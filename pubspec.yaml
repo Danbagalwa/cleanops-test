@@ -1,0 +1,66 @@
+name: jazz_teasdale
+description: Application de gestion d'entretien ménager — Résidence Jazz Teasdale
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # ── Supabase ──────────────────────────────────────────────
+  supabase_flutter: ^2.5.6
+
+  # ── State Management ──────────────────────────────────────
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # ── Navigation ────────────────────────────────────────────
+  go_router: ^14.2.7
+
+  # ── PDF ───────────────────────────────────────────────────
+  pdf: ^3.11.1
+  printing: ^5.13.1
+
+  # ── Internationalisation ──────────────────────────────────
+  intl: ^0.20.2
+
+  # ── Stockage local ────────────────────────────────────────
+  shared_preferences: ^2.3.2
+
+  # ── UI ────────────────────────────────────────────────────
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  gap: ^3.0.1
+
+  # ── Utilitaires ───────────────────────────────────────────
+  equatable: ^2.0.5
+  dartz: ^0.10.1
+  uuid: ^4.4.2
+  logger: ^2.4.0
+  fl_chart: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+  # Riverpod Code Generation
+  riverpod_generator: ^2.6.5
+  build_runner: ^2.4.12
+
+  # Lints
+  custom_lint: ^0.7.6
+  riverpod_lint: ^2.6.5
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/

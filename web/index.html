@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description"
+        content="CleanOps — gestion simple et efficace des équipes et des tâches.">
+  <meta name="theme-color" content="#3732C9">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CleanOps">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>CleanOps</title>
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #f7f8fa;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 14% 12%, rgba(255, 255, 255, .15), transparent 22%),
+        linear-gradient(145deg, #3732c9 0%, #4843e0 52%, #5255f4 100%);
+      color: #fff;
+      opacity: 1;
+      transition: opacity 320ms ease, visibility 320ms ease;
+    }
+
+    #app-loader.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loader-content {
+      width: min(380px, 100%);
+      text-align: center;
+      animation: loader-enter 500ms ease-out both;
+    }
+
+    .loader-logo {
+      width: 104px;
+      height: 104px;
+      margin: 0 auto 25px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .35);
+      border-radius: 29px;
+      background: rgba(255, 255, 255, .16);
+      box-shadow: 0 20px 55px rgba(64, 5, 16, .3);
+      backdrop-filter: blur(10px);
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: -3px;
+    }
+
+    .loader-title {
+      margin: 0;
+      font-size: 27px;
+      font-weight: 850;
+      letter-spacing: 4px;
+    }
+
+    .loader-subtitle {
+      margin: 9px 0 44px;
+      color: rgba(255, 255, 255, .76);
+      font-size: 14px;
+    }
+
+    .loader-track {
+      height: 4px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .2);
+    }
+
+    .loader-progress {
+      width: 42%;
+      height: 100%;
+      border-radius: inherit;
+      background: #fff;
+      animation: loader-progress 1.25s ease-in-out infinite;
+    }
+
+    #loader-status {
+      min-height: 20px;
+      margin: 15px 0 0;
+      color: rgba(255, 255, 255, .8);
+      font-size: 13px;
+      transition: opacity 160ms ease;
+    }
+
+    .loader-help {
+      position: absolute;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      left: 20px;
+      right: 20px;
+      color: rgba(255, 255, 255, .52);
+      text-align: center;
+      font-size: 11px;
+    }
+
+    @keyframes loader-enter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes loader-progress {
+      0% { transform: translateX(-120%); }
+      55% { transform: translateX(115%); }
+      100% { transform: translateX(245%); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loader-content, .loader-progress { animation-duration: 2.5s; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-loader" role="status" aria-live="polite">
+    <div class="loader-content">
+      <div class="loader-logo" aria-hidden="true">C</div>
+      <h1 class="loader-title">CLEANOPS</h1>
+      <p class="loader-subtitle">Votre espace de travail se prépare</p>
+      <div class="loader-track" aria-hidden="true">
+        <div class="loader-progress"></div>
+      </div>
+      <p id="loader-status">Chargement de l’application…</p>
+    </div>
+    <div class="loader-help">Une première ouverture peut prendre quelques secondes.</div>
+  </div>
+
+  <script>
+    (() => {
+      const loader = document.getElementById('app-loader');
+      const status = document.getElementById('loader-status');
+      const messages = [
+        'Chargement de l’application…',
+        'Préparation de votre espace…',
+        'Encore un instant, presque prêt…'
+      ];
+      let messageIndex = 0;
+
+      const messageTimer = window.setInterval(() => {
+        status.style.opacity = '0';
+        window.setTimeout(() => {
+          messageIndex = (messageIndex + 1) % messages.length;
+          status.textContent = messages[messageIndex];
+          status.style.opacity = '1';
+        }, 170);
+      }, 2400);
+
+      const hideLoader = () => {
+        window.clearInterval(messageTimer);
+        loader.classList.add('is-hidden');
+        window.setTimeout(() => loader.remove(), 380);
+      };
+
+      window.addEventListener('flutter-first-frame', hideLoader, { once: true });
+
+      // Filet de sécurité pour les versions du moteur qui n'émettent pas
+      // flutter-first-frame : on retire le voile dès que la vue Flutter existe.
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('flutter-view')) {
+          observer.disconnect();
+          window.setTimeout(hideLoader, 450);
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    })();
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
