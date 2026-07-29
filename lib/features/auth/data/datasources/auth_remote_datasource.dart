@@ -65,8 +65,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   }
 
   // Colonnes pour la restauration de session (sans secrets)
-  static const _kSelectEmployee =
-      'id, nom, prenom, slug, role, is_actif, '
+  static const _kSelectEmployee = 'id, nom, prenom, slug, role, is_actif, '
       'nom_residence, date_creation, date_mise_a_jour';
 
   // ── Niveau 2 — Connexion selon rôle ──────────────────
@@ -108,8 +107,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
       throw const AuthException('Identifiant ou code incorrect');
     }
 
-    final employee =
-        EmployeeModel.fromJson(response as Map<String, dynamic>);
+    final employee = EmployeeModel.fromJson(response as Map<String, dynamic>);
     await _sauvegarderSession(id: employee.id, slug: employee.slug);
 
     return employee;
@@ -205,8 +203,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
             .select('employee_id')
             .eq('token', token)
             .eq('actif', true)
-            .gt('date_expiration',
-                DateTime.now().toUtc().toIso8601String())
+            .gt('date_expiration', DateTime.now().toUtc().toIso8601String())
             .maybeSingle();
 
         if (session == null) {
@@ -217,12 +214,11 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
         }
 
         final employeeId = session['employee_id'] as String;
-        final response =
-            await SupabaseService.table(SupabaseService.employees)
-                .select(_kSelectEmployee)
-                .eq('id', employeeId)
-                .eq('is_actif', true)
-                .maybeSingle();
+        final response = await SupabaseService.table(SupabaseService.employees)
+            .select(_kSelectEmployee)
+            .eq('id', employeeId)
+            .eq('is_actif', true)
+            .maybeSingle();
 
         if (response == null) {
           await _invaliderSessionSupabase(token);
@@ -258,10 +254,15 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   @override
   Future<void> logout() async {
     final token = _prefs.getString(_keyToken);
-    if (token != null) {
-      await _invaliderSessionSupabase(token);
+    try {
+      if (token != null) {
+        await _invaliderSessionSupabase(token);
+      }
+    } finally {
+      // La sortie de l'appareil doit rester fiable même si le réseau ou
+      // l'invalidation de la session distante échoue.
+      await _clearPrefs();
     }
-    await _clearPrefs();
   }
 
   // ── Utilitaires session ───────────────────────────────
@@ -299,8 +300,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   Future<void> _invaliderSessionSupabase(String token) async {
     try {
       await SupabaseService.table(SupabaseService.sessions)
-          .update({'actif': false})
-          .eq('token', token);
+          .update({'actif': false}).eq('token', token);
     } catch (_) {}
   }
 

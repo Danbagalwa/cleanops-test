@@ -32,12 +32,14 @@ class DashboardState {
   final Semaine? semaine;
   final String? messageSemaine;
   final bool isLoading;
+  final bool isRefreshing;
   final String? error;
 
   const DashboardState({
     this.semaine,
     this.messageSemaine,
     this.isLoading = false,
+    this.isRefreshing = false,
     this.error,
   });
 
@@ -45,12 +47,14 @@ class DashboardState {
     Semaine? semaine,
     String? messageSemaine,
     bool? isLoading,
+    bool? isRefreshing,
     String? error,
   }) {
     return DashboardState(
       semaine: semaine ?? this.semaine,
       messageSemaine: messageSemaine ?? this.messageSemaine,
       isLoading: isLoading ?? this.isLoading,
+      isRefreshing: isRefreshing ?? this.isRefreshing,
       error: error,
     );
   }
@@ -61,15 +65,26 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
   final GetSemaineCourante _getSemaineCourante;
   final EmployeeDashboardRepository _repository;
   final Ref _ref;
+  DateTime? _lastLoadedAt;
 
   DashboardNotifier(this._getSemaineCourante, this._repository, this._ref)
       : super(const DashboardState());
 
-  Future<void> charger() async {
+  Future<void> charger({bool force = false}) async {
     final employee = _ref.read(employeeCourantProvider);
     if (employee == null) return;
+    if (state.isLoading || state.isRefreshing) return;
 
-    state = state.copyWith(isLoading: true, error: null);
+    final hasData = state.semaine != null;
+    final cacheIsFresh = _lastLoadedAt != null &&
+        DateTime.now().difference(_lastLoadedAt!) < const Duration(minutes: 3);
+    if (!force && hasData && cacheIsFresh) return;
+
+    state = state.copyWith(
+      isLoading: !hasData,
+      isRefreshing: hasData,
+      error: null,
+    );
 
     final semaineResult = await _getSemaineCourante(employeeId: employee.id);
     final messageResult = await _repository.getMessageSemaine();
@@ -78,17 +93,22 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     semaineResult.fold(
       (failure) => state = state.copyWith(
         isLoading: false,
+        isRefreshing: false,
         error: failure.message,
       ),
-      (semaine) => state = state.copyWith(
-        isLoading: false,
-        semaine: semaine,
-        messageSemaine: message,
-      ),
+      (semaine) {
+        _lastLoadedAt = DateTime.now();
+        state = state.copyWith(
+          isLoading: false,
+          isRefreshing: false,
+          semaine: semaine,
+          messageSemaine: message,
+        );
+      },
     );
   }
 
-  Future<void> rafraichir() => charger();
+  Future<void> rafraichir() => charger(force: true);
 }
 
 // ── Provider ──────────────────────────────────────────────

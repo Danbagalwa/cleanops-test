@@ -14,8 +14,8 @@ final residentEspaceDatasourceProvider = Provider<ResidentEspaceDatasource>(
 );
 
 final residentEspaceRepositoryProvider = Provider<ResidentEspaceRepository>(
-  (ref) => ResidentEspaceRepositoryImpl(
-      ref.watch(residentEspaceDatasourceProvider)),
+  (ref) =>
+      ResidentEspaceRepositoryImpl(ref.watch(residentEspaceDatasourceProvider)),
 );
 
 // ── State ─────────────────────────────────────────────────
@@ -51,9 +51,11 @@ class ResidentEspaceState {
   List<TacheResident> get prochaines {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    return taches
+    final resultat = taches
         .where((t) => t.estPrevu && !t.dateReelle.isBefore(today))
         .toList();
+    resultat.sort((a, b) => a.dateReelle.compareTo(b.dateReelle));
+    return resultat;
   }
 
   List<TacheResident> get tachesNonFaites =>
@@ -61,7 +63,9 @@ class ResidentEspaceState {
 
   TacheResident? get dernierMenage {
     final faits = taches.where((t) => t.estFait).toList();
-    return faits.isEmpty ? null : faits.last;
+    if (faits.isEmpty) return null;
+    faits.sort((a, b) => b.dateReelle.compareTo(a.dateReelle));
+    return faits.first;
   }
 
   // ── Computed — demandes / notifications ───────────────────
@@ -127,9 +131,11 @@ class ResidentEspaceNotifier extends StateNotifier<ResidentEspaceState> {
   }
 
   Future<void> charger() async {
-    chargerTaches();
-    chargerDemandes();
-    chargerNotifications();
+    await Future.wait([
+      chargerTaches(),
+      chargerDemandes(),
+      chargerNotifications(),
+    ]);
   }
 
   Future<void> chargerTaches() async {
@@ -203,8 +209,9 @@ class ResidentEspaceNotifier extends StateNotifier<ResidentEspaceState> {
     result.fold(
       (f) => state = state.copyWith(errorDemandes: f.message),
       (updated) => state = state.copyWith(
-        demandes:
-            state.demandes.map((d) => d.id == updated.id ? updated : d).toList(),
+        demandes: state.demandes
+            .map((d) => d.id == updated.id ? updated : d)
+            .toList(),
       ),
     );
   }
@@ -218,8 +225,9 @@ class ResidentEspaceNotifier extends StateNotifier<ResidentEspaceState> {
     result.fold(
       (f) => state = state.copyWith(errorDemandes: f.message),
       (updated) => state = state.copyWith(
-        demandes:
-            state.demandes.map((d) => d.id == updated.id ? updated : d).toList(),
+        demandes: state.demandes
+            .map((d) => d.id == updated.id ? updated : d)
+            .toList(),
       ),
     );
   }

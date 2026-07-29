@@ -6,46 +6,76 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/dashboard_account_actions.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../domain/entities/progression_jour.dart';
+import '../providers/employer_dashboard_provider.dart';
 
-class EmployerDashboardScreen extends ConsumerWidget {
+class EmployerDashboardScreen extends ConsumerStatefulWidget {
   const EmployerDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final employee = ref.watch(employeeCourantProvider);
+  ConsumerState<EmployerDashboardScreen> createState() =>
+      _EmployerDashboardScreenState();
+}
 
-    // Breakpoint standard pour le web / tablettes paysages
-    final isDesktop = MediaQuery.of(context).size.width >= 1024;
+class _EmployerDashboardScreenState
+    extends ConsumerState<EmployerDashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(
+      () => ref
+          .read(employerDashboardNotifierProvider.notifier)
+          .loadProgressionJour(),
+    );
+  }
+
+  Future<void> _refresh() => ref
+      .read(employerDashboardNotifierProvider.notifier)
+      .loadProgressionJour();
+
+  @override
+  Widget build(BuildContext context) {
+    final employee = ref.watch(employeeCourantProvider);
+    final state = ref.watch(employerDashboardNotifierProvider);
+    final isDesktop = MediaQuery.sizeOf(context).width >= 1024;
 
     return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      // On masque l'AppBar classique sur Desktop car la navigation y est intégrée différemment
+      backgroundColor: const Color(0xFFF7F8FC),
       appBar: isDesktop
           ? null
           : AppBar(
               backgroundColor: AppColors.rouge,
+              surfaceTintColor: AppColors.rouge,
+              foregroundColor: Colors.white,
               elevation: 0,
               title: const Text(
                 'Tableau de bord',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.notifications_outlined,
-                      color: Colors.white),
-                  onPressed: () {},
+                  tooltip: 'Actualiser',
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: state.isLoading ? null : _refresh,
                 ),
+                const DashboardAccountActions(),
+                const SizedBox(width: 4),
               ],
             ),
-      body: isDesktop
-          ? _DesktopLayout(employee: employee)
-          : _MobileLayout(employee: employee),
+      body: RefreshIndicator(
+        color: AppColors.rouge,
+        onRefresh: _refresh,
+        child: isDesktop
+            ? _DesktopLayout(employee: employee, state: state)
+            : _MobileLayout(employee: employee, state: state),
+      ),
     );
   }
 }
@@ -53,7 +83,8 @@ class EmployerDashboardScreen extends ConsumerWidget {
 // ══ LAYOUT MOBILE ═════════════════════════════════════════
 class _MobileLayout extends StatelessWidget {
   final Employee? employee;
-  const _MobileLayout({required this.employee});
+  final EmployerDashboardState state;
+  const _MobileLayout({required this.employee, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +93,19 @@ class _MobileLayout extends StatelessWidget {
       children: [
         _BienvenuCard(employee: employee),
         const SizedBox(height: AppSizes.md),
-        const _StatsGrid(isDesktop: false),
+        if (state.error != null) ...[
+          const _DashboardError(),
+          const SizedBox(height: AppSizes.md),
+        ],
+        _StatsGrid(state: state, isDesktop: false),
+        if (state.progressions.isNotEmpty) ...[
+          const SizedBox(height: AppSizes.md),
+          _TeamProgress(progressions: state.progressions),
+        ],
         const SizedBox(height: AppSizes.md),
         const _SectionTitle(title: 'Accès rapide'),
         const SizedBox(height: AppSizes.sm),
-        const _ActionsRapides(),
+        const _ActionsRapides(columns: 2),
         const SizedBox(height: AppSizes.xxl),
       ],
     );
@@ -76,7 +115,8 @@ class _MobileLayout extends StatelessWidget {
 // ══ LAYOUT DESKTOP (WEB PRO) ════════════════════════════════════════
 class _DesktopLayout extends StatelessWidget {
   final Employee? employee;
-  const _DesktopLayout({required this.employee});
+  final EmployerDashboardState state;
+  const _DesktopLayout({required this.employee, required this.state});
 
   @override
   Widget build(BuildContext context) {
@@ -95,23 +135,29 @@ class _DesktopLayout extends StatelessWidget {
                 backgroundColor: Colors.transparent,
                 // Top bar version Web intégrée au contenu
                 appBar: AppBar(
-                  backgroundColor: Colors.transparent,
+                  backgroundColor: AppColors.rouge,
+                  surfaceTintColor: AppColors.rouge,
+                  foregroundColor: Colors.white,
                   elevation: 0,
                   automaticallyImplyLeading: false,
                   title: const Text(
                     'Tableau de bord de l\'entreprise',
                     style: TextStyle(
-                      color: AppColors.noir,
+                      color: Colors.white,
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   actions: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined,
-                          color: AppColors.noir),
-                      onPressed: () {},
-                    ),
+                    if (state.isLoading)
+                      const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    const DashboardAccountActions(),
                     const SizedBox(width: AppSizes.md),
                   ],
                 ),
@@ -131,7 +177,15 @@ class _DesktopLayout extends StatelessWidget {
                             const SizedBox(height: AppSizes.lg),
                             const _SectionTitle(title: 'Vue d\'ensemble'),
                             const SizedBox(height: AppSizes.md),
-                            const _StatsGrid(isDesktop: true),
+                            if (state.error != null) ...[
+                              const _DashboardError(),
+                              const SizedBox(height: AppSizes.md),
+                            ],
+                            _StatsGrid(state: state, isDesktop: true),
+                            if (state.progressions.isNotEmpty) ...[
+                              const SizedBox(height: AppSizes.lg),
+                              _TeamProgress(progressions: state.progressions),
+                            ],
                           ],
                         ),
                       ),
@@ -144,7 +198,7 @@ class _DesktopLayout extends StatelessWidget {
                           children: [
                             _SectionTitle(title: 'Accès rapide'),
                             SizedBox(height: AppSizes.md),
-                            _ActionsRapides(),
+                            _ActionsRapides(columns: 2),
                             SizedBox(height: AppSizes.md),
                             _InfoCard(),
                           ],
@@ -257,32 +311,49 @@ class _BienvenuCard extends StatelessWidget {
 
 // ── Grille statistiques ───────────────────────────────────
 class _StatsGrid extends StatelessWidget {
+  final EmployerDashboardState state;
   final bool isDesktop;
-  const _StatsGrid({required this.isDesktop});
+  const _StatsGrid({required this.state, required this.isDesktop});
 
   @override
   Widget build(BuildContext context) {
+    final progressions = state.progressions;
+    final totalTasks =
+        progressions.fold<int>(0, (sum, item) => sum + item.totalTaches);
+    final confirmed =
+        progressions.fold<int>(0, (sum, item) => sum + item.tachesConfirmees);
+    final alerts = progressions.fold<int>(
+      0,
+      (sum, item) => sum + item.totalAbsent + item.totalRefus,
+    );
+    final average =
+        totalTasks == 0 ? 0 : (confirmed / totalTasks * 100).round();
+
     final stats = [
-      const _StatData(
+      _StatData(
           icon: Icons.people_rounded,
-          label: 'Employé(e)s',
-          value: '—',
+          label: 'Équipe aujourd’hui',
+          value: state.isLoading && progressions.isEmpty
+              ? null
+              : '${progressions.length}',
           color: AppColors.absent),
-      const _StatData(
-          icon: Icons.apartment_rounded,
-          label: 'Appartements',
-          value: '—',
-          color: AppColors.fait),
-      const _StatData(
+      _StatData(
           icon: Icons.task_alt_rounded,
-          label: "Tâches ce soir",
-          value: '—',
+          label: 'Tâches confirmées',
+          value: state.isLoading && progressions.isEmpty
+              ? null
+              : '$confirmed/$totalTasks',
+          color: AppColors.fait),
+      _StatData(
+          icon: Icons.donut_large_rounded,
+          label: 'Avancement global',
+          value: state.isLoading && progressions.isEmpty ? null : '$average %',
           color: AppColors.rouge),
-      const _StatData(
-          icon: Icons.sticky_note_2_rounded,
-          label: 'Messages',
-          value: '—',
-          color: AppColors.aVerifier),
+      _StatData(
+          icon: Icons.report_outlined,
+          label: alerts == 0 ? 'Aucune alerte' : 'Absences ou refus',
+          value: state.isLoading && progressions.isEmpty ? null : '$alerts',
+          color: alerts == 0 ? AppColors.fait : AppColors.aVerifier),
     ];
 
     return GridView.builder(
@@ -309,7 +380,7 @@ class _StatsGrid extends StatelessWidget {
 class _StatData {
   final IconData icon;
   final String label;
-  final String value;
+  final String? value;
   final Color color;
   const _StatData(
       {required this.icon,
@@ -354,13 +425,24 @@ class _StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  data.value,
+                  data.value ?? '',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: data.color,
                   ),
                 ),
+                if (data.value == null)
+                  Container(
+                    width: 42,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE9EAF0),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
                 const SizedBox(height: 2),
                 Text(
                   data.label,
@@ -383,7 +465,8 @@ class _StatCard extends StatelessWidget {
 
 // ── Actions rapides ───────────────────────────────────────
 class _ActionsRapides extends StatelessWidget {
-  const _ActionsRapides();
+  final int columns;
+  const _ActionsRapides({this.columns = 1});
 
   @override
   Widget build(BuildContext context) {
@@ -438,16 +521,27 @@ class _ActionsRapides extends StatelessWidget {
           route: AppRoutes.messagesSemaine),
     ];
 
-    return Column(
-      children: actions.asMap().entries.map((e) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSizes.sm),
-          child: _ActionTile(data: e.value)
-              .animate(delay: Duration(milliseconds: 150 + e.key * 50))
-              .fadeIn(duration: 250.ms)
-              .slideX(begin: 0.03, end: 0),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 10.0;
+        final count = constraints.maxWidth < 380 ? 1 : columns;
+        final width = (constraints.maxWidth - spacing * (count - 1)) / count;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: actions.asMap().entries.map((entry) {
+            return SizedBox(
+              width: width,
+              child: _ActionTile(data: entry.value)
+                  .animate(
+                    delay: Duration(milliseconds: 120 + entry.key * 35),
+                  )
+                  .fadeIn(duration: 250.ms)
+                  .slideY(begin: .04, end: 0),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 }
@@ -595,6 +689,151 @@ class _InfoCard extends StatelessWidget {
         ],
       ),
     ).animate(delay: 400.ms).fadeIn(duration: 400.ms);
+  }
+}
+
+class _TeamProgress extends StatelessWidget {
+  const _TeamProgress({required this.progressions});
+
+  final List<ProgressionJour> progressions;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...progressions]
+      ..sort((a, b) => a.pourcentage.compareTo(b.pourcentage));
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        border: Border.all(color: const Color(0xFFE7E9F2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Progression de l’équipe',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Les personnes à accompagner apparaissent en premier',
+                      style: TextStyle(
+                        color: AppColors.grisDark,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.go(AppRoutes.progressionJour),
+                child: const Text('Tout voir'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final item in sorted.take(4)) ...[
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 15,
+                  backgroundColor: AppColors.rouge.withValues(alpha: .09),
+                  child: Text(
+                    item.prenom.isEmpty ? '?' : item.prenom[0].toUpperCase(),
+                    style: const TextStyle(
+                      color: AppColors.rouge,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              item.prenom,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          Text(
+                            '${item.tachesConfirmees}/${item.totalTaches}',
+                            style: const TextStyle(
+                              color: AppColors.grisDark,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: LinearProgressIndicator(
+                          value: (item.pourcentage / 100).clamp(0, 1),
+                          minHeight: 6,
+                          color: item.pourcentage >= 100
+                              ? AppColors.fait
+                              : AppColors.rouge,
+                          backgroundColor: const Color(0xFFE9EAF0),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 13),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardError extends StatelessWidget {
+  const _DashboardError();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, color: Color(0xFFC2410C), size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Les indicateurs n’ont pas pu être actualisés. Les autres '
+              'fonctions restent disponibles.',
+              style: TextStyle(
+                color: Color(0xFF9A3412),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

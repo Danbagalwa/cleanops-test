@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +7,7 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/dashboard_account_actions.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../presences/presentation/providers/presence_provider.dart';
 import '../../../presences/presentation/widgets/presence_card_widget.dart';
@@ -78,13 +79,28 @@ class _EmployeeDashboardScreenState
     return Scaffold(
       backgroundColor: AppColors.grisLight,
       appBar: _buildAppBar(),
-      body: RefreshIndicator(
-        color: AppColors.rouge,
-        onRefresh: () =>
-            ref.read(dashboardNotifierProvider.notifier).rafraichir(),
-        child: isDesktop
-            ? _DesktopLayout(state: dashState, employee: employee)
-            : _MobileLayout(state: dashState, employee: employee),
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            color: AppColors.rouge,
+            onRefresh: () =>
+                ref.read(dashboardNotifierProvider.notifier).rafraichir(),
+            child: isDesktop
+                ? _DesktopLayout(state: dashState, employee: employee)
+                : _MobileLayout(state: dashState, employee: employee),
+          ),
+          if (dashState.isRefreshing)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                minHeight: 3,
+                color: AppColors.rouge,
+                backgroundColor: Colors.transparent,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -92,20 +108,20 @@ class _EmployeeDashboardScreenState
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: AppColors.rouge,
+      surfaceTintColor: AppColors.rouge,
+      foregroundColor: Colors.white,
       elevation: 0,
       title: const Text(
         'Tableau de bord',
         style: TextStyle(
           color: Colors.white,
           fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-          onPressed: () {},
-        ),
+      actions: const [
+        DashboardAccountActions(),
+        SizedBox(width: 4),
       ],
     );
   }
@@ -120,7 +136,7 @@ class _MobileLayout extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (state.isLoading) {
+    if (state.isLoading && state.semaine == null) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.rouge),
       );
@@ -146,6 +162,8 @@ class _MobileLayout extends ConsumerWidget {
         // ── Résumé du jour ───────────────────────────────
         if (state.semaine != null) ...[
           _ResumeDuJour(semaine: state.semaine!),
+          const SizedBox(height: AppSizes.md),
+          _ResumeSemaine(semaine: state.semaine!),
           const SizedBox(height: AppSizes.md),
 
           // ── Mini calendrier ──────────────────────────
@@ -183,7 +201,7 @@ class _DesktopLayout extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (state.isLoading) {
+    if (state.isLoading && state.semaine == null) {
       return const Center(
         child: CircularProgressIndicator(color: AppColors.rouge),
       );
@@ -206,6 +224,9 @@ class _DesktopLayout extends ConsumerWidget {
                 MessageSemaineWidget(message: state.messageSemaine!),
               const SizedBox(height: AppSizes.md),
               if (state.semaine != null) _ResumeDuJour(semaine: state.semaine!),
+              const SizedBox(height: AppSizes.md),
+              if (state.semaine != null)
+                _ResumeSemaine(semaine: state.semaine!),
             ],
           ),
         ),
@@ -269,7 +290,7 @@ class _SalutationCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -325,7 +346,7 @@ class _ResumeDuJour extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -396,6 +417,163 @@ class _ResumeDuJour extends StatelessWidget {
   }
 }
 
+class _ResumeSemaine extends StatelessWidget {
+  final Semaine semaine;
+
+  const _ResumeSemaine({required this.semaine});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = semaine.totalTachesSemaine;
+    final confirmees = semaine.tachesConfirmeesSemaine;
+    final progression = total == 0 ? 0.0 : confirmees / total;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Résumé de la semaine',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.noir,
+                  ),
+                ),
+              ),
+              Text(
+                '${(progression * 100).round()} %',
+                style: const TextStyle(
+                  color: AppColors.rouge,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSizes.md),
+          Wrap(
+            spacing: AppSizes.sm,
+            runSpacing: AppSizes.sm,
+            children: [
+              _WeeklyMetric(
+                icon: Icons.check_circle_outline_rounded,
+                label: 'Terminées',
+                value: '$confirmees',
+                color: AppColors.fait,
+              ),
+              _WeeklyMetric(
+                icon: Icons.pending_actions_rounded,
+                label: 'Restantes',
+                value: '${semaine.tachesRestantesSemaine}',
+                color: AppColors.absent,
+              ),
+              _WeeklyMetric(
+                icon: Icons.format_list_numbered_rounded,
+                label: 'Total',
+                value: '$total',
+                color: AppColors.rouge,
+              ),
+              _WeeklyMetric(
+                icon: Icons.schedule_rounded,
+                label: 'Durée prévue',
+                value: semaine.totalMinutesSemaine == 0
+                    ? '—'
+                    : DateHelper.minutesEnHeures(
+                        semaine.totalMinutesSemaine,
+                      ),
+                color: AppColors.aVerifier,
+              ),
+            ],
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: AppSizes.md),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(
+                value: progression,
+                minHeight: 7,
+                color: AppColors.fait,
+                backgroundColor: AppColors.grisMedium,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _WeeklyMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _WeeklyMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 118),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSizes.sm,
+        vertical: AppSizes.sm,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 19, color: color),
+          const SizedBox(width: AppSizes.sm),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.grisDark,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatItem extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -414,7 +592,7 @@ class _StatItem extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSizes.md),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
       ),
       child: Column(
@@ -527,7 +705,7 @@ class _ActionItem extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppSizes.radiusLg),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha:0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -538,7 +716,7 @@ class _ActionItem extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(AppSizes.sm),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha:0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppSizes.radiusSm),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -595,9 +773,9 @@ class _ErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSizes.md),
       decoration: BoxDecoration(
-        color: AppColors.rouge.withValues(alpha:0.1),
+        color: AppColors.rouge.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(color: AppColors.rouge.withValues(alpha:0.3)),
+        border: Border.all(color: AppColors.rouge.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [

@@ -9,6 +9,7 @@ class TacheResident extends Equatable {
   final PeriodeType periode;
   final StatutTache statut;
   final String? prenomPreposee;
+  final bool estProjection;
 
   const TacheResident({
     required this.id,
@@ -18,6 +19,7 @@ class TacheResident extends Equatable {
     required this.periode,
     required this.statut,
     this.prenomPreposee,
+    this.estProjection = false,
   });
 
   // semaine_reelle stocke la date réelle de la tâche (pas le lundi de la semaine)

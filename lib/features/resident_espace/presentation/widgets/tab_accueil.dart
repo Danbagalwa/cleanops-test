@@ -35,8 +35,6 @@ const _kMois = [
 String _fmtDate(DateTime d) =>
     '${_kJours[d.weekday - 1]} ${d.day} ${_kMois[d.month - 1]}';
 
-String _fmtDateCourt(DateTime d) => '${d.day} ${_kMois[d.month - 1]}';
-
 // ─────────────────────────────────────────────────────────
 
 class TabAccueil extends ConsumerWidget {
@@ -62,9 +60,10 @@ class TabAccueil extends ConsumerWidget {
     final menageAujourdhui = state.menageAujourdhui;
     final prochaines = state.prochaines;
     final dernierMenage = state.dernierMenage;
-    // Prochain ≠ aujourd'hui (pour le header Scénario B)
-    final prochainHorsAujourdhui =
-        prochaines.where((t) => !t.estAujourdhui).firstOrNull;
+    final menageMisEnAvant = menageAujourdhui ?? prochaines.firstOrNull;
+    final prochainesApresMiseEnAvant = menageMisEnAvant == null
+        ? prochaines
+        : prochaines.where((t) => t.id != menageMisEnAvant.id).toList();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -75,7 +74,7 @@ class TabAccueil extends ConsumerWidget {
 
         return RefreshIndicator(
           onRefresh: () =>
-              ref.read(residentEspaceNotifierProvider.notifier).chargerTaches(),
+              ref.read(residentEspaceNotifierProvider.notifier).charger(),
           child: ListView(
             padding:
                 EdgeInsets.symmetric(horizontal: hPad, vertical: AppSizes.md),
@@ -100,8 +99,8 @@ class TabAccueil extends ConsumerWidget {
               // ── Header scénario A ou B ─────────────────────
               if (menageAujourdhui != null)
                 _CarteAujourdhui(tache: menageAujourdhui)
-              else if (prochainHorsAujourdhui != null)
-                _CarteProchain(tache: prochainHorsAujourdhui)
+              else if (menageMisEnAvant != null)
+                _CarteProchain(tache: menageMisEnAvant)
               else
                 _CarteAucunMenage(),
 
@@ -129,11 +128,11 @@ class TabAccueil extends ConsumerWidget {
               ),
 
               // ── Prochains ménages ──────────────────────────
-              if (prochaines.isNotEmpty) ...[
+              if (prochainesApresMiseEnAvant.isNotEmpty) ...[
                 const SizedBox(height: AppSizes.lg),
-                const _SectionHeader('Prochains ménages'),
+                const _SectionHeader('Ménages prévus ensuite'),
                 const SizedBox(height: AppSizes.sm),
-                ...prochaines.map((t) => Padding(
+                ...prochainesApresMiseEnAvant.take(7).map((t) => Padding(
                       padding: const EdgeInsets.only(bottom: AppSizes.sm),
                       child: _MenageRow(tache: t),
                     )),
@@ -185,7 +184,7 @@ class _CarteAujourdhui extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Votre ménage est confirmé pour aujourd\'hui',
+                  'Votre ménage est prévu aujourd\'hui',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -361,7 +360,8 @@ class _DernierMenageCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _fmtDate(tache.dateReelle),
+                  '${_fmtDate(tache.dateReelle)} · '
+                  '${tache.periodeDisplayLabel}',
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -427,7 +427,7 @@ class _MenageRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _fmtDateCourt(tache.dateReelle),
+                  _fmtDate(tache.dateReelle),
                   style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -438,6 +438,15 @@ class _MenageRow extends StatelessWidget {
                   style:
                       const TextStyle(fontSize: 12, color: AppColors.grisDark),
                 ),
+                if (tache.estProjection)
+                  const Text(
+                    'Selon le planning récurrent',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.rouge,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -460,7 +469,11 @@ class _MenageRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  estAujourdhui ? 'Confirmé' : 'Prévu',
+                  estAujourdhui
+                      ? 'Aujourd’hui'
+                      : tache.estProjection
+                          ? 'Planifié'
+                          : 'Prévu',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,

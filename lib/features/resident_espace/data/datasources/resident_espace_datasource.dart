@@ -1,4 +1,5 @@
 import '../../../../core/errors/exceptions.dart';
+import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../domain/entities/demande_resident.dart';
@@ -8,12 +9,36 @@ import '../models/tache_resident_model.dart';
 
 // ── Helpers date fr ───────────────────────────────────────
 const _kJours = [
-  'lundi', 'mardi', 'mercredi', 'jeudi',
-  'vendredi', 'samedi', 'dimanche',
+  'lundi',
+  'mardi',
+  'mercredi',
+  'jeudi',
+  'vendredi',
+  'samedi',
+  'dimanche',
+];
+const _joursPlanning = [
+  'Lundi',
+  'Mardi',
+  'Mercredi',
+  'Jeudi',
+  'Vendredi',
+  'Samedi',
+  'Dimanche',
 ];
 const _kMois = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre',
 ];
 
 String _fmtDateFr(DateTime d) =>
@@ -82,18 +107,86 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
           .single();
       final appartementId = residentRow['appartement_id'] as String;
 
-      final debut = _lundi(DateTime.now().subtract(const Duration(days: 56)));
-      final data = await SupabaseService.client
+      final maintenant = DateTime.now();
+      final aujourdhui =
+          DateTime(maintenant.year, maintenant.month, maintenant.day)
+              .toIso8601String()
+              .substring(0, 10);
+
+      // Deux lectures ciblées garantissent un véritable dernier ménage,
+      // même s'il date de plus de huit semaines, et une liste future légère.
+      final dernierEffectue = await SupabaseService.client
           .from(SupabaseService.tachesJour)
           .select(_kSelectTache)
           .eq('appartement_id', appartementId)
-          .gte('semaine_reelle', debut.toIso8601String().substring(0, 10))
-          .inFilter('statut', ['Fait', 'NonCommencé'])
+          .eq('statut', 'Fait')
+          .order('semaine_reelle', ascending: false)
+          .limit(1);
+
+      final tachesFutures = await SupabaseService.client
+          .from(SupabaseService.tachesJour)
+          .select(_kSelectTache)
+          .eq('appartement_id', appartementId)
+          .gte('semaine_reelle', aujourdhui)
           .order('semaine_reelle', ascending: true);
 
-      return (data as List)
-          .map((j) => TacheResidentModel.fromJson(j as Map<String, dynamic>))
+      final lignesFutures = List<Map<String, dynamic>>.from(tachesFutures);
+      final datesDejaGenerees =
+          lignesFutures.map((row) => row['semaine_reelle'] as String).toSet();
+      final menagesReels = lignesFutures
+          .where((row) => row['statut'] == 'NonCommencé')
+          .map(TacheResidentModel.fromJson)
           .toList();
+
+      // Les tâches journalières ne sont générées qu'à l'ouverture de la
+      // semaine par la préposée. On projette donc le planning récurrent pour
+      // que le résident voie ses rendez-vous futurs immédiatement.
+      final templates = await SupabaseService.client
+          .from(SupabaseService.planningTemplates)
+          .select(
+            'id, numero_semaine, jour, periode, '
+            'employees!planning_templates_employee_id_fkey(prenom)',
+          )
+          .eq('appartement_id', appartementId);
+
+      final projections = <TacheResidentModel>[];
+      final debutProjection =
+          DateTime(maintenant.year, maintenant.month, maintenant.day);
+      final finProjection = debutProjection.add(const Duration(days: 365));
+      final templatesList = List<Map<String, dynamic>>.from(templates);
+
+      for (var date = debutProjection;
+          !date.isAfter(finProjection);
+          date = date.add(const Duration(days: 1))) {
+        final dateStr = date.toIso8601String().substring(0, 10);
+        if (datesDejaGenerees.contains(dateStr)) continue;
+
+        final nomJour = _joursPlanning[date.weekday - 1];
+        for (final template in templatesList) {
+          if (template['numero_semaine'] ==
+                  SemaineHelper.semainePourDate(date) &&
+              template['jour'] == nomJour) {
+            projections.add(
+              TacheResidentModel.fromPlanningTemplate(
+                json: template,
+                appartementId: appartementId,
+                date: date,
+              ),
+            );
+          }
+        }
+      }
+
+      final menagesAVenir = [...menagesReels, ...projections]
+        ..sort((a, b) => a.dateReelle.compareTo(b.dateReelle));
+      final data = (dernierEffectue as List)
+          .map((j) => TacheResidentModel.fromJson(
+                j as Map<String, dynamic>,
+              ))
+          .toList()
+        ..addAll(menagesAVenir);
+
+      return data;
     } catch (e) {
       throw ServerException('Erreur chargement ménages : $e');
     }
@@ -167,8 +260,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
       String message =
           'Mme $residentPrenom $residentNom a accepté votre proposition.';
       if (demande.propositionDate != null) {
-        message =
-            'Mme $residentPrenom a accepté le '
+        message = 'Mme $residentPrenom a accepté le '
             '${_fmtDateFr(demande.propositionDate!)} — '
             '${_periodeFr(demande.propositionPeriode)}';
       }
@@ -199,8 +291,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
       String message =
           'Mme $residentPrenom $residentNom a refusé votre proposition.';
       if (demande.propositionDate != null) {
-        message =
-            'Mme $residentPrenom a refusé le '
+        message = 'Mme $residentPrenom a refusé le '
             '${_fmtDateFr(demande.propositionDate!)} — '
             '${_periodeFr(demande.propositionPeriode)}';
       }
@@ -238,8 +329,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
     try {
       await SupabaseService.client
           .from(SupabaseService.notificationsResidents)
-          .update({'is_lue': true})
-          .eq('id', notifId);
+          .update({'is_lue': true}).eq('id', notifId);
     } catch (e) {
       throw ServerException('Erreur marquage notification : $e');
     }
@@ -290,8 +380,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
 
       String message = 'Votre demande a reçu une réponse.';
       if (propositionDate != null) {
-        message =
-            'Nouveau ménage proposé : '
+        message = 'Nouveau ménage proposé : '
             '${_fmtDateFr(propositionDate)} — '
             '${_periodeFr(propositionPeriode)}';
       }
@@ -299,11 +388,11 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
       await SupabaseService.client
           .from(SupabaseService.notificationsResidents)
           .insert({
-            'resident_id': demande.residentId,
-            'type': 'ChangementDate',
-            'message': message,
-            'is_lue': false,
-          });
+        'resident_id': demande.residentId,
+        'type': 'ChangementDate',
+        'message': message,
+        'is_lue': false,
+      });
 
       return demande;
     } catch (e) {
@@ -313,8 +402,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
 
   // ── Helpers privés ────────────────────────────────────────
 
-  Future<void> _notifierResponsables(
-      String demandeId, String message) async {
+  Future<void> _notifierResponsables(String demandeId, String message) async {
     final rolesResponsables = RoleType.values
         .where((role) => role.isResponsable)
         .map((role) => role.label)
@@ -343,7 +431,4 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
           .insert(batch);
     }
   }
-
-  static DateTime _lundi(DateTime date) =>
-      date.subtract(Duration(days: date.weekday - 1));
 }

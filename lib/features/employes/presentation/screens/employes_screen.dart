@@ -3,15 +3,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/widgets/error_widget.dart';
+import '../../../../core/widgets/export_menu_button.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
 import '../../../auth/domain/entities/employee.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../pdf/domain/usecases/generate_employes_export.dart';
+import '../../../pdf/presentation/screens/employes_pdf_preview_screen.dart';
 import '../../domain/usecases/add_employe.dart';
 import '../../domain/usecases/update_employe.dart';
 import '../providers/employes_provider.dart';
 import '../widgets/employe_form_widget.dart';
 import '../widgets/employe_list_item.dart';
 
-const _kPageSize = 12;
+const _kPageSize = 10;
 const _kRolesFiltres = [
   RoleType.employe,
   RoleType.superviseurMenage,
@@ -64,6 +68,20 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
     }).toList();
   }
 
+  String _filterDescription() {
+    final filters = <String>[];
+    if (_searchQuery.isNotEmpty) {
+      filters.add('Recherche : "${_searchCtrl.text.trim()}"');
+    }
+    if (_filterRole != null) {
+      filters.add('Rôle : ${roleDisplay(_filterRole!)}');
+    }
+    if (_filterActif != null) {
+      filters.add(_filterActif! ? 'Statut : actifs' : 'Statut : inactifs');
+    }
+    return filters.isEmpty ? 'Tous les employés' : filters.join(' · ');
+  }
+
   void _ouvrirFormulaire({Employee? employe}) {
     showDialog(
       context: context,
@@ -114,8 +132,10 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(employesNotifierProvider);
+    final currentEmployee = ref.watch(employeeCourantProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 900;
     final filtered = _filtered(state.employes);
+    final filterDescription = _filterDescription();
     final totalPages = (filtered.length / _kPageSize).ceil().clamp(1, 9999);
     final safePage = _page.clamp(0, totalPages - 1);
     final paginated =
@@ -135,6 +155,33 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
           ),
         ),
         actions: [
+          AppExportMenuButton(
+            enabled: filtered.isNotEmpty && !state.isLoading,
+            onPdf: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => EmployesPdfPreviewScreen(
+                  employees: filtered,
+                  filterDescription: filterDescription,
+                  generatedBy: currentEmployee?.nomComplet ?? 'CleanOps',
+                ),
+              ),
+            ),
+            onExcel: () {
+              try {
+                const GenerateEmployesExcel()(
+                  employees: filtered,
+                  filterDescription: filterDescription,
+                );
+                showExportSuccess(
+                  context,
+                  'La liste Excel des employés a été téléchargée.',
+                );
+              } catch (error) {
+                AppFeedback.showError(context, error);
+              }
+            },
+          ),
+          const SizedBox(width: 8),
           if (isDesktop)
             Padding(
               padding: const EdgeInsets.only(right: AppSizes.md),
@@ -586,6 +633,7 @@ class _PaginationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final start = currentPage * pageSize + 1;
     final end = ((currentPage + 1) * pageSize).clamp(0, totalItems);
+    final isCompact = MediaQuery.sizeOf(context).width < 600;
 
     return Container(
       decoration: const BoxDecoration(
@@ -594,8 +642,8 @@ class _PaginationBar extends StatelessWidget {
           top: BorderSide(color: AppColors.grisMedium),
         ),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? AppSizes.sm : AppSizes.md,
         vertical: AppSizes.sm,
       ),
       child: Row(
@@ -616,7 +664,20 @@ class _PaginationBar extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 color: AppColors.grisDark,
               ),
-              ..._buildPageNumbers(),
+              if (isCompact)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: Text(
+                    'Page ${currentPage + 1}/$totalPages',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.grisDark,
+                    ),
+                  ),
+                )
+              else
+                ..._buildPageNumbers(),
               IconButton(
                 icon: const Icon(Icons.chevron_right_rounded),
                 onPressed: currentPage < totalPages - 1
@@ -648,6 +709,7 @@ class _FormDialog extends ConsumerWidget {
     return EmployeFormWidget(
       employe: employe,
       isLoading: isLoading,
+      canEditNumeroPointeuse: ref.watch(roleActuelProvider) == RoleType.admin,
       onSave: ({
         required String nom,
         required String prenom,

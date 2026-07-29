@@ -26,12 +26,14 @@ class EmployeFormWidget extends StatefulWidget {
   final Employee? employe;
   final EmployeSaveCallback onSave;
   final bool isLoading;
+  final bool canEditNumeroPointeuse;
 
   const EmployeFormWidget({
     super.key,
     this.employe,
     required this.onSave,
     this.isLoading = false,
+    this.canEditNumeroPointeuse = false,
   });
 
   @override
@@ -79,14 +81,16 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
       prenom: _prenomCtrl.text.trim(),
       nom: _nomCtrl.text.trim(),
       role: _role,
-      numeroPointeuse:
-          _isPreposee && _pointeuseCtrl.text.trim().isNotEmpty
-              ? _pointeuseCtrl.text.trim()
-              : null,
-      motDePasse:
-          !_isPreposee && _mdpCtrl.text.trim().isNotEmpty
-              ? _mdpCtrl.text.trim()
-              : null,
+      numeroPointeuse: _isPreposee
+          ? widget.canEditNumeroPointeuse
+              ? (_pointeuseCtrl.text.trim().isEmpty
+                  ? null
+                  : _pointeuseCtrl.text.trim())
+              : widget.employe?.numeroPointeuse
+          : null,
+      motDePasse: !_isPreposee && _mdpCtrl.text.trim().isNotEmpty
+          ? _mdpCtrl.text.trim()
+          : null,
       isActif: _isActif,
     );
   }
@@ -114,8 +118,7 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: AppColors.rouge.withValues(alpha: 0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppSizes.radiusSm),
+                        borderRadius: BorderRadius.circular(AppSizes.radiusSm),
                       ),
                       child: const Icon(
                         Icons.person_rounded,
@@ -154,10 +157,9 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                           prefixIcon: Icon(Icons.person_outline_rounded),
                         ),
                         textCapitalization: TextCapitalization.words,
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Obligatoire'
-                                : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Obligatoire'
+                            : null,
                       ),
                     ),
                     const SizedBox(width: AppSizes.sm),
@@ -166,10 +168,9 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                         controller: _nomCtrl,
                         decoration: const InputDecoration(labelText: 'Nom'),
                         textCapitalization: TextCapitalization.words,
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty)
-                                ? 'Obligatoire'
-                                : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Obligatoire'
+                            : null,
                       ),
                     ),
                   ],
@@ -211,9 +212,7 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                                   : AppColors.grisLight,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: selected
-                                    ? color
-                                    : AppColors.grisMedium,
+                                color: selected ? color : AppColors.grisMedium,
                               ),
                             ),
                             child: Text(
@@ -237,30 +236,46 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
 
                 // ── Numéro de pointeuse (préposée only) ──
                 if (_isPreposee) ...[
-                  TextFormField(
-                    controller: _pointeuseCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'N° de pointeuse (optionnel)',
-                      hintText: '6 chiffres',
-                      prefixIcon:
-                          Icon(Icons.fingerprint_rounded),
+                  if (widget.canEditNumeroPointeuse)
+                    TextFormField(
+                      controller: _pointeuseCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'N° de pointeuse',
+                        hintText: '6 chiffres',
+                        prefixIcon: Icon(Icons.fingerprint_rounded),
+                        helperText: 'Ce champ est réservé aux administrateurs.',
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                      validator: (v) {
+                        final value = v?.trim() ?? '';
+                        if (!_isEdit && value.isEmpty) {
+                          return 'Obligatoire pour une préposée';
+                        }
+                        if (value.isNotEmpty && value.length != 6) {
+                          return '6 chiffres requis';
+                        }
+                        return null;
+                      },
+                    )
+                  else
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'N° de pointeuse',
+                        prefixIcon: Icon(Icons.fingerprint_rounded),
+                        suffixIcon: Icon(Icons.lock_outline_rounded, size: 18),
+                        helperText:
+                            'Seul un administrateur peut modifier ce numéro.',
+                        filled: true,
+                      ),
+                      child: Text(
+                        widget.employe?.numeroPointeuse ??
+                            'À attribuer par un administrateur',
+                      ),
                     ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
-                    ],
-                    validator: (v) {
-                      final value = v?.trim() ?? '';
-                      if (!_isEdit && value.isEmpty) {
-                        return 'Obligatoire pour une préposée';
-                      }
-                      if (value.isNotEmpty && value.length != 6) {
-                        return '6 chiffres requis';
-                      }
-                      return null;
-                    },
-                  ),
                   const SizedBox(height: AppSizes.md),
                 ],
 
@@ -272,8 +287,7 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                       labelText: _isEdit
                           ? 'Mot de passe (laisser vide pour ne pas changer)'
                           : 'Mot de passe',
-                      prefixIcon:
-                          const Icon(Icons.password_rounded),
+                      prefixIcon: const Icon(Icons.password_rounded),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _showMdp
@@ -281,14 +295,12 @@ class _EmployeFormWidgetState extends State<EmployeFormWidget> {
                               : Icons.visibility_outlined,
                           size: 20,
                         ),
-                        onPressed: () =>
-                            setState(() => _showMdp = !_showMdp),
+                        onPressed: () => setState(() => _showMdp = !_showMdp),
                       ),
                     ),
                     obscureText: !_showMdp,
                     validator: (v) {
-                      if (!_isEdit &&
-                          (v == null || v.trim().isEmpty)) {
+                      if (!_isEdit && (v == null || v.trim().isEmpty)) {
                         return 'Obligatoire pour un responsable';
                       }
                       return null;

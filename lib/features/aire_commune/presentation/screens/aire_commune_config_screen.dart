@@ -33,28 +33,35 @@ class _AireCommuneConfigScreenState
     final state = ref.watch(aireCommuneNotifierProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.grisLight,
+      backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
         backgroundColor: AppColors.rouge,
+        surfaceTintColor: AppColors.rouge,
+        foregroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 1,
+        shadowColor: Colors.black12,
         leading: IconButton(
+          tooltip: 'Retour',
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          'Configuration — Aire commune',
+          'Réglages des aires communes',
           style: TextStyle(
-              color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
         ),
       ),
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+          constraints: const BoxConstraints(maxWidth: 820),
           child: ListView(
             padding: const EdgeInsets.symmetric(
                 horizontal: AppSizes.md, vertical: AppSizes.lg),
             children: [
+              const _ConfigIntro(),
+              const SizedBox(height: AppSizes.lg),
               // ── Section 1 : Reset complet ──────────────
               const _SectionHeader(label: 'RESET MANUEL'),
               const SizedBox(height: AppSizes.xs),
@@ -115,6 +122,64 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _ConfigIntro extends StatelessWidget {
+  const _ConfigIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.lg),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.rouge, AppColors.rougeLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppSizes.radiusXl),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .16),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(Icons.tune_rounded, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Organisation hebdomadaire',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Configurez les remises à zéro et corrigez les confirmations '
+                  'si nécessaire.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .76),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Card réutilisable ──────────────────────────────────────
 Widget _card({required Widget child, EdgeInsetsGeometry? padding}) {
   return Container(
@@ -122,11 +187,12 @@ Widget _card({required Widget child, EdgeInsetsGeometry? padding}) {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      border: Border.all(color: const Color(0xFFE7E9F2)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.04),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
+          color: Colors.black.withValues(alpha: 0.025),
+          blurRadius: 14,
+          offset: const Offset(0, 5),
         ),
       ],
     ),
@@ -166,8 +232,7 @@ class _ResetCard extends ConsumerWidget {
                         color: AppColors.noir)),
                 SizedBox(height: 2),
                 Text('Remet toutes les zones à "À confirmer"',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.grisText)),
+                    style: TextStyle(fontSize: 12, color: AppColors.grisText)),
               ],
             ),
           ),
@@ -183,8 +248,8 @@ class _ResetCard extends ConsumerWidget {
                   onPressed: () => _confirmerReset(context, ref),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.refus,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   icon: const Icon(Icons.restart_alt_rounded, size: 16),
                   label: const Text('Remettre à zéro',
@@ -218,8 +283,7 @@ class _ResetCard extends ConsumerWidget {
               child: const Text('Annuler')),
           FilledButton.icon(
             onPressed: () => Navigator.pop(dialogCtx, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.refus),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.refus),
             icon: const Icon(Icons.restart_alt_rounded, size: 16),
             label: const Text('Confirmer'),
           ),
@@ -245,13 +309,11 @@ class _ResetCard extends ConsumerWidget {
               backgroundColor: AppColors.fait,
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppSizes.radiusMd)),
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
             )
           : SnackBar(
-              content: Text(
-                  ref.read(aireCommuneNotifierProvider).error ??
-                      'Erreur lors du reset'),
+              content: Text(ref.read(aireCommuneNotifierProvider).error ??
+                  'Erreur lors du reset'),
               backgroundColor: AppColors.rouge,
               behavior: SnackBarBehavior.floating,
             ),
@@ -309,9 +371,7 @@ class _JourRadio extends StatelessWidget {
   final bool selectionne;
   final VoidCallback onChanged;
   const _JourRadio(
-      {required this.jour,
-      required this.selectionne,
-      required this.onChanged});
+      {required this.jour, required this.selectionne, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -327,18 +387,15 @@ class _JourRadio extends StatelessWidget {
                   ? Icons.radio_button_checked_rounded
                   : Icons.radio_button_off_rounded,
               size: 20,
-              color:
-                  selectionne ? AppColors.rouge : AppColors.grisText,
+              color: selectionne ? AppColors.rouge : AppColors.grisText,
             ),
             const SizedBox(width: 10),
             Text(
               jour,
               style: TextStyle(
                 fontSize: 14,
-                fontWeight:
-                    selectionne ? FontWeight.w600 : FontWeight.w400,
-                color:
-                    selectionne ? AppColors.rouge : AppColors.noir,
+                fontWeight: selectionne ? FontWeight.w600 : FontWeight.w400,
+                color: selectionne ? AppColors.rouge : AppColors.noir,
               ),
             ),
           ],
@@ -380,9 +437,11 @@ class _ResetAutoCard extends ConsumerWidget {
                         color: AppColors.noir)),
                 const SizedBox(height: 2),
                 Text(
-                  actif ? 'Actif — reset chaque semaine' : 'Désactivé — reset manuel seulement',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.grisText),
+                  actif
+                      ? 'Actif — reset chaque semaine'
+                      : 'Désactivé — reset manuel seulement',
+                  style:
+                      const TextStyle(fontSize: 12, color: AppColors.grisText),
                 ),
               ],
             ),
@@ -416,8 +475,7 @@ class _ZonesConfirmeesCard extends ConsumerWidget {
                 size: 20, color: AppColors.grisMedium),
             SizedBox(width: 8),
             Text('Aucune zone confirmée cette semaine',
-                style: TextStyle(
-                    fontSize: 13, color: AppColors.grisText)),
+                style: TextStyle(fontSize: 13, color: AppColors.grisText)),
           ],
         ),
       );
@@ -446,9 +504,8 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final nomZone = _formatZone(zone.zone);
-    final heure = zone.confirmeLE != null
-        ? DateHelper.formatHeure(zone.confirmeLE!)
-        : '';
+    final heure =
+        zone.confirmeLE != null ? DateHelper.formatHeure(zone.confirmeLE!) : '';
 
     return Padding(
       padding:
@@ -483,12 +540,10 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
           TextButton.icon(
             onPressed: () => _confirmerAnnulation(context, ref, nomZone),
             icon: const Icon(Icons.undo_rounded, size: 15),
-            label: const Text('Annuler',
-                style: TextStyle(fontSize: 12)),
+            label: const Text('Annuler', style: TextStyle(fontSize: 12)),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.refus,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             ),
           ),
         ],
@@ -514,8 +569,7 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
               child: const Text('Non')),
           FilledButton(
             onPressed: () => Navigator.pop(dialogCtx, true),
-            style: FilledButton.styleFrom(
-                backgroundColor: AppColors.refus),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.refus),
             child: const Text('Annuler la confirmation'),
           ),
         ],
@@ -588,9 +642,7 @@ class _HistoriqueRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              isAuto
-                  ? Icons.autorenew_rounded
-                  : Icons.restart_alt_rounded,
+              isAuto ? Icons.autorenew_rounded : Icons.restart_alt_rounded,
               size: 16,
               color: AppColors.absent,
             ),
@@ -604,8 +656,7 @@ class _HistoriqueRow extends StatelessWidget {
                     color: AppColors.noir)),
           ),
           Text(date,
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.grisText)),
+              style: const TextStyle(fontSize: 11, color: AppColors.grisText)),
         ],
       ),
     );
@@ -613,6 +664,5 @@ class _HistoriqueRow extends StatelessWidget {
 }
 
 // ── Helper ─────────────────────────────────────────────────
-String _formatZone(String zone) => zone
-    .replaceAll('_Etage_', ' – Étage ')
-    .replaceAll('_', ' ');
+String _formatZone(String zone) =>
+    zone.replaceAll('_Etage_', ' – Étage ').replaceAll('_', ' ');

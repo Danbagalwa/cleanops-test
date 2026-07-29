@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/errors/exceptions.dart';
+import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../domain/entities/memo.dart';
 import '../models/memo_model.dart';
@@ -21,11 +22,6 @@ abstract class MemoDatasource {
 }
 
 class MemoDatasourceImpl implements MemoDatasource {
-  static int get _semaineNumero {
-    final day = DateTime.now().day;
-    return ((day - 1) / 7).floor() + 1;
-  }
-
   static String get _dateAujourdhui =>
       DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -78,7 +74,8 @@ class MemoDatasourceImpl implements MemoDatasource {
         final lastMemo = empMemos.isNotEmpty ? empMemos.first : null;
         final nonLus = empMemos
             .where((m) =>
-                m['auteur'] == 'Employé' && (m['is_lu'] as bool? ?? false) == false)
+                m['auteur'] == 'Employé' &&
+                (m['is_lu'] as bool? ?? false) == false)
             .length;
         return PreposeeResume(
           employeeId: emp['id'] as String,
@@ -111,7 +108,7 @@ class MemoDatasourceImpl implements MemoDatasource {
             'auteur': auteur == AuteurType.employeur ? 'Employeur' : 'Employé',
             'message': message,
             'tache_jour_date': _dateAujourdhui,
-            'numero_semaine': _semaineNumero,
+            'numero_semaine': SemaineHelper.semaineCourante,
             'is_lu': false,
           })
           .select('*, auteur_employe:auteur_id(prenom)')

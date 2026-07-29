@@ -15,11 +15,13 @@ class JourSemaineModel extends JourSemaine {
     required String nom,
     required List<Map<String, dynamic>> taches,
   }) {
-    final total     = taches.length;
-    final confirmees = taches.where((t) =>
-    t['statut'] != 'NonCommencé').length;
-    final minutes   = taches.fold<int>(
-        0, (sum, t) => sum + ((t['minutes_finales'] as int?) ?? 0));
+    final total = taches.length;
+    final confirmees = taches.where((t) => t['statut'] != 'NonCommencé').length;
+    final minutes = taches.fold<int>(0, (sum, t) {
+      final appartement = t['appartements'] as Map<String, dynamic>?;
+      final minutesBase = appartement?['minutes_base'] as int? ?? 0;
+      return sum + ((t['minutes_finales'] as int?) ?? minutesBase);
+    });
 
     StatutJour statut;
     if (total == 0 || confirmees == 0) {
@@ -31,12 +33,12 @@ class JourSemaineModel extends JourSemaine {
     }
 
     return JourSemaineModel(
-      date:             date,
-      nom:              nom,
-      numeroTaches:     total,
+      date: date,
+      nom: nom,
+      numeroTaches: total,
       tachesConfirmees: confirmees,
-      totalMinutes:     minutes,
-      statut:           statut,
+      totalMinutes: minutes,
+      statut: statut,
     );
   }
 }

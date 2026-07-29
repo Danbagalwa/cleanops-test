@@ -24,6 +24,8 @@ import '../../features/resident_espace/presentation/screens/resident_accueil_scr
 import '../../features/resident_espace/presentation/screens/resident_demandes_screen.dart';
 import '../../features/resident_espace/presentation/screens/resident_profil_screen.dart';
 import '../../features/resident_espace/presentation/screens/demandes_residents_responsable_screen.dart';
+import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/splash_screen.dart';
 
@@ -74,6 +76,7 @@ class AppRoutes {
   static const String demandesResidents = '/demandes/residents';
   static const String demandesEquipe = '/demandes/equipe';
   static const String profil = '/profil';
+  static const String notifications = '/notifications';
 
   static String loginSlug(String slug) => '/$slug';
 }
@@ -98,6 +101,7 @@ const _routesProtegees = [
   '/residents',
   '/demandes',
   '/profil',
+  '/notifications',
   '/resident',
 ];
 
@@ -226,9 +230,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               final numeroSemaine = state.uri.queryParameters['semaine'];
               return PdfPreviewScreen(
                 employeeId: employeeId,
-                numeroSemaine: numeroSemaine != null
-                    ? int.tryParse(numeroSemaine)
-                    : null,
+                numeroSemaine:
+                    numeroSemaine != null ? int.tryParse(numeroSemaine) : null,
               );
             },
           ),
@@ -270,8 +273,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'config',
-                builder: (context, state) =>
-                    const AireCommuneConfigScreen(),
+                builder: (context, state) => const AireCommuneConfigScreen(),
               ),
             ],
           ),
@@ -280,6 +282,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/messages-semaine',
             builder: (context, state) => const MessagesSemaineScreen(),
+          ),
+
+          GoRoute(
+            path: '/profil',
+            builder: (context, state) => const ProfileScreen(),
+          ),
+
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) => const NotificationsScreen(),
           ),
 
           // Résidents (responsable)

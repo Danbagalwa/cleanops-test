@@ -342,9 +342,35 @@ class _AppShellState extends ConsumerState<AppShell> {
         ? <String, int>{'/resident/demandes': notifBadge}
         : const <String, int>{};
 
-    void onLogout() {
-      ref.read(authNotifierProvider.notifier).logout();
-      context.go('/');
+    final profileRoute =
+        employee?.isResident == true ? '/resident/profil' : '/profil';
+
+    Future<void> onLogout() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(Icons.logout_rounded, color: AppColors.rouge),
+          title: const Text('Se déconnecter ?'),
+          content: const Text(
+            'Vous devrez vous identifier à nouveau pour accéder à votre espace.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Rester connecté'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Se déconnecter'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+      await ref.read(authNotifierProvider.notifier).logout();
+      if (context.mounted) context.go('/');
     }
 
     if (isDesktop) {
@@ -363,6 +389,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                   activeRoute: activeRoute,
                   employee: employee,
                   onLogout: onLogout,
+                  onProfile: () => context.go(profileRoute),
                   isExpanded: _expanded,
                   onToggle: () => setState(() => _expanded = !_expanded),
                   badgeMap: badgeMap,
@@ -440,6 +467,7 @@ class _Sidebar extends StatelessWidget {
   final String activeRoute;
   final Employee? employee;
   final VoidCallback onLogout;
+  final VoidCallback onProfile;
   final bool isExpanded;
   final VoidCallback onToggle;
   final Map<String, int> badgeMap;
@@ -449,6 +477,7 @@ class _Sidebar extends StatelessWidget {
     required this.activeRoute,
     required this.employee,
     required this.onLogout,
+    required this.onProfile,
     required this.isExpanded,
     required this.onToggle,
     this.badgeMap = const {},
@@ -489,13 +518,13 @@ class _Sidebar extends StatelessWidget {
 
                     // Items de la section
                     ...sections[si].items.map(
-                      (item) => _SidebarItem(
-                        item: item,
-                        isActive: item.route == activeRoute,
-                        isExpanded: isExpanded,
-                        badge: badgeMap[item.route] ?? 0,
-                      ),
-                    ),
+                          (item) => _SidebarItem(
+                            item: item,
+                            isActive: item.route == activeRoute,
+                            isExpanded: isExpanded,
+                            badge: badgeMap[item.route] ?? 0,
+                          ),
+                        ),
                   ],
                 ],
               ),
@@ -506,6 +535,7 @@ class _Sidebar extends StatelessWidget {
           _SidebarFooter(
             employee: employee,
             onLogout: onLogout,
+            onProfile: onProfile,
             isExpanded: isExpanded,
           ),
         ],
@@ -763,11 +793,13 @@ class _SidebarItem extends StatelessWidget {
 class _SidebarFooter extends StatelessWidget {
   final Employee? employee;
   final VoidCallback onLogout;
+  final VoidCallback onProfile;
   final bool isExpanded;
 
   const _SidebarFooter({
     required this.employee,
     required this.onLogout,
+    required this.onProfile,
     required this.isExpanded,
   });
 
@@ -822,9 +854,14 @@ class _SidebarFooter extends StatelessWidget {
   }
 
   Widget _buildExpanded() {
-    return Column(
-      children: [
-        Row(
+    return _buildAccountMenu(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          border: Border.all(color: const Color(0xFFE7E9F2)),
+        ),
+        child: Row(
           children: [
             _buildAvatar(),
             const SizedBox(width: 10),
@@ -851,41 +888,68 @@ class _SidebarFooter extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.unfold_more_rounded,
+              size: 18,
+              color: AppColors.grisText,
+            ),
           ],
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onLogout,
-            icon: const Icon(Icons.logout_rounded, size: 16),
-            label: const Text('Déconnexion'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.grisDark,
-              side: const BorderSide(color: AppColors.grisMedium),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              textStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildCollapsed() {
-    return Center(
-      child: Tooltip(
-        message: 'Déconnexion',
-        preferBelow: false,
-        child: InkWell(
-          onTap: onLogout,
-          borderRadius: BorderRadius.circular(20),
-          child: _buildAvatar(),
-        ),
+    return Tooltip(
+      message: 'Ouvrir le menu du compte',
+      child: _buildAccountMenu(child: _buildAvatar()),
+    );
+  }
+
+  Widget _buildAccountMenu({required Widget child}) {
+    return PopupMenuButton<String>(
+      tooltip: 'Menu du compte',
+      position: PopupMenuPosition.over,
+      offset: const Offset(0, -116),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
       ),
+      elevation: 8,
+      onSelected: (value) {
+        if (value == 'profile') {
+          onProfile();
+        } else if (value == 'logout') {
+          onLogout();
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: 'profile',
+          child: Row(
+            children: [
+              Icon(Icons.manage_accounts_outlined, size: 20),
+              SizedBox(width: 12),
+              Text('Mon profil'),
+            ],
+          ),
+        ),
+        PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout_rounded, size: 20, color: Color(0xFF9F2D2D)),
+              SizedBox(width: 12),
+              Text(
+                'Se déconnecter',
+                style: TextStyle(color: Color(0xFF9F2D2D)),
+              ),
+            ],
+          ),
+        ),
+      ],
+      child: child,
     );
   }
 }

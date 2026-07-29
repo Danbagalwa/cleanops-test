@@ -24,6 +24,26 @@ class UserFriendlyError {
     final raw = _clean(error?.toString() ?? '');
     final text = raw.toLowerCase();
 
+    // Le message a déjà été traduit par une couche métier. Il ne doit pas
+    // être remplacé une seconde fois par le composant de présentation.
+    if (text.startsWith('certaines données ne respectent pas') ||
+        text.startsWith('vérifiez les champs indiqués')) {
+      return UserFriendlyError(
+        title: 'Une information est à vérifier',
+        message: raw,
+        kind: UserErrorKind.validation,
+      );
+    }
+
+    if (text.startsWith('nous n’avons pas pu terminer') ||
+        text.startsWith("nous n'avons pas pu terminer")) {
+      return UserFriendlyError(
+        title: 'Nous n’avons pas pu terminer',
+        message: raw,
+        kind: UserErrorKind.unexpected,
+      );
+    }
+
     if (_containsAny(text, [
       'socketexception',
       'failed host lookup',
@@ -34,8 +54,7 @@ class UserFriendlyError {
     ])) {
       return const UserFriendlyError(
         title: 'Connexion interrompue',
-        message:
-            'Nous n’arrivons pas à joindre le service pour le moment. '
+        message: 'Nous n’arrivons pas à joindre le service pour le moment. '
             'Vérifiez votre connexion, puis réessayez. Vos données sont en sécurité.',
         kind: UserErrorKind.connection,
       );
@@ -44,8 +63,7 @@ class UserFriendlyError {
     if (_containsAny(text, ['timeout', 'timed out', 'délai dépassé'])) {
       return const UserFriendlyError(
         title: 'Le service prend un peu de temps',
-        message:
-            'La demande n’a pas pu être terminée assez rapidement. '
+        message: 'La demande n’a pas pu être terminée assez rapidement. '
             'Patientez quelques instants, puis réessayez.',
         kind: UserErrorKind.unavailable,
       );
@@ -77,8 +95,7 @@ class UserFriendlyError {
     ])) {
       return const UserFriendlyError(
         title: 'Action non autorisée',
-        message:
-            'Cette action n’est pas disponible pour votre profil. '
+        message: 'Cette action n’est pas disponible pour votre profil. '
             'Rien n’a été modifié.',
         kind: UserErrorKind.permission,
       );
@@ -94,8 +111,7 @@ class UserFriendlyError {
     ])) {
       return const UserFriendlyError(
         title: 'Cet élément existe déjà',
-        message:
-            'Une information identique est déjà enregistrée. '
+        message: 'Une information identique est déjà enregistrée. '
             'Vous pouvez vérifier les données saisies puis réessayer.',
         kind: UserErrorKind.duplicate,
       );
@@ -123,8 +139,7 @@ class UserFriendlyError {
     ])) {
       return const UserFriendlyError(
         title: 'Une information est à vérifier',
-        message:
-            'Certaines données ne respectent pas les règles attendues. '
+        message: 'Certaines données ne respectent pas les règles attendues. '
             'Vérifiez les champs indiqués puis réessayez.',
         kind: UserErrorKind.validation,
       );
@@ -138,8 +153,7 @@ class UserFriendlyError {
     ])) {
       return const UserFriendlyError(
         title: 'Information introuvable',
-        message:
-            'Cet élément n’est plus disponible ou a déjà été modifié. '
+        message: 'Cet élément n’est plus disponible ou a déjà été modifié. '
             'Actualisez la page pour continuer.',
         kind: UserErrorKind.notFound,
       );

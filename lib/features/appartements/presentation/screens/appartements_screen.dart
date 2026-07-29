@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/widgets/error_widget.dart';
+import '../../../../core/widgets/export_menu_button.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../pdf/domain/usecases/generate_appartements_export.dart';
+import '../../../pdf/presentation/screens/appartements_pdf_preview_screen.dart';
 import '../../domain/entities/appartement.dart';
 import '../providers/appartements_provider.dart';
 import '../widgets/appartement_form_widget.dart';
@@ -52,6 +56,17 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
       final matchTaille = _filterTaille == null || a.taille == _filterTaille;
       return matchSearch && matchTaille;
     }).toList();
+  }
+
+  String _filterDescription() {
+    final filters = <String>[];
+    if (_searchQuery.isNotEmpty) {
+      filters.add('Recherche : "${_searchCtrl.text.trim()}"');
+    }
+    if (_filterTaille != null) {
+      filters.add('Taille : $_filterTaille');
+    }
+    return filters.isEmpty ? 'Tous les appartements' : filters.join(' · ');
   }
 
   void _ouvrirFormulaire({Appartement? appartement}) {
@@ -104,8 +119,10 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appartementsNotifierProvider);
+    final currentEmployee = ref.watch(employeeCourantProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 900;
     final filtered = _filtered(state.appartements);
+    final filterDescription = _filterDescription();
     final totalPages = (filtered.length / _kPageSize).ceil().clamp(1, 9999);
     final safePage = _page.clamp(0, totalPages - 1);
     final paginated =
@@ -125,6 +142,33 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
           ),
         ),
         actions: [
+          AppExportMenuButton(
+            enabled: filtered.isNotEmpty && !state.isLoading,
+            onPdf: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AppartementsPdfPreviewScreen(
+                  appartements: filtered,
+                  filterDescription: filterDescription,
+                  generatedBy: currentEmployee?.nomComplet ?? 'CleanOps',
+                ),
+              ),
+            ),
+            onExcel: () {
+              try {
+                const GenerateAppartementsExcel()(
+                  appartements: filtered,
+                  filterDescription: filterDescription,
+                );
+                showExportSuccess(
+                  context,
+                  'La liste Excel des appartements a été téléchargée.',
+                );
+              } catch (error) {
+                AppFeedback.showError(context, error);
+              }
+            },
+          ),
+          const SizedBox(width: 8),
           if (isDesktop)
             Padding(
               padding: const EdgeInsets.only(right: AppSizes.md),
@@ -137,16 +181,22 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
                   foregroundColor: AppColors.rouge,
                 ),
               ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton(
+                tooltip: 'Ajouter un appartement',
+                onPressed: () => _ouvrirFormulaire(),
+                style: IconButton.styleFrom(
+                  foregroundColor: AppColors.rouge,
+                  backgroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.add_rounded),
+              ),
             ),
         ],
       ),
-      floatingActionButton: isDesktop
-          ? null
-          : FloatingActionButton(
-              onPressed: () => _ouvrirFormulaire(),
-              backgroundColor: AppColors.rouge,
-              child: const Icon(Icons.add_rounded, color: Colors.white),
-            ),
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(

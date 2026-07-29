@@ -12,7 +12,13 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
   const EmployeeDashboardDatasourceImpl();
 
   static const _joursNoms = [
-    'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
+    'Lundi',
+    'Mardi',
+    'Mercredi',
+    'Jeudi',
+    'Vendredi',
+    'Samedi',
+    'Dimanche',
   ];
 
   @override
@@ -20,17 +26,16 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
     required String employeeId,
   }) async {
     try {
-      final lundi          = SemaineHelper.lundiCourant;
-      final vendredi       = lundi.add(const Duration(days: 4));
-      final numeroSemaine  = SemaineHelper.semaineCourante;
-      final lundiStr       = lundi.toIso8601String().split('T')[0];
-      final vendrediStr    = vendredi.toIso8601String().split('T')[0];
+      final lundi = SemaineHelper.lundiCourant;
+      final vendredi = lundi.add(const Duration(days: 4));
+      final numeroSemaine = SemaineHelper.semaineCourante;
+      final lundiStr = lundi.toIso8601String().split('T')[0];
+      final vendrediStr = vendredi.toIso8601String().split('T')[0];
 
       // Première lecture : taches déjà générées ?
       var taches = List<Map<String, dynamic>>.from(
-        await SupabaseService
-            .table(SupabaseService.tachesJour)
-            .select('*, appartements(numero, taille)')
+        await SupabaseService.table(SupabaseService.tachesJour)
+            .select('*, appartements(numero, taille, minutes_base)')
             .eq('employee_id', employeeId)
             .gte('semaine_reelle', lundiStr)
             .lte('semaine_reelle', vendrediStr)
@@ -41,9 +46,8 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
       if (taches.isEmpty) {
         await _genererSemaine(employeeId, lundi, numeroSemaine);
         taches = List<Map<String, dynamic>>.from(
-          await SupabaseService
-              .table(SupabaseService.tachesJour)
-              .select('*, appartements(numero, taille)')
+          await SupabaseService.table(SupabaseService.tachesJour)
+              .select('*, appartements(numero, taille, minutes_base)')
               .eq('employee_id', employeeId)
               .gte('semaine_reelle', lundiStr)
               .lte('semaine_reelle', vendrediStr)
@@ -58,21 +62,20 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
       for (int i = 0; i < 5; i++) {
         final date = lundi.add(Duration(days: i));
         final dateStr = date.toIso8601String().split('T')[0];
-        final tachesJour = taches
-            .where((t) => t['semaine_reelle'] == dateStr)
-            .toList();
+        final tachesJour =
+            taches.where((t) => t['semaine_reelle'] == dateStr).toList();
 
         jours.add(JourSemaineModel.fromTaches(
-          date:   date,
-          nom:    nomsJours[i],
+          date: date,
+          nom: nomsJours[i],
           taches: tachesJour,
         ));
       }
 
       return SemaineModel(
         numeroSemaine: numeroSemaine,
-        lundiDate:     lundi,
-        jours:         jours,
+        lundiDate: lundi,
+        jours: jours,
       );
     } catch (e) {
       throw ServerException('Erreur chargement semaine : $e');
@@ -82,13 +85,18 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
   // Génère toutes les tâches de la semaine depuis les planning_templates en un seul batch
   Future<void> _genererSemaine(
       String employeeId, DateTime lundi, int numeroSemaine) async {
-    final templates = await SupabaseService
-        .table(SupabaseService.planningTemplates)
-        .select('*')
-        .eq('employee_id', employeeId)
-        .eq('numero_semaine', numeroSemaine)
-        .inFilter('jour', ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'])
-        .order('numero_tache');
+    final templates =
+        await SupabaseService.table(SupabaseService.planningTemplates)
+            .select('*')
+            .eq('employee_id', employeeId)
+            .eq('numero_semaine', numeroSemaine)
+            .inFilter('jour', [
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi'
+    ]).order('numero_tache');
 
     final list = templates as List;
     if (list.isEmpty) return;
@@ -118,11 +126,11 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
   @override
   Future<String?> getMessageSemaine() async {
     try {
-      final response = await SupabaseService
-          .table(SupabaseService.messagesSemaine)
-          .select('contenu')
-          .eq('is_actif', true)
-          .maybeSingle();
+      final response =
+          await SupabaseService.table(SupabaseService.messagesSemaine)
+              .select('contenu')
+              .eq('is_actif', true)
+              .maybeSingle();
 
       return response?['contenu'] as String?;
     } catch (e) {

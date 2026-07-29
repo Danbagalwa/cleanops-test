@@ -2,15 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../pdf/presentation/screens/resident_cleaning_dates_pdf_screen.dart';
 import '../../domain/entities/demande_resident.dart';
+import '../../domain/entities/tache_resident.dart';
 import '../providers/resident_espace_provider.dart';
 
 const _kJours = [
-  'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'
+  'lundi',
+  'mardi',
+  'mercredi',
+  'jeudi',
+  'vendredi',
+  'samedi',
+  'dimanche'
 ];
 const _kMois = [
-  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+  'janvier',
+  'février',
+  'mars',
+  'avril',
+  'mai',
+  'juin',
+  'juillet',
+  'août',
+  'septembre',
+  'octobre',
+  'novembre',
+  'décembre'
 ];
 
 String _fmtDate(DateTime d) =>
@@ -25,6 +44,7 @@ class TabDemandes extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(residentEspaceNotifierProvider);
+    final resident = ref.watch(employeeCourantProvider);
     final demandes = state.demandes;
 
     return LayoutBuilder(
@@ -59,7 +79,11 @@ class TabDemandes extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                     AppSizes.md, AppSizes.md, AppSizes.md, 0),
-                child: _PdfSection(),
+                child: _PdfSection(
+                  taches: state.prochaines,
+                  residentName: resident?.nomComplet ?? 'Résident',
+                  apartmentNumber: resident?.nomResidence ?? '—',
+                ),
               ),
 
               // ── Liste demandes ──────────────────────────
@@ -80,8 +104,8 @@ class TabDemandes extends ConsumerWidget {
                               itemBuilder: (context, i) => _DemandeCard(
                                 demande: demandes[i],
                                 onAccepter: () => ref
-                                    .read(residentEspaceNotifierProvider
-                                        .notifier)
+                                    .read(
+                                        residentEspaceNotifierProvider.notifier)
                                     .accepterProposition(demandes[i].id),
                                 onRefuser: () =>
                                     _confirmerRefus(context, ref, demandes[i]),
@@ -205,8 +229,9 @@ class _DemandeCard extends StatelessWidget {
 
           if (demande.enAttente) _EnAttenteSection(),
 
-          if (demande.repondue) _ReponseeSection(demande: demande,
-              onAccepter: onAccepter, onRefuser: onRefuser),
+          if (demande.repondue)
+            _ReponseeSection(
+                demande: demande, onAccepter: onAccepter, onRefuser: onRefuser),
 
           if (demande.resolue) _ResolueSection(demande: demande),
         ],
@@ -326,8 +351,7 @@ class _ReponseeSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.rouge.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-              border: Border.all(
-                  color: AppColors.rouge.withValues(alpha: 0.3)),
+              border: Border.all(color: AppColors.rouge.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -362,8 +386,7 @@ class _ReponseeSection extends StatelessWidget {
                   foregroundColor: AppColors.grisDark,
                   side: const BorderSide(color: AppColors.grisMedium),
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.radiusSm),
+                    borderRadius: BorderRadius.circular(AppSizes.radiusSm),
                   ),
                 ),
                 child: const Text('Refuser'),
@@ -376,8 +399,7 @@ class _ReponseeSection extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.fait,
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.radiusSm),
+                    borderRadius: BorderRadius.circular(AppSizes.radiusSm),
                   ),
                 ),
                 child: const Text('Accepter'),
@@ -410,8 +432,7 @@ class _ResolueSection extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.check_circle_rounded,
-                  size: 16, color: AppColors.fait),
+              Icon(Icons.check_circle_rounded, size: 16, color: AppColors.fait),
               SizedBox(width: AppSizes.sm),
               Text(
                 'Demande résolue ✅',
@@ -439,6 +460,16 @@ class _ResolueSection extends StatelessWidget {
 // ── Section PDF ───────────────────────────────────────────
 
 class _PdfSection extends StatelessWidget {
+  final List<TacheResident> taches;
+  final String residentName;
+  final String apartmentNumber;
+
+  const _PdfSection({
+    required this.taches,
+    required this.residentName,
+    required this.apartmentNumber,
+  });
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -464,8 +495,10 @@ class _PdfSection extends StatelessWidget {
               Expanded(
                 child: _PdfButton(
                   icon: Icons.calendar_today_rounded,
-                  label: 'Toute l\'année',
-                  onTap: () => _aVenir(context),
+                  label: '12 prochains mois',
+                  onTap: taches.isEmpty
+                      ? null
+                      : () => _ouvrirApercu(context, taches),
                 ),
               ),
               const SizedBox(width: AppSizes.sm),
@@ -473,7 +506,7 @@ class _PdfSection extends StatelessWidget {
                 child: _PdfButton(
                   icon: Icons.date_range_rounded,
                   label: 'Période choisie',
-                  onTap: () => _aVenir(context),
+                  onTap: taches.isEmpty ? null : () => _choisirPeriode(context),
                 ),
               ),
             ],
@@ -487,8 +520,7 @@ class _PdfSection extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Ces dates peuvent être sujettes à modifications',
-                  style:
-                      TextStyle(fontSize: 11, color: AppColors.grisDark),
+                  style: TextStyle(fontSize: 11, color: AppColors.grisDark),
                 ),
               ),
             ],
@@ -498,11 +530,40 @@ class _PdfSection extends StatelessWidget {
     );
   }
 
-  void _aVenir(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Cette fonctionnalité sera bientôt disponible'),
-        behavior: SnackBarBehavior.floating,
+  Future<void> _choisirPeriode(BuildContext context) async {
+    final first = taches.first.dateReelle;
+    final last = taches.last.dateReelle;
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: first,
+      lastDate: last,
+      initialDateRange: DateTimeRange(
+        start: first,
+        end: last.isAfter(first.add(const Duration(days: 90)))
+            ? first.add(const Duration(days: 90))
+            : last,
+      ),
+    );
+    if (range == null || !context.mounted) return;
+    final filtered = taches
+        .where((t) =>
+            !t.dateReelle.isBefore(range.start) &&
+            !t.dateReelle.isAfter(range.end))
+        .toList();
+    _ouvrirApercu(context, filtered);
+  }
+
+  void _ouvrirApercu(
+    BuildContext context,
+    List<TacheResident> dates,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ResidentCleaningDatesPdfScreen(
+          taches: dates,
+          residentName: residentName,
+          apartmentNumber: apartmentNumber,
+        ),
       ),
     );
   }
@@ -511,13 +572,14 @@ class _PdfSection extends StatelessWidget {
 class _PdfButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
-  const _PdfButton({required this.icon, required this.label, required this.onTap});
+  final VoidCallback? onTap;
+  const _PdfButton(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.grisLight,
+      color: onTap == null ? AppColors.grisMedium : AppColors.grisLight,
       borderRadius: BorderRadius.circular(AppSizes.radiusSm),
       child: InkWell(
         onTap: onTap,
@@ -556,7 +618,10 @@ class _TypeIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color) = switch (type) {
-      TypeDemande.reprogrammer => (Icons.calendar_month_rounded, AppColors.rouge),
+      TypeDemande.reprogrammer => (
+          Icons.calendar_month_rounded,
+          AppColors.rouge
+        ),
       TypeDemande.annuler => (Icons.cancel_rounded, AppColors.refus),
       TypeDemande.commentaire => (Icons.chat_bubble_rounded, AppColors.absent),
     };
@@ -579,20 +644,25 @@ class _StatutBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, bg, fg) = switch (statut) {
-      StatutDemande.enAttente =>
-        ('En attente', AppColors.grisLight, AppColors.grisDark),
-      StatutDemande.repondue =>
-        ('Répondue', AppColors.aVerifier.withValues(alpha: 0.15), AppColors.aVerifier),
-      StatutDemande.resolue =>
-        ('Résolue', AppColors.faitBg, AppColors.fait),
+      StatutDemande.enAttente => (
+          'En attente',
+          AppColors.grisLight,
+          AppColors.grisDark
+        ),
+      StatutDemande.repondue => (
+          'Répondue',
+          AppColors.aVerifier.withValues(alpha: 0.15),
+          AppColors.aVerifier
+        ),
+      StatutDemande.resolue => ('Résolue', AppColors.faitBg, AppColors.fait),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration:
           BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Text(label,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+          style:
+              TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
     );
   }
 }
@@ -647,8 +717,7 @@ class _EmptyDemandes extends StatelessWidget {
                 onPressed: onNouvelleDemande,
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Faire une demande'),
-                style:
-                    FilledButton.styleFrom(backgroundColor: AppColors.rouge),
+                style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
               ),
             ],
           ),

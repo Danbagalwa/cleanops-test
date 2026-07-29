@@ -124,8 +124,8 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
       return;
     }
 
-    final motif = _motifController.text.trim();
-    if (motif.length < 10) {
+    final motifSaisi = _motifController.text.trim();
+    if (motifSaisi.length < 10) {
       setState(() {
         _motifError = 'Le motif doit faire au moins 10 caractères';
         _submitError = null;
@@ -137,14 +137,20 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
       _submitError = null;
     });
 
-    final success = await ref
-        .read(residentEspaceNotifierProvider.notifier)
-        .creerDemande(
-          type: _type!,
-          tacheJourId: _tacheSelectee?.id,
-          motif: motif,
-          estUrgente: _avertissementUrgent,
-        );
+    final tache = _tacheSelectee;
+    final motif = tache?.estProjection == true
+        ? '${_descriptionMenage(tache!)} — $motifSaisi'
+        : motifSaisi;
+
+    final success =
+        await ref.read(residentEspaceNotifierProvider.notifier).creerDemande(
+              type: _type!,
+              // Une projection n'existe pas encore dans taches_jour : la date
+              // est conservée dans le motif sans envoyer un faux identifiant.
+              tacheJourId: tache?.estProjection == true ? null : tache?.id,
+              motif: motif,
+              estUrgente: _avertissementUrgent,
+            );
 
     if (!mounted) return;
 
@@ -152,9 +158,39 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
       Navigator.of(context).pop(true);
     } else {
       final erreur = ref.read(residentEspaceNotifierProvider).errorDemandes;
-      setState(() => _submitError =
-          erreur ?? 'Erreur lors de l\'envoi. Réessayez.');
+      setState(
+          () => _submitError = erreur ?? 'Erreur lors de l\'envoi. Réessayez.');
     }
+  }
+
+  String _descriptionMenage(TacheResident tache) {
+    const jours = [
+      'lundi',
+      'mardi',
+      'mercredi',
+      'jeudi',
+      'vendredi',
+      'samedi',
+      'dimanche',
+    ];
+    const mois = [
+      'janvier',
+      'février',
+      'mars',
+      'avril',
+      'mai',
+      'juin',
+      'juillet',
+      'août',
+      'septembre',
+      'octobre',
+      'novembre',
+      'décembre',
+    ];
+    final date = tache.dateReelle;
+    return 'Ménage planifié du ${jours[date.weekday - 1]} '
+        '${date.day} ${mois[date.month - 1]} ${date.year}, '
+        '${tache.periodeDisplayLabel.toLowerCase()}';
   }
 
   @override
@@ -342,15 +378,13 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
                     if (_motifError != null) setState(() => _motifError = null);
                   },
                   decoration: InputDecoration(
-                    hintText:
-                        'Décrivez votre demande (minimum 10 caractères)…',
+                    hintText: 'Décrivez votre demande (minimum 10 caractères)…',
                     hintStyle: const TextStyle(
                         color: AppColors.grisText, fontSize: 14),
                     errorText: _motifError,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                      borderSide:
-                          const BorderSide(color: AppColors.grisMedium),
+                      borderSide: const BorderSide(color: AppColors.grisMedium),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -433,9 +467,8 @@ class _TypeCard extends StatelessWidget {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.all(AppSizes.md),
         decoration: BoxDecoration(
-          color: selected
-              ? AppColors.rouge.withValues(alpha: 0.07)
-              : Colors.white,
+          color:
+              selected ? AppColors.rouge.withValues(alpha: 0.07) : Colors.white,
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           border: Border.all(
             color: selected ? AppColors.rouge : AppColors.grisMedium,
@@ -496,12 +529,27 @@ class _TacheChoixCard extends StatelessWidget {
   final VoidCallback onTap;
 
   static const _jours = [
-    'lundi', 'mardi', 'mercredi', 'jeudi',
-    'vendredi', 'samedi', 'dimanche'
+    'lundi',
+    'mardi',
+    'mercredi',
+    'jeudi',
+    'vendredi',
+    'samedi',
+    'dimanche'
   ];
   static const _mois = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+    'janvier',
+    'février',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'août',
+    'septembre',
+    'octobre',
+    'novembre',
+    'décembre'
   ];
 
   const _TacheChoixCard({
@@ -521,12 +569,11 @@ class _TacheChoixCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.md, vertical: 12),
+        padding:
+            const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 12),
         decoration: BoxDecoration(
-          color: selected
-              ? AppColors.rouge.withValues(alpha: 0.06)
-              : Colors.white,
+          color:
+              selected ? AppColors.rouge.withValues(alpha: 0.06) : Colors.white,
           borderRadius: BorderRadius.circular(AppSizes.radiusSm),
           border: Border.all(
             color: selected ? AppColors.rouge : AppColors.grisMedium,
@@ -549,8 +596,7 @@ class _TacheChoixCard extends StatelessWidget {
               ),
             ),
             if (selected)
-              const Icon(Icons.check_rounded,
-                  color: AppColors.rouge, size: 18),
+              const Icon(Icons.check_rounded, color: AppColors.rouge, size: 18),
           ],
         ),
       ),

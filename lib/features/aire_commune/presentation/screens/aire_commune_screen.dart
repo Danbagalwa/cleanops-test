@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -47,10 +48,14 @@ class _AireCommuneScreenState extends ConsumerState<AireCommuneScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppColors.grisLight,
+        backgroundColor: const Color(0xFFF7F8FC),
         appBar: AppBar(
           backgroundColor: AppColors.rouge,
+          surfaceTintColor: AppColors.rouge,
+          foregroundColor: Colors.white,
           elevation: 0,
+          scrolledUnderElevation: 1,
+          shadowColor: Colors.black12,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             onPressed: inDetail
@@ -78,8 +83,10 @@ class _AireCommuneScreenState extends ConsumerState<AireCommuneScreen> {
                 Text(
                   '${state.getTotalFait(state.categorieSelectee!)} / '
                   '${state.getTotal(state.categorieSelectee!)} zones confirmées',
-                  style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
                 ),
             ],
           ),
@@ -87,27 +94,41 @@ class _AireCommuneScreenState extends ConsumerState<AireCommuneScreen> {
             if (!inDetail) ...[
               // ── Bouton rafraîchir ─────────────────────────
               IconButton(
-                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Rafraîchir',
-                onPressed: () => ref
-                    .read(aireCommuneNotifierProvider.notifier)
-                    .loadTaches(),
+                onPressed: () =>
+                    ref.read(aireCommuneNotifierProvider.notifier).loadTaches(),
               ),
               // ── Bouton configuration (responsable uniquement)
               if (isResponsable)
                 IconButton(
-                  icon: const Icon(Icons.settings_outlined, color: Colors.white),
+                  icon: const Icon(Icons.tune_rounded),
                   tooltip: 'Configuration',
                   onPressed: () => context.push('/aire-commune/config'),
                 ),
             ],
           ],
         ),
-        body: RefreshIndicator(
-          color: AppColors.rouge,
-          onRefresh: () =>
-              ref.read(aireCommuneNotifierProvider.notifier).loadTaches(),
-          child: _buildBody(state, isResponsable),
+        body: Stack(
+          children: [
+            RefreshIndicator(
+              color: AppColors.rouge,
+              onRefresh: () =>
+                  ref.read(aireCommuneNotifierProvider.notifier).loadTaches(),
+              child: _buildBody(state, isResponsable),
+            ),
+            if (state.isLoading && state.tachesParCategorie.isNotEmpty)
+              const Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: AppColors.rouge,
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -139,7 +160,6 @@ class _AireCommuneScreenState extends ConsumerState<AireCommuneScreen> {
       isResponsable: isResponsable,
     );
   }
-
 }
 
 // ── Vue liste des catégories ──────────────────────────────
@@ -176,26 +196,55 @@ class _ListeCategories extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: const BoxConstraints(maxWidth: 1120),
         child: ListView(
           padding: const EdgeInsets.symmetric(
               horizontal: AppSizes.md, vertical: AppSizes.lg),
           children: [
-            _BandeauGlobal(totalFait: totalFait, totalTaches: totalTaches),
+            _BandeauGlobal(
+              totalFait: totalFait,
+              totalTaches: totalTaches,
+              categories: categories.length,
+            ),
             // Section historique (responsable uniquement, si données disponibles)
             if (isResponsable && historiqueResets.isNotEmpty) ...[
               const SizedBox(height: AppSizes.sm),
               _HistoriqueResets(resets: historiqueResets),
             ],
+            const SizedBox(height: AppSizes.lg),
+            const _SectionHeader(
+              title: 'Zones à entretenir',
+              subtitle: 'Sélectionnez une catégorie pour afficher ses zones',
+            ),
             const SizedBox(height: AppSizes.md),
-            ...categories.map(
-              (c) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                child: _CategorieCard(
-                  categorie: c,
-                  taches: tachesParCategorie[c]!,
-                ),
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 900
+                    ? 3
+                    : constraints.maxWidth >= 600
+                        ? 2
+                        : 1;
+                const spacing = 12.0;
+                final itemWidth =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: categories.asMap().entries.map((entry) {
+                    final category = entry.value;
+                    return SizedBox(
+                      width: itemWidth,
+                      child: _CategorieCard(
+                        categorie: category,
+                        taches: tachesParCategorie[category]!,
+                      )
+                          .animate(delay: (entry.key * 45).ms)
+                          .fadeIn(duration: 280.ms)
+                          .slideY(begin: .04, end: 0),
+                    );
+                  }).toList(),
+                );
+              },
             ),
           ],
         ),
@@ -208,27 +257,30 @@ class _ListeCategories extends StatelessWidget {
 class _BandeauGlobal extends StatelessWidget {
   final int totalFait;
   final int totalTaches;
-  const _BandeauGlobal({required this.totalFait, required this.totalTaches});
+  final int categories;
+  const _BandeauGlobal({
+    required this.totalFait,
+    required this.totalTaches,
+    required this.categories,
+  });
 
   @override
   Widget build(BuildContext context) {
     final pct = totalTaches > 0 ? totalFait / totalTaches : 0.0;
-    final barColor = pct >= 1.0
-        ? AppColors.fait
-        : pct >= 0.5
-            ? AppColors.aVerifier
-            : AppColors.rouge;
-
     return Container(
-      padding: const EdgeInsets.all(AppSizes.md),
+      padding: const EdgeInsets.all(AppSizes.lg),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        gradient: const LinearGradient(
+          colors: [AppColors.rouge, AppColors.rougeLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppSizes.radiusXl),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.rouge.withValues(alpha: .18),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -237,31 +289,89 @@ class _BandeauGlobal extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
-                'Avancement global',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.noir),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .16),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.cleaning_services_rounded,
+                  color: Colors.white,
+                ),
               ),
-              const Spacer(),
-              Text(
-                '$totalFait / $totalTaches zones',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: barColor),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Entretien des aires communes',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '$categories catégories • $totalTaches zones',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: .75),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .16),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${(pct * 100).round()} %',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: AppSizes.sm),
+          const SizedBox(height: AppSizes.lg),
+          Row(
+            children: [
+              Text(
+                '$totalFait terminée${totalFait > 1 ? 's' : ''}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${totalTaches - totalFait} restante'
+                '${totalTaches - totalFait > 1 ? 's' : ''}',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .72),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: pct,
-              backgroundColor: AppColors.grisMedium,
-              valueColor: AlwaysStoppedAnimation<Color>(barColor),
-              minHeight: 8,
+              backgroundColor: Colors.white.withValues(alpha: .2),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              minHeight: 9,
             ),
           ),
         ],
@@ -278,8 +388,8 @@ class _HistoriqueResets extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.md, vertical: 10),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
@@ -290,8 +400,7 @@ class _HistoriqueResets extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.history_rounded,
-                  size: 14, color: AppColors.grisText),
+              Icon(Icons.history_rounded, size: 14, color: AppColors.grisText),
               SizedBox(width: 4),
               Text(
                 'HISTORIQUE DES RESETS',
@@ -346,8 +455,7 @@ class _ResetRow extends StatelessWidget {
           ),
           Text(
             date,
-            style:
-                const TextStyle(fontSize: 11, color: AppColors.grisText),
+            style: const TextStyle(fontSize: 11, color: AppColors.grisText),
           ),
         ],
       ),
@@ -404,8 +512,7 @@ class _CategorieCard extends ConsumerWidget {
                     height: 44,
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.1),
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.radiusMd),
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                     ),
                     child: Icon(icon, color: color, size: 22),
                   ),
@@ -471,14 +578,109 @@ class _DetailCategorie extends StatelessWidget {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView.separated(
+        constraints: const BoxConstraints(maxWidth: 1000),
+        child: ListView(
           padding: const EdgeInsets.symmetric(
               horizontal: AppSizes.md, vertical: AppSizes.lg),
-          itemCount: taches.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSizes.sm),
-          itemBuilder: (context, i) => _ZoneCard(tache: taches[i]),
+          children: [
+            _DetailHeader(categorie: categorie, taches: taches),
+            const SizedBox(height: AppSizes.lg),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth >= 720 ? 2 : 1;
+                const spacing = 12.0;
+                final itemWidth =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: taches.asMap().entries.map((entry) {
+                    return SizedBox(
+                      width: itemWidth,
+                      child: _ZoneCard(tache: entry.value)
+                          .animate(delay: (entry.key * 35).ms)
+                          .fadeIn(duration: 250.ms),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _DetailHeader extends StatelessWidget {
+  const _DetailHeader({required this.categorie, required this.taches});
+
+  final String categorie;
+  final List<TacheAireCommune> taches;
+
+  @override
+  Widget build(BuildContext context) {
+    final done = taches.where((task) => task.estFait).length;
+    final progress = taches.isEmpty ? 0.0 : done / taches.length;
+    final complete = done == taches.length;
+    final (icon, color) = _iconData(categorie);
+
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusXl),
+        border: Border.all(color: const Color(0xFFE7E9F2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  complete
+                      ? 'Toutes les zones sont terminées'
+                      : '${taches.length - done} zone'
+                          '${taches.length - done > 1 ? 's' : ''} à confirmer',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    color: complete ? AppColors.fait : AppColors.rouge,
+                    backgroundColor: const Color(0xFFE9EAF0),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Text(
+            '$done/${taches.length}',
+            style: TextStyle(
+              color: complete ? AppColors.fait : AppColors.rouge,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -565,8 +767,7 @@ class _ZoneCardState extends ConsumerState<_ZoneCard> {
                 else
                   const Text(
                     'À confirmer',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.grisText),
+                    style: TextStyle(fontSize: 12, color: AppColors.grisText),
                   ),
               ],
             ),
@@ -580,8 +781,7 @@ class _ZoneCardState extends ConsumerState<_ZoneCard> {
                 onPressed: _confirming ? null : _confirmer,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.fait,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: AppSizes.sm),
+                  padding: const EdgeInsets.symmetric(horizontal: AppSizes.sm),
                 ),
                 child: _confirming
                     ? const SizedBox(
@@ -590,8 +790,7 @@ class _ZoneCardState extends ConsumerState<_ZoneCard> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Confirmer',
-                        style: TextStyle(fontSize: 13)),
+                    : const Text('Confirmer', style: TextStyle(fontSize: 13)),
               ),
             ),
         ],
@@ -609,12 +808,88 @@ class _ZoneCardState extends ConsumerState<_ZoneCard> {
 
     final error = ref.read(aireCommuneNotifierProvider).error;
     if (error != null) {
-      AppFeedback.showError(context, error);
+      AppFeedback.showError(
+        context,
+        'La zone n’a pas pu être confirmée. Vérifiez votre connexion et '
+        'réessayez.',
+      );
+    } else {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.fait,
+            content: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('${_formatZone(widget.tache.zone)} confirmée.'),
+                ),
+              ],
+            ),
+          ),
+        );
     }
   }
 }
 
 // ── Helpers ────────────────────────────────────────────────
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.rouge.withValues(alpha: .09),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.grid_view_rounded,
+            color: AppColors.rouge,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.noir,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.grisDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 String _labelCategorie(String c) => switch (c) {
       'Ascenseur' => 'Ascenseurs',
       'Corridor' => 'Corridors',
@@ -635,9 +910,8 @@ String _labelCategorie(String c) => switch (c) {
       _ => (Icons.category_outlined, AppColors.grisText),
     };
 
-String _formatZone(String zone) => zone
-    .replaceAll('_Etage_', ' – Étage ')
-    .replaceAll('_', ' ');
+String _formatZone(String zone) =>
+    zone.replaceAll('_Etage_', ' – Étage ').replaceAll('_', ' ');
 
 // ── État vide ──────────────────────────────────────────────
 class _EmptyState extends ConsumerWidget {

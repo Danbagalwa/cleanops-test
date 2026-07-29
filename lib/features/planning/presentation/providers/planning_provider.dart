@@ -74,6 +74,8 @@ class PlanningState {
 
 // ── Notifier ──────────────────────────────────────────────
 class PlanningNotifier extends StateNotifier<PlanningState> {
+  static const int _capaciteMaxParPeriode = 6;
+
   final GetPlanningEmployee _get;
   final PlanningRepository _repository;
   final String? _employeeId;
@@ -104,21 +106,33 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
     required PeriodeType periode,
   }) async {
     // Règle : un appartement ne peut être visité qu'une seule fois par jour
-    final conflit = state.templates.where((t) =>
-        t.appartementId == appartementId &&
-        t.numeroSemaine == numeroSemaine &&
-        t.jour == jour).firstOrNull;
+    final conflit = state.templates
+        .where((t) =>
+            t.appartementId == appartementId &&
+            t.numeroSemaine == numeroSemaine &&
+            t.jour == jour)
+        .firstOrNull;
 
     if (conflit != null) {
       state = state.copyWith(
-        error: 'Cet appartement est déjà attribué le $jour (Sem. $numeroSemaine). '
+        error:
+            'Cet appartement est déjà attribué le $jour (Sem. $numeroSemaine). '
             "Chaque appartement ne peut être visité qu'une seule fois par jour.",
       );
       return false;
     }
 
     final existing = state.pourSlot(employeeId, numeroSemaine, jour, periode);
-    final numeroTache = existing.isEmpty ? 1 : existing.last.numeroTache + 1;
+    final numeroTache = _prochainePositionLibre(existing);
+    if (numeroTache == null) {
+      state = state.copyWith(
+        error:
+            'La période $jour ${periode == PeriodeType.am ? 'matin' : 'après-midi'} '
+            'contient déjà $_capaciteMaxParPeriode tâches. '
+            'Déplacez ou retirez une tâche avant d’en ajouter une autre.',
+      );
+      return false;
+    }
 
     state = state.copyWith(isLoading: true, error: null);
     final result = await _repository.ajouterSlot(
@@ -178,14 +192,31 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
       return false;
     }
 
-    final destination = state.pourSlot(
-      employeeId,
-      current.numeroSemaine,
-      jour,
-      periode,
-    );
-    final position = numeroTache ??
-        (destination.isEmpty ? 1 : destination.last.numeroTache + 1);
+    final memeEmplacement = current.employeeId == employeeId &&
+        current.jour == jour &&
+        current.periode == periode;
+    if (memeEmplacement && numeroTache == null) return true;
+
+    final destination = state
+        .pourSlot(
+          employeeId,
+          current.numeroSemaine,
+          jour,
+          periode,
+        )
+        .where((template) => template.id != templateId)
+        .toList();
+    final position = numeroTache ?? _prochainePositionLibre(destination);
+
+    if (position == null || position < 1 || position > _capaciteMaxParPeriode) {
+      state = state.copyWith(
+        error:
+            'La période $jour ${periode == PeriodeType.am ? 'matin' : 'après-midi'} '
+            'est complète. Elle peut contenir au maximum '
+            '$_capaciteMaxParPeriode tâches.',
+      );
+      return false;
+    }
 
     state = state.copyWith(isLoading: true, error: null);
     final result = await _repository.deplacerSlot(
@@ -205,8 +236,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
         state = state.copyWith(
           isLoading: false,
           templates: state.templates
-              .map((template) =>
-                  template.id == templateId ? updated : template)
+              .map((template) => template.id == templateId ? updated : template)
               .toList(),
         );
         return true;
@@ -217,13 +247,21 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
   void changerSemaine(int semaine) {
     state = state.copyWith(semaineVue: semaine);
   }
+
+  int? _prochainePositionLibre(List<PlanningTemplate> templates) {
+    final positions = templates.map((template) => template.numeroTache).toSet();
+    for (var position = 1; position <= _capaciteMaxParPeriode; position++) {
+      if (!positions.contains(position)) return position;
+    }
+    return null;
+  }
 }
 
 // ── Provider (family par employeeId) ─────────────────────
 // null = charger tous les templates (vue équipe responsable)
 // String = charger uniquement cet employé (vue préposée ou navigation directe)
-final planningNotifierProvider = StateNotifierProvider.family<
-    PlanningNotifier, PlanningState, String?>(
+final planningNotifierProvider =
+    StateNotifierProvider.family<PlanningNotifier, PlanningState, String?>(
   (ref, employeeId) => PlanningNotifier(
     get: ref.watch(_getPlanningProvider),
     repository: ref.watch(planningRepositoryProvider),

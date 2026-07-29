@@ -1,13 +1,21 @@
 import 'package:equatable/equatable.dart';
 
 enum TypeNotifResident {
+  presenceConfirmee,
+  remplacement,
   changementDate,
+  menageEnAttente,
+  absence,
   annulationConfirmee,
   demandeResolue,
   general;
 
   static TypeNotifResident fromString(String v) => switch (v) {
+        'PresenceConfirmee' => TypeNotifResident.presenceConfirmee,
+        'Remplacement' || 'Transfert' => TypeNotifResident.remplacement,
         'ChangementDate' => TypeNotifResident.changementDate,
+        'MenageEnAttente' => TypeNotifResident.menageEnAttente,
+        'Absence' => TypeNotifResident.absence,
         'AnnulationConfirmee' => TypeNotifResident.annulationConfirmee,
         'DemandeResolue' => TypeNotifResident.demandeResolue,
         _ => TypeNotifResident.general,

@@ -699,6 +699,14 @@ class _ActionRow extends ConsumerWidget {
             'Vous serez informé(e) dès qu\'une date est confirmée.',
       );
 
+      await _notifierEmployes(
+        employeeIds: [presence.employeeId],
+        type: 'Annulation',
+        message:
+            'Le ménage Apt $_numAppart — ${_nomJour(date)} $_periode a été annulé.',
+        entityId: _tacheId,
+      );
+
       onLoading(false);
       onDone('C');
     } catch (e) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/semaine_helper.dart';
@@ -9,6 +10,7 @@ import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../appartements/presentation/providers/appartements_provider.dart';
 import '../../../employes/presentation/providers/employes_provider.dart';
+import '../../../pdf/domain/usecases/generate_planning_excel.dart';
 import '../../../tache_jour/domain/entities/tache_jour.dart';
 import '../../domain/entities/planning_template.dart';
 import '../providers/planning_provider.dart';
@@ -50,6 +52,10 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
         // Responsable arrivant depuis le dashboard avec un employeeId
         setState(() => _employeeVue = widget.employeeId);
         ref.read(planningNotifierProvider(null).notifier).charger();
+        final employesState = ref.read(employesNotifierProvider);
+        if (employesState.employes.isEmpty && !employesState.isLoading) {
+          ref.read(employesNotifierProvider.notifier).charger();
+        }
       } else {
         // Responsable → vue équipe (charge tous les templates)
         ref.read(planningNotifierProvider(null).notifier).charger();
@@ -69,6 +75,8 @@ class _PlanningScreenState extends ConsumerState<PlanningScreen> {
 
       return _IndividualView(
         employeeId: _employeeVue!,
+        employee: emp ??
+            (employee?.id == _employeeVue ? employee : null),
         employeeName: emp != null
             ? '${emp.prenom} ${emp.nom}'
             : (isResponsable ? '...' : '${employee?.prenom ?? ''} ${employee?.nom ?? ''}'),
@@ -126,6 +134,33 @@ class _TeamView extends ConsumerWidget {
             ),
           ],
         ),
+        actions: [
+          _ExportMenuButton(
+            enabled: !planningState.isLoading,
+            onPdf: () => context.push(
+                      Uri(
+                        path: '/pdf',
+                        queryParameters: {'semaine': '$semaine'},
+                      ).toString(),
+                    ),
+            onExcel: () {
+              try {
+                const GeneratePlanningExcel().team(
+                  employees: employes,
+                  templates: planningState.templates,
+                  numeroSemaine: semaine,
+                );
+                _showExportSuccess(
+                  context,
+                  'Le planning Excel de l’équipe a été téléchargé.',
+                );
+              } catch (error) {
+                AppFeedback.showError(context, error);
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Column(
         children: [
@@ -528,6 +563,7 @@ class _TeamCellGroup extends StatelessWidget {
 // ── Vue individuelle ──────────────────────────────────────
 class _IndividualView extends ConsumerWidget {
   final String employeeId;
+  final Employee? employee;
   final String employeeName;
   final bool isResponsable;
   final String? providerKey;
@@ -535,6 +571,7 @@ class _IndividualView extends ConsumerWidget {
 
   const _IndividualView({
     required this.employeeId,
+    required this.employee,
     required this.employeeName,
     required this.isResponsable,
     required this.providerKey,
@@ -574,6 +611,38 @@ class _IndividualView extends ConsumerWidget {
           ],
         ),
         actions: [
+          _ExportMenuButton(
+            enabled: !planningState.isLoading,
+            onPdf: () => context.push(
+                      Uri(
+                        path: '/pdf',
+                        queryParameters: {'employeeId': employeeId},
+                      ).toString(),
+                    ),
+            onExcel: () {
+              final selectedEmployee = employee;
+              if (selectedEmployee == null) {
+                AppFeedback.showError(
+                  context,
+                  'Les informations de cet employé sont encore en cours de '
+                  'chargement. Réessayez dans un instant.',
+                );
+                return;
+              }
+              try {
+                const GeneratePlanningExcel().employee(
+                  employee: selectedEmployee,
+                  templates: planningState.templates,
+                );
+                _showExportSuccess(
+                  context,
+                  'Le planning Excel personnel a été téléchargé.',
+                );
+              } catch (error) {
+                AppFeedback.showError(context, error);
+              }
+            },
+          ),
           if (planningState.isLoading)
             const Padding(
               padding: EdgeInsets.only(right: AppSizes.md),
@@ -615,6 +684,183 @@ class _IndividualView extends ConsumerWidget {
 }
 
 // ── Widgets utilitaires ───────────────────────────────────
+enum _ExportFormat { pdf, excel }
+
+class _ExportMenuButton extends StatelessWidget {
+  final bool enabled;
+  final VoidCallback onPdf;
+  final VoidCallback onExcel;
+
+  const _ExportMenuButton({
+    required this.enabled,
+    required this.onPdf,
+    required this.onExcel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ExportFormat>(
+      enabled: enabled,
+      tooltip: 'Exporter le planning',
+      onSelected: (format) {
+        switch (format) {
+          case _ExportFormat.pdf:
+            onPdf();
+            break;
+          case _ExportFormat.excel:
+            onExcel();
+            break;
+        }
+      },
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: _ExportFormat.pdf,
+          child: _ExportMenuItem(
+            icon: Icons.picture_as_pdf_rounded,
+            color: Color(0xFFD14343),
+            title: 'Exporter en PDF',
+            subtitle: 'Aperçu, impression ou téléchargement',
+          ),
+        ),
+        PopupMenuItem(
+          value: _ExportFormat.excel,
+          child: _ExportMenuItem(
+            icon: Icons.table_view_rounded,
+            color: Color(0xFF18794E),
+            title: 'Exporter en Excel',
+            subtitle: 'Classeur modifiable au format XLSX',
+          ),
+        ),
+      ],
+      child: AnimatedOpacity(
+        opacity: enabled ? 1 : 0.45,
+        duration: const Duration(milliseconds: 160),
+        child: Container(
+          height: 40,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.sizeOf(context).width < 600 ? 10 : 12,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.download_rounded,
+                color: Colors.white,
+                size: 19,
+              ),
+              if (MediaQuery.sizeOf(context).width >= 600) ...[
+                const SizedBox(width: 7),
+                const Text(
+                  'Exporter',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 3),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExportMenuItem extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+
+  const _ExportMenuItem({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 245,
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppColors.grisText,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _showExportSuccess(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.of(context);
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF18794E),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+}
+
 class _ErrorBanner extends StatelessWidget {
   final String message;
   const _ErrorBanner(this.message);

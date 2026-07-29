@@ -59,6 +59,18 @@ class Semaine extends Equatable {
     return jours.where((j) => j.estAujourdhui).firstOrNull;
   }
 
+  int get totalTachesSemaine =>
+      jours.fold(0, (total, jour) => total + jour.numeroTaches);
+
+  int get tachesConfirmeesSemaine =>
+      jours.fold(0, (total, jour) => total + jour.tachesConfirmees);
+
+  int get tachesRestantesSemaine =>
+      totalTachesSemaine - tachesConfirmeesSemaine;
+
+  int get totalMinutesSemaine =>
+      jours.fold(0, (total, jour) => total + jour.totalMinutes);
+
   @override
   List<Object?> get props => [numeroSemaine, lundiDate];
 }
