@@ -14,6 +14,7 @@ class AppSizes {
   static const double radiusMd = 12.0;
   static const double radiusLg = 16.0;
   static const double radiusXl = 24.0;
+  static const double radiusPill = 999.0;
 
   // ── Tailles fixes ────────────────────────────────────────
   static const double pinBoxSize = 56.0;

@@ -87,12 +87,18 @@ class AppartementsNotifier extends StateNotifier<AppartementsState> {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
     final result = await _add(AddAppartementParams(
       numero: numero,
       taille: taille,
       minutesBase: minutesBase,
+      notes: notes,
+      hasAnimal: hasAnimal,
+      typeAnimal: typeAnimal,
     ));
     return result.fold(
       (failure) {
@@ -113,6 +119,9 @@ class AppartementsNotifier extends StateNotifier<AppartementsState> {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
     final result = await _update(UpdateAppartementParams(
@@ -120,6 +129,9 @@ class AppartementsNotifier extends StateNotifier<AppartementsState> {
       numero: numero,
       taille: taille,
       minutesBase: minutesBase,
+      notes: notes,
+      hasAnimal: hasAnimal,
+      typeAnimal: typeAnimal,
     ));
     return result.fold(
       (failure) {

@@ -104,18 +104,32 @@ class _StatistiquesScreenState extends ConsumerState<StatistiquesScreen> {
             ),
         ],
       ),
-      body: Row(
-        children: [
-          // ── Contenu principal (gauche) ─────────────────────
-          Expanded(child: content),
-          // ── Rail de navigation (droite) ────────────────────
-          _RightNav(
-            selectedIndex: state.selectedTab,
-            onSelect: (i) =>
-                ref.read(statistiquesNotifierProvider.notifier).selectTab(i),
-          ),
-        ],
-      ),
+      body: MediaQuery.of(context).size.width < 640
+          ? Column(
+              children: [
+                // ── Onglets (mobile) ────────────────────────────
+                _TopTabBar(
+                  selectedIndex: state.selectedTab,
+                  onSelect: (i) => ref
+                      .read(statistiquesNotifierProvider.notifier)
+                      .selectTab(i),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : Row(
+              children: [
+                // ── Contenu principal (gauche) ───────────────────
+                Expanded(child: content),
+                // ── Rail de navigation (droite) ──────────────────
+                _RightNav(
+                  selectedIndex: state.selectedTab,
+                  onSelect: (i) => ref
+                      .read(statistiquesNotifierProvider.notifier)
+                      .selectTab(i),
+                ),
+              ],
+            ),
     );
   }
 
@@ -130,7 +144,123 @@ class _StatistiquesScreenState extends ConsumerState<StatistiquesScreen> {
   }
 }
 
-// ── Rail de navigation droit ───────────────────────────────
+// ── Barre d'onglets horizontale (mobile) ────────────────────
+
+class _TopTabBar extends StatelessWidget {
+  final int selectedIndex;
+  final void Function(int) onSelect;
+
+  const _TopTabBar({required this.selectedIndex, required this.onSelect});
+
+  static const _items = [
+    _NavItemData(
+      icon: Icons.calendar_today_outlined,
+      activeIcon: Icons.calendar_today_rounded,
+      label: 'Semaine',
+    ),
+    _NavItemData(
+      icon: Icons.people_outline_rounded,
+      activeIcon: Icons.people_rounded,
+      label: 'Préposées',
+    ),
+    _NavItemData(
+      icon: Icons.apartment_outlined,
+      activeIcon: Icons.apartment_rounded,
+      label: 'Appts',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(
+          AppSizes.md, AppSizes.sm, AppSizes.md, AppSizes.sm),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: AppColors.grisLight,
+          borderRadius: BorderRadius.circular(AppSizes.radiusPill),
+        ),
+        child: Row(
+          children: [
+            for (int i = 0; i < _items.length; i++)
+              Expanded(
+                child: _TopTabItem(
+                  data: _items[i],
+                  isSelected: selectedIndex == i,
+                  onTap: () => onSelect(i),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TopTabItem extends StatelessWidget {
+  final _NavItemData data;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TopTabItem({
+    required this.data,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSizes.radiusPill),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppSizes.radiusPill),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? data.activeIcon : data.icon,
+              size: 16,
+              color: isSelected ? AppColors.rouge : AppColors.grisText,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                data.label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppColors.rouge : AppColors.grisText,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rail de navigation droit (desktop / tablette) ───────────
 
 class _RightNav extends StatelessWidget {
   final int selectedIndex;

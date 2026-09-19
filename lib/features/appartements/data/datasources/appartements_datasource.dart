@@ -8,12 +8,18 @@ abstract class AppartementsDatasource {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   });
   Future<AppartementModel> updateAppartement({
     required String id,
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   });
   Future<void> deleteAppartement(String id);
 }
@@ -38,10 +44,20 @@ class AppartementsDatasourceImpl implements AppartementsDatasource {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     try {
       final response = await SupabaseService.table(SupabaseService.appartements)
-          .insert({'numero': numero, 'taille': taille, 'minutes_base': minutesBase})
+          .insert({
+            'numero': numero,
+            'taille': taille,
+            'minutes_base': minutesBase,
+            'notes': notes,
+            'has_animal': hasAnimal,
+            'type_animal': hasAnimal ? typeAnimal : null,
+          })
           .select()
           .single();
       return AppartementModel.fromJson(response);
@@ -60,10 +76,20 @@ class AppartementsDatasourceImpl implements AppartementsDatasource {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     try {
       final response = await SupabaseService.table(SupabaseService.appartements)
-          .update({'numero': numero, 'taille': taille, 'minutes_base': minutesBase})
+          .update({
+            'numero': numero,
+            'taille': taille,
+            'minutes_base': minutesBase,
+            'notes': notes,
+            'has_animal': hasAnimal,
+            'type_animal': hasAnimal ? typeAnimal : null,
+          })
           .eq('id', id)
           .select()
           .single();

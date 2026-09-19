@@ -220,26 +220,125 @@ class _AbsencesScreenState extends ConsumerState<AbsencesScreen> {
                 child: CircularProgressIndicator(color: AppColors.rouge))
             : state.error != null
                 ? _ErrorBody(message: state.error!, onRetry: _charger)
-                : state.absences.isEmpty
+                : state.absences.isEmpty && state.presencesAvecHeures.isEmpty
                     ? const _EmptyState()
                     : Align(
                         alignment: Alignment.topCenter,
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 700),
-                          child: ListView.separated(
+                          child: ListView(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: AppSizes.md, vertical: AppSizes.lg),
-                            itemCount: state.absences.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: AppSizes.md),
-                            itemBuilder: (context, i) => _AbsenceCard(
-                              presence: state.absences[i],
-                              date: _date,
-                            ),
+                            children: [
+                              if (state.presencesAvecHeures.isNotEmpty) ...[
+                                _RegistreHeuresSection(
+                                    presences: state.presencesAvecHeures),
+                                const SizedBox(height: AppSizes.lg),
+                              ],
+                              for (int i = 0; i < state.absences.length; i++) ...[
+                                if (i > 0) const SizedBox(height: AppSizes.md),
+                                _AbsenceCard(
+                                  presence: state.absences[i],
+                                  date: _date,
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ),
       ),
+    );
+  }
+}
+
+// ── Registre des horaires précisés (informatif) ────────────
+
+class _RegistreHeuresSection extends StatelessWidget {
+  final List<Presence> presences;
+  const _RegistreHeuresSection({required this.presences});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        border: Border.all(color: AppColors.grisMedium),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.access_time_rounded, size: 16, color: AppColors.absent),
+              SizedBox(width: 6),
+              Text(
+                'HORAIRES PRÉCISÉS AUJOURD\'HUI',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grisText,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'À titre informatif — n\'affecte pas les tâches du jour.',
+            style: TextStyle(fontSize: 11, color: AppColors.grisText),
+          ),
+          const SizedBox(height: AppSizes.sm),
+          for (int i = 0; i < presences.length; i++) ...[
+            if (i > 0) const Divider(height: 16),
+            _HeureRegistreRow(presence: presences[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HeureRegistreRow extends StatelessWidget {
+  final Presence presence;
+  const _HeureRegistreRow({required this.presence});
+
+  @override
+  Widget build(BuildContext context) {
+    final prenom = presence.employee?.prenom ?? '';
+    final nom = presence.employee?.nom ?? '';
+    final initiale = prenom.isNotEmpty ? prenom[0].toUpperCase() : '?';
+
+    return Row(
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: AppColors.absent.withValues(alpha: 0.12),
+          child: Text(initiale,
+              style: const TextStyle(
+                  color: AppColors.absent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(width: AppSizes.sm),
+        Expanded(
+          child: Text(
+            '$prenom $nom'.trim().isEmpty ? 'Préposée' : '$prenom $nom',
+            style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.noir),
+          ),
+        ),
+        Text(
+          '${presence.heureDebut} → ${presence.heureFin}',
+          style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.absent),
+        ),
+      ],
     );
   }
 }

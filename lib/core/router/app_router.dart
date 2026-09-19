@@ -26,6 +26,8 @@ import '../../features/resident_espace/presentation/screens/resident_profil_scre
 import '../../features/resident_espace/presentation/screens/demandes_residents_responsable_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
+import '../../features/demandes_equipe/presentation/screens/demandes_equipe_responsable_screen.dart';
+import '../../features/demandes_equipe/presentation/screens/mes_demandes_equipe_screen.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/splash_screen.dart';
 
@@ -75,6 +77,7 @@ class AppRoutes {
   static const String residents = '/residents';
   static const String demandesResidents = '/demandes/residents';
   static const String demandesEquipe = '/demandes/equipe';
+  static const String mesDemandesEquipe = '/mes-demandes-equipe';
   static const String profil = '/profil';
   static const String notifications = '/notifications';
 
@@ -100,6 +103,7 @@ const _routesProtegees = [
   '/messages-semaine',
   '/residents',
   '/demandes',
+  '/mes-demandes-equipe',
   '/profil',
   '/notifications',
   '/resident',
@@ -305,6 +309,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/demandes/residents',
             builder: (context, state) =>
                 const DemandesResidentsResponsableScreen(),
+          ),
+
+          // Demandes équipe — congé / absence planifiée (responsable)
+          GoRoute(
+            path: '/demandes/equipe',
+            builder: (context, state) =>
+                const DemandesEquipeResponsableScreen(),
+          ),
+
+          // Mes demandes d'équipe (tout employé)
+          GoRoute(
+            path: '/mes-demandes-equipe',
+            builder: (context, state) => const MesDemandesEquipeScreen(),
           ),
 
           // ── Espace résident ─────────────────────────────

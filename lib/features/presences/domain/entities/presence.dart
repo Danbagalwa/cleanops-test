@@ -41,6 +41,10 @@ class Presence extends Equatable {
   final bool alerteEnvoyee;
   final String? valideParId;
   final Employee? employee;
+  // Précision d'horaire — informatif uniquement (registre pour le
+  // responsable), ne bloque ni ne filtre aucune tâche. Format 'HH:mm'.
+  final String? heureDebut;
+  final String? heureFin;
 
   const Presence({
     required this.id,
@@ -51,11 +55,22 @@ class Presence extends Equatable {
     this.alerteEnvoyee = false,
     this.valideParId,
     this.employee,
+    this.heureDebut,
+    this.heureFin,
   });
 
   bool get estConfirmee => confirmedLe != null;
+  bool get aHeuresPrecisees => heureDebut != null && heureFin != null;
 
   @override
-  List<Object?> get props =>
-      [id, employeeId, date, statut, alerteEnvoyee, valideParId];
+  List<Object?> get props => [
+        id,
+        employeeId,
+        date,
+        statut,
+        alerteEnvoyee,
+        valideParId,
+        heureDebut,
+        heureFin,
+      ];
 }

@@ -3,7 +3,8 @@ import 'package:equatable/equatable.dart';
 enum TypeDemande {
   reprogrammer,
   annuler,
-  commentaire;
+  commentaire,
+  infoAppartement;
 
   String get label {
     switch (this) {
@@ -13,6 +14,8 @@ enum TypeDemande {
         return 'Annuler';
       case TypeDemande.commentaire:
         return 'Commentaire';
+      case TypeDemande.infoAppartement:
+        return 'InfoAppartement';
     }
   }
 
@@ -22,6 +25,8 @@ enum TypeDemande {
         return TypeDemande.annuler;
       case 'Commentaire':
         return TypeDemande.commentaire;
+      case 'InfoAppartement':
+        return TypeDemande.infoAppartement;
       default:
         return TypeDemande.reprogrammer;
     }
@@ -70,6 +75,11 @@ class DemandeResident extends Equatable {
   final bool estUrgente;
   final DateTime createdAt;
 
+  // Proposition résident — type infoAppartement uniquement
+  final String? propositionNotes;
+  final bool? propositionHasAnimal;
+  final String? propositionTypeAnimal;
+
   const DemandeResident({
     required this.id,
     required this.residentId,
@@ -83,6 +93,9 @@ class DemandeResident extends Equatable {
     this.residentAccepte,
     required this.estUrgente,
     required this.createdAt,
+    this.propositionNotes,
+    this.propositionHasAnimal,
+    this.propositionTypeAnimal,
   });
 
   bool get enAttente => statut == StatutDemande.enAttente;

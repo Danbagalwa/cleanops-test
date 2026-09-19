@@ -183,6 +183,68 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
                 ],
               ],
             ),
+
+            // ── Alerte animal / notes ────────────────────
+            if (appt?.hasAnimal == true || (appt?.notes?.isNotEmpty ?? false))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSizes.sm),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSizes.sm),
+                  decoration: BoxDecoration(
+                    color: AppColors.aVerifier.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                    border: Border.all(
+                      color: AppColors.aVerifier.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (appt?.hasAnimal == true)
+                        Row(
+                          children: [
+                            const Icon(Icons.pets_rounded,
+                                size: 16, color: AppColors.aVerifier),
+                            const SizedBox(width: 6),
+                            Text(
+                              (appt?.typeAnimal?.isNotEmpty ?? false)
+                                  ? 'Animal présent : ${appt!.typeAnimal}'
+                                  : 'Animal présent',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.noir,
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (appt?.hasAnimal == true &&
+                          (appt?.notes?.isNotEmpty ?? false))
+                        const SizedBox(height: 6),
+                      if (appt?.notes?.isNotEmpty ?? false)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.notes_rounded,
+                                size: 16, color: AppColors.grisDark),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                appt!.notes!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.grisDark,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
             const SizedBox(height: AppSizes.md),
 
             // ── Options de statut ────────────────────────

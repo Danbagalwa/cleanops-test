@@ -94,7 +94,33 @@ class TacheDisponibleDatasourceImpl implements TacheDisponibleDatasource {
           .select(_joinTache)
           .single();
 
-      return TacheDisponibleModel.fromJson(data);
+      final result = TacheDisponibleModel.fromJson(data);
+
+      final numero = result.tacheJour?.appartement?.numero;
+      final message =
+          numero != null ? 'Tâche disponible — Apt $numero' : 'Une tâche est disponible pour l\'équipe.';
+
+      if (employeeVisibleId != null) {
+        await _notifierEmployes(
+          employeeIds: [employeeVisibleId],
+          message: message,
+          entityId: result.id,
+        );
+      } else {
+        final actifs = await SupabaseService.client
+            .from(SupabaseService.employees)
+            .select('id')
+            .eq('is_actif', true)
+            .neq('id', libereParId);
+        final ids = (actifs as List).map((e) => e['id'] as String).toList();
+        await _notifierEmployes(
+          employeeIds: ids,
+          message: message,
+          entityId: result.id,
+        );
+      }
+
+      return result;
     } on PostgrestException catch (e) {
       throw ServerException(e.message);
     } catch (e) {
@@ -123,12 +149,50 @@ class TacheDisponibleDatasourceImpl implements TacheDisponibleDatasource {
           .eq('id', tacheDisponibleId)
           .single();
 
-      return TacheDisponibleModel.fromJson(updated);
+      final result = TacheDisponibleModel.fromJson(updated);
+
+      if (result.libereParId != null && result.libereParId != employeeId) {
+        final numero = result.tacheJour?.appartement?.numero;
+        final message = numero != null
+            ? 'Votre tâche Apt $numero a été prise en charge par un collègue.'
+            : 'Une de vos tâches libérées a été prise en charge.';
+        await _notifierEmployes(
+          employeeIds: [result.libereParId!],
+          message: message,
+          entityId: result.id,
+          type: 'Transfert',
+        );
+      }
+
+      return result;
     } on PostgrestException catch (e) {
       throw ServerException(e.message);
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(e.toString());
+    }
+  }
+
+  Future<void> _notifierEmployes({
+    required List<String> employeeIds,
+    required String message,
+    required String entityId,
+    String type = 'TacheDisponible',
+  }) async {
+    if (employeeIds.isEmpty) return;
+    try {
+      final rows = employeeIds
+          .map((id) => {
+                'destinataire_id': id,
+                'type': type,
+                'message': message,
+                'entity_id': entityId,
+                'entity_type': 'TacheDisponible',
+              })
+          .toList();
+      await SupabaseService.table(SupabaseService.notifications).insert(rows);
+    } catch (_) {
+      // Silencieux — la notification n'est pas critique
     }
   }
 }

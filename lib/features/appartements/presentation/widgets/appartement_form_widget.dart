@@ -8,6 +8,9 @@ typedef AppartementSaveCallback = void Function(
   String numero,
   String taille,
   int minutesBase,
+  String? notes,
+  bool hasAnimal,
+  String? typeAnimal,
 );
 
 const List<String> _tailles = ['2 1/2', '3 1/2', '4 1/2', '5 1/2'];
@@ -47,7 +50,10 @@ class _AppartementFormWidgetState extends State<AppartementFormWidget> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _numeroCtrl;
   late final TextEditingController _minutesCtrl;
+  late final TextEditingController _notesCtrl;
+  late final TextEditingController _typeAnimalCtrl;
   late String _taille;
+  late bool _hasAnimal;
 
   bool get _isEdit => widget.appartement != null;
 
@@ -55,6 +61,7 @@ class _AppartementFormWidgetState extends State<AppartementFormWidget> {
   void initState() {
     super.initState();
     _taille = widget.appartement?.taille ?? '3 1/2';
+    _hasAnimal = widget.appartement?.hasAnimal ?? false;
     _numeroCtrl = TextEditingController(
       text: widget.appartement?.numero ?? '',
     );
@@ -62,12 +69,18 @@ class _AppartementFormWidgetState extends State<AppartementFormWidget> {
       text: (widget.appartement?.minutesBase ?? _minutesDefaut(_taille))
           .toString(),
     );
+    _notesCtrl = TextEditingController(text: widget.appartement?.notes ?? '');
+    _typeAnimalCtrl = TextEditingController(
+      text: widget.appartement?.typeAnimal ?? '',
+    );
   }
 
   @override
   void dispose() {
     _numeroCtrl.dispose();
     _minutesCtrl.dispose();
+    _notesCtrl.dispose();
+    _typeAnimalCtrl.dispose();
     super.dispose();
   }
 
@@ -82,7 +95,16 @@ class _AppartementFormWidgetState extends State<AppartementFormWidget> {
     if (!_formKey.currentState!.validate()) return;
     final minutes =
         int.tryParse(_minutesCtrl.text.trim()) ?? _minutesDefaut(_taille);
-    widget.onSave(_numeroCtrl.text.trim(), _taille, minutes);
+    final notes = _notesCtrl.text.trim();
+    final typeAnimal = _typeAnimalCtrl.text.trim();
+    widget.onSave(
+      _numeroCtrl.text.trim(),
+      _taille,
+      minutes,
+      notes.isEmpty ? null : notes,
+      _hasAnimal,
+      _hasAnimal && typeAnimal.isNotEmpty ? typeAnimal : null,
+    );
   }
 
   @override
@@ -227,6 +249,75 @@ class _AppartementFormWidgetState extends State<AppartementFormWidget> {
                     if (n == null || n <= 0) return 'Valeur invalide';
                     return null;
                   },
+                ),
+
+                const SizedBox(height: AppSizes.md),
+
+                // ── Animal ───────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.grisLight,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  ),
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        value: _hasAnimal,
+                        onChanged: (v) => setState(() {
+                          _hasAnimal = v;
+                          if (!v) _typeAnimalCtrl.clear();
+                        }),
+                        title: const Text(
+                          'Présence d\'un animal',
+                          style: TextStyle(fontSize: 13.5),
+                        ),
+                        secondary: const Icon(Icons.pets_rounded, size: 20),
+                        activeThumbColor: AppColors.rouge,
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSizes.sm,
+                        ),
+                      ),
+                      if (_hasAnimal)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSizes.sm,
+                            0,
+                            AppSizes.sm,
+                            AppSizes.sm,
+                          ),
+                          child: TextFormField(
+                            controller: _typeAnimalCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Type d\'animal',
+                              hintText: 'Ex: Chat, Chien...',
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: AppSizes.md),
+
+                // ── Notes ────────────────────────────────
+                TextFormField(
+                  controller: _notesCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes',
+                    hintText: 'Informations complémentaires...',
+                    prefixIcon: Icon(Icons.notes_rounded, size: 19),
+                    isDense: true,
+                    alignLabelWithHint: true,
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                  minLines: 2,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
                 ),
 
                 const SizedBox(height: AppSizes.lg),

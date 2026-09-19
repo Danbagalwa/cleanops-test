@@ -13,10 +13,15 @@ abstract class ResidentEspaceRepository {
 
   Future<Either<Failure, DemandeResident>> creerDemande({
     required String residentId,
+    required String residentPrenom,
+    required String residentNom,
     required TypeDemande type,
     String? tacheJourId,
     required String motif,
     bool estUrgente = false,
+    String? propositionNotes,
+    bool? propositionHasAnimal,
+    String? propositionTypeAnimal,
   });
 
   /// Résident accepte la proposition du responsable.
@@ -47,5 +52,16 @@ abstract class ResidentEspaceRepository {
     required String reponse,
     DateTime? propositionDate,
     String? propositionPeriode,
+  });
+
+  /// Valide la proposition d'infos appartement (applique notes/animal).
+  Future<Either<Failure, DemandeResident>> validerInfoAppartement({
+    required String demandeId,
+  });
+
+  /// Refuse la proposition d'infos appartement.
+  Future<Either<Failure, DemandeResident>> refuserInfoAppartement({
+    required String demandeId,
+    required String reponse,
   });
 }

@@ -34,18 +34,28 @@ class ResidentEspaceRepositoryImpl implements ResidentEspaceRepository {
   @override
   Future<Either<Failure, DemandeResident>> creerDemande({
     required String residentId,
+    required String residentPrenom,
+    required String residentNom,
     required TypeDemande type,
     String? tacheJourId,
     required String motif,
     bool estUrgente = false,
+    String? propositionNotes,
+    bool? propositionHasAnimal,
+    String? propositionTypeAnimal,
   }) async {
     try {
       return Right(await _ds.creerDemande(
         residentId: residentId,
+        residentPrenom: residentPrenom,
+        residentNom: residentNom,
         type: type,
         tacheJourId: tacheJourId,
         motif: motif,
         estUrgente: estUrgente,
+        propositionNotes: propositionNotes,
+        propositionHasAnimal: propositionHasAnimal,
+        propositionTypeAnimal: propositionTypeAnimal,
       ));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
@@ -129,6 +139,32 @@ class ResidentEspaceRepositoryImpl implements ResidentEspaceRepository {
         reponse: reponse,
         propositionDate: propositionDate,
         propositionPeriode: propositionPeriode,
+      ));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, DemandeResident>> validerInfoAppartement({
+    required String demandeId,
+  }) async {
+    try {
+      return Right(await _ds.validerInfoAppartement(demandeId: demandeId));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, DemandeResident>> refuserInfoAppartement({
+    required String demandeId,
+    required String reponse,
+  }) async {
+    try {
+      return Right(await _ds.refuserInfoAppartement(
+        demandeId: demandeId,
+        reponse: reponse,
       ));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

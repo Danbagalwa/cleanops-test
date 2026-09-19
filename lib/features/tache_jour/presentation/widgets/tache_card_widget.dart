@@ -152,11 +152,33 @@ class TacheCardWidget extends StatelessWidget {
                             _Badge(appt.taille, AppColors.grisText),
                             const SizedBox(width: 6),
                           ],
-                          if (minutes > 0)
+                          if (minutes > 0) ...[
                             _Badge(
                               DateHelper.minutesEnHeures(minutes),
                               AppColors.grisDark,
                             ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (appt?.hasAnimal == true)
+                            Tooltip(
+                              message: (appt?.typeAnimal?.isNotEmpty ?? false)
+                                  ? 'Animal : ${appt!.typeAnimal}'
+                                  : 'Présence d\'un animal',
+                              child: const Icon(
+                                Icons.pets_rounded,
+                                size: 14,
+                                color: AppColors.aVerifier,
+                              ),
+                            ),
+                          if (appt?.notes != null &&
+                              appt!.notes!.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            const Icon(
+                              Icons.notes_rounded,
+                              size: 14,
+                              color: AppColors.grisText,
+                            ),
+                          ],
                         ],
                       ),
                       if (tache.motifAbsent != null &&

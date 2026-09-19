@@ -685,7 +685,7 @@ class _FormDialog extends ConsumerWidget {
     return AppartementFormWidget(
       appartement: appartement,
       isLoading: isLoading,
-      onSave: (numero, taille, minutes) async {
+      onSave: (numero, taille, minutes, notes, hasAnimal, typeAnimal) async {
         final notifier = ref.read(appartementsNotifierProvider.notifier);
         final bool ok;
 
@@ -694,6 +694,9 @@ class _FormDialog extends ConsumerWidget {
             numero: numero,
             taille: taille,
             minutesBase: minutes,
+            notes: notes,
+            hasAnimal: hasAnimal,
+            typeAnimal: typeAnimal,
           );
         } else {
           ok = await notifier.modifier(
@@ -701,6 +704,9 @@ class _FormDialog extends ConsumerWidget {
             numero: numero,
             taille: taille,
             minutesBase: minutes,
+            notes: notes,
+            hasAnimal: hasAnimal,
+            typeAnimal: typeAnimal,
           );
         }
 

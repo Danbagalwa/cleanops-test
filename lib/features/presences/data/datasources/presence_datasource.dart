@@ -9,6 +9,8 @@ abstract class PresenceDatasource {
     required String employeeId,
     required DateTime date,
     required StatutPresence statut,
+    String? heureDebut,
+    String? heureFin,
   });
 
   Future<PresenceModel?> getMaPresence({
@@ -18,11 +20,14 @@ abstract class PresenceDatasource {
 
   Future<List<PresenceModel>> getAbsencesDuJour(DateTime date);
 
+  Future<List<PresenceModel>> getPresencesAvecHeures(DateTime date);
+
   Future<void> envoyerAlerteResponsable({
     required String presenceId,
     required List<String> responsableIds,
     required String message,
     required String entityId,
+    String type = 'AbsenceValidee',
   });
 }
 
@@ -39,6 +44,8 @@ class PresenceDatasourceImpl implements PresenceDatasource {
     required String employeeId,
     required DateTime date,
     required StatutPresence statut,
+    String? heureDebut,
+    String? heureFin,
   }) async {
     try {
       final dateStr = _dateStr(date);
@@ -53,6 +60,8 @@ class PresenceDatasourceImpl implements PresenceDatasource {
               'statut': statut.label,
               'confirme_le': DateTime.now().toIso8601String(),
               'alerte_responsable_envoyee': false,
+              'heure_debut': heureDebut,
+              'heure_fin': heureFin,
             },
             onConflict: 'employee_id,date',
           )
@@ -112,11 +121,34 @@ class PresenceDatasourceImpl implements PresenceDatasource {
   }
 
   @override
+  Future<List<PresenceModel>> getPresencesAvecHeures(DateTime date) async {
+    try {
+      final data = await SupabaseService
+          .table(SupabaseService.presences)
+          .select(_join)
+          .eq('date', _dateStr(date))
+          .eq('statut', StatutPresence.present.label)
+          .not('heure_debut', 'is', null)
+          .order('heure_debut');
+
+      return (data as List)
+          .map((e) => PresenceModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on PostgrestException catch (e) {
+      throw ServerException(e.message);
+    } catch (e) {
+      if (e is ServerException) rethrow;
+      throw ServerException(e.toString());
+    }
+  }
+
+  @override
   Future<void> envoyerAlerteResponsable({
     required String presenceId,
     required List<String> responsableIds,
     required String message,
     required String entityId,
+    String type = 'AbsenceValidee',
   }) async {
     try {
       // Marquer alerte envoyée
@@ -130,7 +162,7 @@ class PresenceDatasourceImpl implements PresenceDatasource {
         final rows = responsableIds
             .map((id) => {
                   'destinataire_id': id,
-                  'type': 'Absence',
+                  'type': type,
                   'message': message,
                   'entity_id': entityId,
                   'entity_type': 'Presence',

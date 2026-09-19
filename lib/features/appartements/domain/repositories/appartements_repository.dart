@@ -9,6 +9,9 @@ abstract class AppartementsRepository {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   });
 
   Future<Either<Failure, Appartement>> updateAppartement({
@@ -16,6 +19,9 @@ abstract class AppartementsRepository {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   });
 
   Future<Either<Failure, void>> deleteAppartement(String id);

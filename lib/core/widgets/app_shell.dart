@@ -8,9 +8,9 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/resident_espace/presentation/providers/resident_espace_provider.dart';
 
 // ── Dimensions sidebar ────────────────────────────────────
-const double _kSidebarExpanded = 260;
-const double _kSidebarCollapsed = 64;
-const Duration _kSidebarDuration = Duration(milliseconds: 240);
+const double _kSidebarExpanded = 264;
+const double _kSidebarCollapsed = 68;
+const Duration _kSidebarDuration = Duration(milliseconds: 220);
 
 // ─────────────────────────────────────────────────────────
 // Modèles
@@ -22,6 +22,7 @@ class _NavItem {
   final String label;
   final String shortLabel;
   final String route;
+  final bool mobilePrimary;
 
   const _NavItem({
     required this.icon,
@@ -29,129 +30,40 @@ class _NavItem {
     required this.label,
     required this.shortLabel,
     required this.route,
+    this.mobilePrimary = false,
   });
 }
 
-/// Groupe de liens avec un titre de section affiché dans la sidebar.
-class _NavSection {
-  final String label; // vide → pas d'en-tête
+/// Groupe de destinations. [label] nul → liste à plat, sans en-tête ni pli.
+class _NavGroup {
+  final String? label;
   final List<_NavItem> items;
-  const _NavSection({required this.label, required this.items});
+  final bool startOpen;
+
+  const _NavGroup({this.label, required this.items, this.startOpen = true});
 }
 
 // ─────────────────────────────────────────────────────────
-// Items préposée
+// Préposée — famille "Mon travail" / "Équipe"
 // ─────────────────────────────────────────────────────────
 
-const List<_NavItem> _preposeeItems = [
-  _NavItem(
-    icon: Icons.home_outlined,
-    activeIcon: Icons.home_rounded,
-    label: 'Tableau de bord',
-    shortLabel: 'Accueil',
-    route: '/dashboard',
-  ),
-  _NavItem(
-    icon: Icons.today_outlined,
-    activeIcon: Icons.today_rounded,
-    label: 'Ma Journée',
-    shortLabel: 'Journée',
-    route: '/journee',
-  ),
-  _NavItem(
-    icon: Icons.calendar_month_outlined,
-    activeIcon: Icons.calendar_month_rounded,
-    label: 'Planning',
-    shortLabel: 'Planning',
-    route: '/planning',
-  ),
-  _NavItem(
-    icon: Icons.sticky_note_2_outlined,
-    activeIcon: Icons.sticky_note_2_rounded,
-    label: 'Mémo',
-    shortLabel: 'Mémo',
-    route: '/memo',
-  ),
-  _NavItem(
-    icon: Icons.chat_bubble_outline_rounded,
-    activeIcon: Icons.chat_bubble_rounded,
-    label: 'Chat Équipe',
-    shortLabel: 'Chat',
-    route: '/chat',
-  ),
-];
+const _NavItem _preposeeDashboard = _NavItem(
+  icon: Icons.home_outlined,
+  activeIcon: Icons.home_rounded,
+  label: 'Tableau de bord',
+  shortLabel: 'Accueil',
+  route: '/dashboard',
+);
 
-const List<_NavSection> _preposeeSections = [
-  _NavSection(label: 'NAVIGATION', items: _preposeeItems),
-];
-
-// ─────────────────────────────────────────────────────────
-// Items responsable
-// ─────────────────────────────────────────────────────────
-
-/// 5 items affichés dans la barre de navigation mobile.
-const List<_NavItem> _responsableMobileItems = [
-  _NavItem(
-    icon: Icons.dashboard_outlined,
-    activeIcon: Icons.dashboard_rounded,
-    label: 'Tableau de bord',
-    shortLabel: 'Accueil',
-    route: '/employeur',
-  ),
-  _NavItem(
-    icon: Icons.group_outlined,
-    activeIcon: Icons.group_rounded,
-    label: 'Employés',
-    shortLabel: 'Équipe',
-    route: '/employes',
-  ),
-  _NavItem(
-    icon: Icons.apartment_outlined,
-    activeIcon: Icons.apartment_rounded,
-    label: 'Appartements',
-    shortLabel: 'Appts',
-    route: '/appartements',
-  ),
-  _NavItem(
-    icon: Icons.calendar_month_outlined,
-    activeIcon: Icons.calendar_month_rounded,
-    label: 'Planning',
-    shortLabel: 'Planning',
-    route: '/planning',
-  ),
-  _NavItem(
-    icon: Icons.chat_bubble_outline_rounded,
-    activeIcon: Icons.chat_bubble_rounded,
-    label: 'Chat Équipe',
-    shortLabel: 'Chat',
-    route: '/chat',
-  ),
-];
-
-/// Sidebar organisée en 3 sections.
-const List<_NavSection> _responsableSections = [
-  // ── Section 1 : navigation principale ─────────────────
-  _NavSection(label: 'PRINCIPAL', items: [
+const List<_NavGroup> _preposeeGroups = [
+  _NavGroup(label: 'Mon travail', items: [
     _NavItem(
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard_rounded,
-      label: 'Tableau de bord',
-      shortLabel: 'Accueil',
-      route: '/employeur',
-    ),
-    _NavItem(
-      icon: Icons.group_outlined,
-      activeIcon: Icons.group_rounded,
-      label: 'Employés',
-      shortLabel: 'Équipe',
-      route: '/employes',
-    ),
-    _NavItem(
-      icon: Icons.apartment_outlined,
-      activeIcon: Icons.apartment_rounded,
-      label: 'Appartements',
-      shortLabel: 'Appts',
-      route: '/appartements',
+      icon: Icons.today_outlined,
+      activeIcon: Icons.today_rounded,
+      label: 'Ma Journée',
+      shortLabel: 'Journée',
+      route: '/journee',
+      mobilePrimary: true,
     ),
     _NavItem(
       icon: Icons.calendar_month_outlined,
@@ -159,24 +71,77 @@ const List<_NavSection> _responsableSections = [
       label: 'Planning',
       shortLabel: 'Planning',
       route: '/planning',
+      mobilePrimary: true,
     ),
+    _NavItem(
+      icon: Icons.assignment_ind_outlined,
+      activeIcon: Icons.assignment_ind_rounded,
+      label: 'Tâches disponibles',
+      shortLabel: 'Dispo.',
+      route: '/taches-disponibles',
+    ),
+    _NavItem(
+      icon: Icons.home_work_outlined,
+      activeIcon: Icons.home_work_rounded,
+      label: 'Aires communes',
+      shortLabel: 'Communes',
+      route: '/aire-commune',
+    ),
+  ]),
+  _NavGroup(label: 'Équipe', items: [
     _NavItem(
       icon: Icons.chat_bubble_outline_rounded,
       activeIcon: Icons.chat_bubble_rounded,
       label: 'Chat Équipe',
       shortLabel: 'Chat',
       route: '/chat',
+      mobilePrimary: true,
+    ),
+    _NavItem(
+      icon: Icons.sticky_note_2_outlined,
+      activeIcon: Icons.sticky_note_2_rounded,
+      label: 'Mémo',
+      shortLabel: 'Mémo',
+      route: '/memo',
+    ),
+    _NavItem(
+      icon: Icons.event_note_outlined,
+      activeIcon: Icons.event_note_rounded,
+      label: 'Mes demandes',
+      shortLabel: 'Demandes',
+      route: '/mes-demandes-equipe',
     ),
   ]),
+];
 
-  // ── Section 2 : opérations quotidiennes ───────────────
-  _NavSection(label: 'OPÉRATIONS', items: [
+// ─────────────────────────────────────────────────────────
+// Responsable — famille "Opérations" / "Équipe" / "Résidence"
+// ─────────────────────────────────────────────────────────
+
+const _NavItem _responsableDashboard = _NavItem(
+  icon: Icons.dashboard_outlined,
+  activeIcon: Icons.dashboard_rounded,
+  label: 'Tableau de bord',
+  shortLabel: 'Accueil',
+  route: '/employeur',
+);
+
+const List<_NavGroup> _responsableGroups = [
+  _NavGroup(label: 'Opérations', items: [
     _NavItem(
       icon: Icons.checklist_rounded,
       activeIcon: Icons.checklist_rounded,
       label: 'Progression du jour',
       shortLabel: 'Jour',
       route: '/progression-jour',
+    ),
+    _NavItem(
+      icon: Icons.calendar_month_outlined,
+      activeIcon: Icons.calendar_month_rounded,
+      label: 'Planning',
+      shortLabel: 'Planning',
+      route: '/planning',
+      mobilePrimary: true,
     ),
     _NavItem(
       icon: Icons.person_off_outlined,
@@ -192,23 +157,23 @@ const List<_NavSection> _responsableSections = [
       shortLabel: 'Communes',
       route: '/aire-commune',
     ),
-    _NavItem(
-      icon: Icons.campaign_outlined,
-      activeIcon: Icons.campaign_rounded,
-      label: 'Messages semaine',
-      shortLabel: 'Messages',
-      route: '/messages-semaine',
-    ),
   ]),
-
-  // ── Section 3 : analyse & gestion ─────────────────────
-  _NavSection(label: 'ANALYSE', items: [
+  _NavGroup(label: 'Équipe', items: [
     _NavItem(
-      icon: Icons.bar_chart_outlined,
-      activeIcon: Icons.bar_chart_rounded,
-      label: 'Statistiques',
-      shortLabel: 'Stats',
-      route: '/statistiques',
+      icon: Icons.group_outlined,
+      activeIcon: Icons.group_rounded,
+      label: 'Employé(e)s',
+      shortLabel: 'Équipe',
+      route: '/employes',
+      mobilePrimary: true,
+    ),
+    _NavItem(
+      icon: Icons.chat_bubble_outline_rounded,
+      activeIcon: Icons.chat_bubble_rounded,
+      label: 'Chat Équipe',
+      shortLabel: 'Chat',
+      route: '/chat',
+      mobilePrimary: true,
     ),
     _NavItem(
       icon: Icons.sticky_note_2_outlined,
@@ -216,6 +181,22 @@ const List<_NavSection> _responsableSections = [
       label: 'Mémo',
       shortLabel: 'Mémo',
       route: '/memo',
+    ),
+    _NavItem(
+      icon: Icons.event_note_outlined,
+      activeIcon: Icons.event_note_rounded,
+      label: 'Demandes équipe',
+      shortLabel: 'Demandes éq.',
+      route: '/demandes/equipe',
+    ),
+  ]),
+  _NavGroup(label: 'Résidence', startOpen: false, items: [
+    _NavItem(
+      icon: Icons.apartment_outlined,
+      activeIcon: Icons.apartment_rounded,
+      label: 'Appartements',
+      shortLabel: 'Appts',
+      route: '/appartements',
     ),
     _NavItem(
       icon: Icons.people_outline_rounded,
@@ -228,43 +209,78 @@ const List<_NavSection> _responsableSections = [
       icon: Icons.inbox_outlined,
       activeIcon: Icons.inbox_rounded,
       label: 'Demandes résidents',
-      shortLabel: 'Demandes',
+      shortLabel: 'Demandes rés.',
       route: '/demandes/residents',
+    ),
+    _NavItem(
+      icon: Icons.bar_chart_outlined,
+      activeIcon: Icons.bar_chart_rounded,
+      label: 'Statistiques',
+      shortLabel: 'Stats',
+      route: '/statistiques',
+    ),
+    _NavItem(
+      icon: Icons.campaign_outlined,
+      activeIcon: Icons.campaign_rounded,
+      label: 'Messages semaine',
+      shortLabel: 'Messages',
+      route: '/messages-semaine',
     ),
   ]),
 ];
 
 // ─────────────────────────────────────────────────────────
-// Items résident
+// Résident — liste à plat (peu de destinations)
 // ─────────────────────────────────────────────────────────
 
-const List<_NavItem> _residentItems = [
-  _NavItem(
-    icon: Icons.home_outlined,
-    activeIcon: Icons.home_rounded,
-    label: 'Mon espace',
-    shortLabel: 'Accueil',
-    route: '/resident',
-  ),
-  _NavItem(
-    icon: Icons.inbox_outlined,
-    activeIcon: Icons.inbox_rounded,
-    label: 'Mes demandes',
-    shortLabel: 'Demandes',
-    route: '/resident/demandes',
-  ),
-  _NavItem(
-    icon: Icons.person_outlined,
-    activeIcon: Icons.person_rounded,
-    label: 'Mon profil',
-    shortLabel: 'Profil',
-    route: '/resident/profil',
-  ),
+const _NavItem _residentDashboard = _NavItem(
+  icon: Icons.home_outlined,
+  activeIcon: Icons.home_rounded,
+  label: 'Mon espace',
+  shortLabel: 'Accueil',
+  route: '/resident',
+  mobilePrimary: true,
+);
+
+const List<_NavGroup> _residentGroups = [
+  _NavGroup(items: [
+    _NavItem(
+      icon: Icons.inbox_outlined,
+      activeIcon: Icons.inbox_rounded,
+      label: 'Mes demandes',
+      shortLabel: 'Demandes',
+      route: '/resident/demandes',
+      mobilePrimary: true,
+    ),
+    _NavItem(
+      icon: Icons.person_outlined,
+      activeIcon: Icons.person_rounded,
+      label: 'Mon profil',
+      shortLabel: 'Profil',
+      route: '/resident/profil',
+      mobilePrimary: true,
+    ),
+  ]),
 ];
 
-const List<_NavSection> _residentSections = [
-  _NavSection(label: 'MON ESPACE', items: _residentItems),
-];
+// ─────────────────────────────────────────────────────────
+// Helpers — dérivation des items mobiles
+// ─────────────────────────────────────────────────────────
+
+List<_NavItem> _allItems(List<_NavGroup> groups) =>
+    groups.expand((g) => g.items).toList();
+
+List<_NavItem> _mobilePrimary(_NavItem dashboard, List<_NavGroup> groups) => [
+      dashboard,
+      ..._allItems(groups).where((i) => i.mobilePrimary),
+    ];
+
+List<_NavGroup> _mobileOverflowGroups(List<_NavGroup> groups) => groups
+    .map((g) => _NavGroup(
+        label: g.label,
+        items: g.items.where((i) => !i.mobilePrimary).toList()))
+    .where((g) => g.items.isNotEmpty)
+    .toList();
 
 // ─────────────────────────────────────────────────────────
 // AppShell
@@ -286,33 +302,39 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   bool _expanded = true;
+  final Set<String> _closedGroups = {};
 
-  /// Route active parmi toutes les sections — correspondance exacte d'abord,
-  /// puis le préfixe le plus long suivi de '/' (évite le bug /resident vs /residents).
-  String _computeActiveRoute(List<_NavSection> sections) {
+  bool _groupOpen(_NavGroup group) {
+    if (group.label == null) return true;
+    return !_closedGroups.contains(group.label);
+  }
+
+  void _toggleGroup(_NavGroup group) {
+    if (group.label == null) return;
+    setState(() {
+      if (_closedGroups.contains(group.label)) {
+        _closedGroups.remove(group.label);
+      } else {
+        _closedGroups.add(group.label!);
+      }
+    });
+  }
+
+  /// Route active — correspondance exacte d'abord, puis le préfixe le plus
+  /// long suivi de '/' (évite le bug /resident vs /residents).
+  String _computeActiveRoute(_NavItem dashboard, List<_NavGroup> groups) {
+    final all = [dashboard, ..._allItems(groups)];
     String bestRoute = '';
-    for (final section in sections) {
-      for (final item in section.items) {
-        final r = item.route;
-        if (widget.location == r) return r;
-        if (r != '/' &&
-            widget.location.startsWith('$r/') &&
-            r.length > bestRoute.length) {
-          bestRoute = r;
-        }
+    for (final item in all) {
+      final r = item.route;
+      if (widget.location == r) return r;
+      if (r != '/' &&
+          widget.location.startsWith('$r/') &&
+          r.length > bestRoute.length) {
+        bestRoute = r;
       }
     }
     return bestRoute;
-  }
-
-  /// Index actif dans la liste mobile (préfixe /route/).
-  int _mobileActiveIndex(List<_NavItem> items) {
-    for (int i = 0; i < items.length; i++) {
-      final r = items[i].route;
-      if (widget.location == r) return i;
-      if (r != '/' && widget.location.startsWith('$r/')) return i;
-    }
-    return 0;
   }
 
   @override
@@ -321,56 +343,29 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isResponsable = ref.watch(isResponsableProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-    // Sections sidebar selon le rôle
-    final sections = employee?.isResident == true
-        ? _residentSections
-        : (isResponsable ? _responsableSections : _preposeeSections);
+    final _NavItem dashboard;
+    final List<_NavGroup> groups;
+    if (employee?.isResident == true) {
+      dashboard = _residentDashboard;
+      groups = _residentGroups;
+    } else if (isResponsable) {
+      dashboard = _responsableDashboard;
+      groups = _responsableGroups;
+    } else {
+      dashboard = _preposeeDashboard;
+      groups = _preposeeGroups;
+    }
 
-    // Items pour la barre mobile (5 max)
-    final mobileItems = (employee?.isResident == true
-            ? _residentItems
-            : (isResponsable ? _responsableMobileItems : _preposeeItems))
-        .take(5)
-        .toList();
-
-    final activeRoute = _computeActiveRoute(sections);
-    final mobileIndex =
-        _mobileActiveIndex(mobileItems).clamp(0, mobileItems.length - 1);
+    final activeRoute = _computeActiveRoute(dashboard, groups);
 
     final notifBadge = ref.watch(badgeNotifResidentProvider);
     final badgeMap = notifBadge > 0
         ? <String, int>{'/resident/demandes': notifBadge}
         : const <String, int>{};
 
-    final profileRoute =
-        employee?.isResident == true ? '/resident/profil' : '/profil';
-
-    Future<void> onLogout() async {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          icon: const Icon(Icons.logout_rounded, color: AppColors.rouge),
-          title: const Text('Se déconnecter ?'),
-          content: const Text(
-            'Vous devrez vous identifier à nouveau pour accéder à votre espace.',
-            textAlign: TextAlign.center,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Rester connecté'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Se déconnecter'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !context.mounted) return;
-      await ref.read(authNotifierProvider.notifier).logout();
-      if (context.mounted) context.go('/');
+    void onLogout() {
+      ref.read(authNotifierProvider.notifier).logout();
+      context.go('/');
     }
 
     if (isDesktop) {
@@ -378,108 +373,373 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundColor: AppColors.grisLight,
         body: Row(
           children: [
-            // ── Sidebar animée ───────────────────────────
             AnimatedContainer(
               width: _expanded ? _kSidebarExpanded : _kSidebarCollapsed,
               duration: _kSidebarDuration,
               curve: Curves.easeInOut,
               child: ClipRect(
                 child: _Sidebar(
-                  sections: sections,
+                  dashboard: dashboard,
+                  groups: groups,
                   activeRoute: activeRoute,
                   employee: employee,
                   onLogout: onLogout,
-                  onProfile: () => context.go(profileRoute),
                   isExpanded: _expanded,
                   onToggle: () => setState(() => _expanded = !_expanded),
                   badgeMap: badgeMap,
+                  groupOpen: _groupOpen,
+                  onToggleGroup: _toggleGroup,
                 ),
               ),
             ),
-            // ── Contenu principal ────────────────────────
             Expanded(child: widget.child),
           ],
         ),
       );
     }
 
-    // ── Mobile : barre de navigation en bas ───────────────
+    // ── Mobile ─────────────────────────────────────────────
+    final mobilePrimary = _mobilePrimary(dashboard, groups);
+    final overflowGroups = _mobileOverflowGroups(groups);
+
     return Scaffold(
       backgroundColor: AppColors.grisLight,
       body: widget.child,
-      bottomNavigationBar: _BottomNav(
-        items: mobileItems,
-        activeIndex: mobileIndex,
-        badgeMap: badgeMap,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: _MobileBottomBar(
+            items: mobilePrimary,
+            activeRoute: activeRoute,
+            badgeMap: badgeMap,
+            overflowGroups: overflowGroups,
+          ),
+        ),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// Bottom Navigation (mobile — inchangé)
+// Barre mobile flottante + tiroir "Plus"
 // ─────────────────────────────────────────────────────────
 
-class _BottomNav extends StatelessWidget {
+class _MobileBottomBar extends StatelessWidget {
   final List<_NavItem> items;
-  final int activeIndex;
+  final String activeRoute;
   final Map<String, int> badgeMap;
+  final List<_NavGroup> overflowGroups;
 
-  const _BottomNav({
+  const _MobileBottomBar({
     required this.items,
-    required this.activeIndex,
+    required this.activeRoute,
+    required this.overflowGroups,
+    this.badgeMap = const {},
+  });
+
+  bool get _isOverflowActive =>
+      overflowGroups.any((g) => g.items.any((i) => i.route == activeRoute));
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (final item in items)
+            Expanded(
+              child: _BarButton(
+                icon: item.route == activeRoute ? item.activeIcon : item.icon,
+                label: item.shortLabel,
+                active: item.route == activeRoute,
+                badge: badgeMap[item.route] ?? 0,
+                onTap: () => context.go(item.route),
+              ),
+            ),
+          if (overflowGroups.isNotEmpty)
+            Expanded(
+              child: _BarButton(
+                icon: Icons.grid_view_rounded,
+                label: 'Plus',
+                active: _isOverflowActive,
+                onTap: () => _openPlusSheet(context),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _openPlusSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => _PlusSheet(
+        groups: overflowGroups,
+        activeRoute: activeRoute,
+        badgeMap: badgeMap,
+        onSelect: (route) {
+          Navigator.of(sheetContext).pop();
+          context.go(route);
+        },
+      ),
+    );
+  }
+}
+
+class _BarButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final int badge;
+  final VoidCallback onTap;
+
+  const _BarButton({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget iconWidget = Icon(
+      icon,
+      size: 24,
+      color: active ? AppColors.rouge : AppColors.grisDark,
+    );
+    if (badge > 0) {
+      iconWidget = Badge(label: Text('$badge'), child: iconWidget);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSizes.radiusPill),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.rouge.withValues(alpha: 0.10)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppSizes.radiusPill),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              iconWidget,
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                  color: active ? AppColors.rouge : AppColors.grisDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Tiroir "Plus" ──────────────────────────────────────────
+
+class _PlusSheet extends StatelessWidget {
+  final List<_NavGroup> groups;
+  final String activeRoute;
+  final Map<String, int> badgeMap;
+  final ValueChanged<String> onSelect;
+
+  const _PlusSheet({
+    required this.groups,
+    required this.activeRoute,
+    required this.onSelect,
     this.badgeMap = const {},
   });
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: activeIndex,
-      onDestinationSelected: (i) => context.go(items[i].route),
-      backgroundColor: Colors.white,
-      indicatorColor: AppColors.rouge.withValues(alpha: 0.12),
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      height: AppSizes.bottomNavHeight,
-      destinations: items.map((item) {
-        final badge = badgeMap[item.route] ?? 0;
-        Widget icon = Icon(item.icon, color: AppColors.grisDark);
-        Widget selectedIcon = Icon(item.activeIcon, color: AppColors.rouge);
-        if (badge > 0) {
-          icon = Badge(label: Text('$badge'), child: icon);
-          selectedIcon = Badge(label: Text('$badge'), child: selectedIcon);
-        }
-        return NavigationDestination(
-          icon: icon,
-          selectedIcon: selectedIcon,
-          label: item.shortLabel,
-        );
-      }).toList(),
+    final maxHeight = MediaQuery.of(context).size.height * 0.82;
+
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSizes.lg, AppSizes.sm, AppSizes.lg, AppSizes.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.grisMedium,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Plus',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.noir,
+                ),
+              ),
+              const SizedBox(height: AppSizes.md),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final group in groups) ...[
+                        if (group.label != null) ...[
+                          Text(
+                            group.label!.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.grisText,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: AppSizes.sm),
+                        ],
+                        Wrap(
+                          spacing: AppSizes.sm,
+                          runSpacing: AppSizes.md,
+                          children: group.items.map((item) {
+                            final active = item.route == activeRoute;
+                            final badge = badgeMap[item.route] ?? 0;
+                            return SizedBox(
+                              width: 76,
+                              child: InkWell(
+                                onTap: () => onSelect(item.route),
+                                borderRadius:
+                                    BorderRadius.circular(AppSizes.radiusMd),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: active
+                                            ? AppColors.rouge
+                                                .withValues(alpha: 0.10)
+                                            : AppColors.grisLight,
+                                        borderRadius: BorderRadius.circular(
+                                            AppSizes.radiusMd),
+                                      ),
+                                      child: Badge(
+                                        isLabelVisible: badge > 0,
+                                        label: Text('$badge'),
+                                        child: Icon(
+                                          active
+                                              ? item.activeIcon
+                                              : item.icon,
+                                          color: active
+                                              ? AppColors.rouge
+                                              : AppColors.grisDark,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      item.label,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: active
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: active
+                                            ? AppColors.rouge
+                                            : AppColors.noir,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: AppSizes.lg),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// Sidebar
+// Sidebar (desktop)
 // ─────────────────────────────────────────────────────────
 
 class _Sidebar extends StatelessWidget {
-  final List<_NavSection> sections;
+  final _NavItem dashboard;
+  final List<_NavGroup> groups;
   final String activeRoute;
   final Employee? employee;
   final VoidCallback onLogout;
-  final VoidCallback onProfile;
   final bool isExpanded;
   final VoidCallback onToggle;
   final Map<String, int> badgeMap;
+  final bool Function(_NavGroup) groupOpen;
+  final void Function(_NavGroup) onToggleGroup;
 
   const _Sidebar({
-    required this.sections,
+    required this.dashboard,
+    required this.groups,
     required this.activeRoute,
     required this.employee,
     required this.onLogout,
-    required this.onProfile,
     required this.isExpanded,
     required this.onToggle,
+    required this.groupOpen,
+    required this.onToggleGroup,
     this.badgeMap = const {},
   });
 
@@ -492,50 +752,57 @@ class _Sidebar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Header ──────────────────────────────────
           _SidebarHeader(isExpanded: isExpanded, onToggle: onToggle),
-
-          // ── Navigation par sections ──────────────────
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.symmetric(
                 horizontal: isExpanded ? 12 : 8,
-                vertical: 12,
+                vertical: 14,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (int si = 0; si < sections.length; si++) ...[
-                    // Séparateur inter-sections
-                    if (si > 0) _SectionDivider(isExpanded: isExpanded),
-
-                    // En-tête de section
-                    _SectionHeader(
-                      label: sections[si].label,
-                      isExpanded: isExpanded,
-                      isFirst: si == 0,
+                  _SidebarItem(
+                    item: dashboard,
+                    isActive: dashboard.route == activeRoute,
+                    isExpanded: isExpanded,
+                    badge: badgeMap[dashboard.route] ?? 0,
+                  ),
+                  for (final group in groups) ...[
+                    const SizedBox(height: 4),
+                    if (group.label != null)
+                      _GroupHeader(
+                        label: group.label!,
+                        isExpanded: isExpanded,
+                        open: groupOpen(group),
+                        onTap: () => onToggleGroup(group),
+                      ),
+                    AnimatedSize(
+                      duration: _kSidebarDuration,
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.topCenter,
+                      child: (!isExpanded || groupOpen(group))
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: group.items
+                                  .map((item) => _SidebarItem(
+                                        item: item,
+                                        isActive: item.route == activeRoute,
+                                        isExpanded: isExpanded,
+                                        badge: badgeMap[item.route] ?? 0,
+                                      ))
+                                  .toList(),
+                            )
+                          : const SizedBox(width: double.infinity),
                     ),
-
-                    // Items de la section
-                    ...sections[si].items.map(
-                          (item) => _SidebarItem(
-                            item: item,
-                            isActive: item.route == activeRoute,
-                            isExpanded: isExpanded,
-                            badge: badgeMap[item.route] ?? 0,
-                          ),
-                        ),
                   ],
                 ],
               ),
             ),
           ),
-
-          // ── Footer ──────────────────────────────────
           _SidebarFooter(
             employee: employee,
             onLogout: onLogout,
-            onProfile: onProfile,
             isExpanded: isExpanded,
           ),
         ],
@@ -544,57 +811,56 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-// ── Séparateur entre sections ─────────────────────────────
-class _SectionDivider extends StatelessWidget {
-  final bool isExpanded;
-  const _SectionDivider({required this.isExpanded});
-
-  @override
-  Widget build(BuildContext context) {
-    if (isExpanded) {
-      // En mode étendu : simple espace vertical
-      return const SizedBox(height: 4);
-    }
-    // En mode réduit : ligne de séparation subtile
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 6),
-      child: Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
-    );
-  }
-}
-
-// ── En-tête de section ────────────────────────────────────
-class _SectionHeader extends StatelessWidget {
+// ── En-tête de groupe (dépliable) ─────────────────────────
+class _GroupHeader extends StatelessWidget {
   final String label;
   final bool isExpanded;
-  final bool isFirst;
+  final bool open;
+  final VoidCallback onTap;
 
-  const _SectionHeader({
+  const _GroupHeader({
     required this.label,
     required this.isExpanded,
-    required this.isFirst,
+    required this.open,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (label.isEmpty) return const SizedBox.shrink();
-
     return AnimatedOpacity(
       opacity: isExpanded ? 1.0 : 0.0,
       duration: _kSidebarDuration,
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 8,
-          bottom: 4,
-          top: isFirst ? 2 : 8,
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: AppColors.grisText,
-            letterSpacing: 1.5,
+      child: IgnorePointer(
+        ignoring: !isExpanded,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 14, 4, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.grisText,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: open ? 0.5 : 0,
+                  duration: _kSidebarDuration,
+                  child: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                    color: AppColors.grisText,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -613,7 +879,9 @@ class _SidebarHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 64,
-      color: AppColors.rouge,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.grisMedium)),
+      ),
       child: isExpanded ? _buildExpanded() : _buildCollapsed(),
     );
   }
@@ -626,12 +894,12 @@ class _SidebarHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: AppColors.rouge.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.apartment_rounded,
-              color: Colors.white,
+              color: AppColors.rouge,
               size: 20,
             ),
           ),
@@ -644,16 +912,16 @@ class _SidebarHeader extends StatelessWidget {
                 Text(
                   'CleanOps',
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
+                    color: AppColors.noir,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 0.3,
+                    letterSpacing: -0.2,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   'Résidence',
-                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                  style: TextStyle(color: AppColors.grisText, fontSize: 11),
                 ),
               ],
             ),
@@ -663,11 +931,11 @@ class _SidebarHeader extends StatelessWidget {
             child: InkWell(
               onTap: onToggle,
               borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
+              child: const Padding(
+                padding: EdgeInsets.all(6),
                 child: Icon(
                   Icons.chevron_left_rounded,
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: AppColors.grisText,
                   size: 22,
                 ),
               ),
@@ -685,11 +953,11 @@ class _SidebarHeader extends StatelessWidget {
         child: InkWell(
           onTap: onToggle,
           borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(8),
+          child: const Padding(
+            padding: EdgeInsets.all(8),
             child: Icon(
               Icons.chevron_right_rounded,
-              color: Colors.white.withValues(alpha: 0.8),
+              color: AppColors.grisText,
               size: 22,
             ),
           ),
@@ -717,7 +985,7 @@ class _SidebarItem extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget icon = Icon(
       isActive ? item.activeIcon : item.icon,
-      size: 20,
+      size: 19,
       color: isActive ? AppColors.rouge : AppColors.grisDark,
     );
     if (badge > 0) {
@@ -732,23 +1000,23 @@ class _SidebarItem extends StatelessWidget {
         waitDuration: const Duration(milliseconds: 300),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          borderRadius: BorderRadius.circular(AppSizes.radiusPill),
           child: InkWell(
             onTap: () => context.go(item.route),
-            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+            borderRadius: BorderRadius.circular(AppSizes.radiusPill),
             hoverColor: AppColors.grisLight,
             child: AnimatedContainer(
               duration: _kSidebarDuration,
               curve: Curves.easeInOut,
               padding: EdgeInsets.symmetric(
-                horizontal: isExpanded ? 12 : 0,
+                horizontal: isExpanded ? 14 : 0,
                 vertical: 10,
               ),
               decoration: BoxDecoration(
                 color: isActive
                     ? AppColors.rouge.withValues(alpha: 0.08)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                borderRadius: BorderRadius.circular(AppSizes.radiusPill),
               ),
               child: isExpanded
                   ? Row(
@@ -759,25 +1027,15 @@ class _SidebarItem extends StatelessWidget {
                           child: Text(
                             item.label,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13.5,
                               fontWeight:
-                                  isActive ? FontWeight.w600 : FontWeight.w400,
+                                  isActive ? FontWeight.w700 : FontWeight.w500,
                               color:
                                   isActive ? AppColors.rouge : AppColors.noir,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        // Indicateur actif discret
-                        if (isActive)
-                          Container(
-                            width: 4,
-                            height: 4,
-                            decoration: const BoxDecoration(
-                              color: AppColors.rouge,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
                       ],
                     )
                   : Center(child: icon),
@@ -793,13 +1051,11 @@ class _SidebarItem extends StatelessWidget {
 class _SidebarFooter extends StatelessWidget {
   final Employee? employee;
   final VoidCallback onLogout;
-  final VoidCallback onProfile;
   final bool isExpanded;
 
   const _SidebarFooter({
     required this.employee,
     required this.onLogout,
-    required this.onProfile,
     required this.isExpanded,
   });
 
@@ -854,102 +1110,63 @@ class _SidebarFooter extends StatelessWidget {
   }
 
   Widget _buildExpanded() {
-    return _buildAccountMenu(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          border: Border.all(color: const Color(0xFFE7E9F2)),
+    return Row(
+      children: [
+        _buildAvatar(),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${employee?.prenom ?? ''} ${employee?.nom ?? ''}',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.noir,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                _roleLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.grisText,
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Row(
-          children: [
-            _buildAvatar(),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${employee?.prenom ?? ''} ${employee?.nom ?? ''}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.noir,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    _roleLabel,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.grisText,
-                    ),
-                  ),
-                ],
+        Tooltip(
+          message: 'Déconnexion',
+          child: InkWell(
+            onTap: onLogout,
+            borderRadius: BorderRadius.circular(8),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child: Icon(
+                Icons.logout_rounded,
+                size: 18,
+                color: AppColors.grisText,
               ),
             ),
-            const SizedBox(width: 6),
-            const Icon(
-              Icons.unfold_more_rounded,
-              size: 18,
-              color: AppColors.grisText,
-            ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildCollapsed() {
-    return Tooltip(
-      message: 'Ouvrir le menu du compte',
-      child: _buildAccountMenu(child: _buildAvatar()),
-    );
-  }
-
-  Widget _buildAccountMenu({required Widget child}) {
-    return PopupMenuButton<String>(
-      tooltip: 'Menu du compte',
-      position: PopupMenuPosition.over,
-      offset: const Offset(0, -116),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+    return Center(
+      child: Tooltip(
+        message: 'Déconnexion',
+        preferBelow: false,
+        child: InkWell(
+          onTap: onLogout,
+          borderRadius: BorderRadius.circular(20),
+          child: _buildAvatar(),
+        ),
       ),
-      elevation: 8,
-      onSelected: (value) {
-        if (value == 'profile') {
-          onProfile();
-        } else if (value == 'logout') {
-          onLogout();
-        }
-      },
-      itemBuilder: (context) => const [
-        PopupMenuItem(
-          value: 'profile',
-          child: Row(
-            children: [
-              Icon(Icons.manage_accounts_outlined, size: 20),
-              SizedBox(width: 12),
-              Text('Mon profil'),
-            ],
-          ),
-        ),
-        PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'logout',
-          child: Row(
-            children: [
-              Icon(Icons.logout_rounded, size: 20, color: Color(0xFF9F2D2D)),
-              SizedBox(width: 12),
-              Text(
-                'Se déconnecter',
-                style: TextStyle(color: Color(0xFF9F2D2D)),
-              ),
-            ],
-          ),
-        ),
-      ],
-      child: child,
     );
   }
 }

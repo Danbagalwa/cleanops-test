@@ -94,6 +94,52 @@ class DemandesResponsableNotifier
       },
     );
   }
+
+  Future<bool> validerInfoAppartement(String demandeId) async {
+    state = state.copyWith(isSending: true, clearError: true);
+    final result = await _repo.validerInfoAppartement(demandeId: demandeId);
+    return result.fold(
+      (f) {
+        state = state.copyWith(isSending: false, error: f.message);
+        return false;
+      },
+      (updated) {
+        state = state.copyWith(
+          isSending: false,
+          demandes: state.demandes
+              .map((d) => d.id == updated.id ? updated : d)
+              .toList(),
+        );
+        return true;
+      },
+    );
+  }
+
+  Future<bool> refuserInfoAppartement({
+    required String demandeId,
+    required String reponse,
+  }) async {
+    state = state.copyWith(isSending: true, clearError: true);
+    final result = await _repo.refuserInfoAppartement(
+      demandeId: demandeId,
+      reponse: reponse,
+    );
+    return result.fold(
+      (f) {
+        state = state.copyWith(isSending: false, error: f.message);
+        return false;
+      },
+      (updated) {
+        state = state.copyWith(
+          isSending: false,
+          demandes: state.demandes
+              .map((d) => d.id == updated.id ? updated : d)
+              .toList(),
+        );
+        return true;
+      },
+    );
+  }
 }
 
 // ── Provider ──────────────────────────────────────────────

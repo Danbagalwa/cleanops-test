@@ -6,6 +6,9 @@ class AppartementModel extends Appartement {
     required super.numero,
     required super.taille,
     required super.minutesBase,
+    super.notes,
+    super.hasAnimal,
+    super.typeAnimal,
   });
 
   factory AppartementModel.fromJson(Map<String, dynamic> json) {
@@ -14,6 +17,9 @@ class AppartementModel extends Appartement {
       numero: json['numero'] as String? ?? '',
       taille: json['taille'] as String? ?? '3 1/2',
       minutesBase: (json['minutes_base'] as num?)?.toInt() ?? 60,
+      notes: json['notes'] as String?,
+      hasAnimal: json['has_animal'] as bool? ?? false,
+      typeAnimal: json['type_animal'] as String?,
     );
   }
 
@@ -23,6 +29,9 @@ class AppartementModel extends Appartement {
       'numero': numero,
       'taille': taille,
       'minutes_base': minutesBase,
+      'notes': notes,
+      'has_animal': hasAnimal,
+      'type_animal': typeAnimal,
     };
   }
 }

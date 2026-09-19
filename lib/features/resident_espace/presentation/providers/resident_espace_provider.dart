@@ -175,14 +175,22 @@ class ResidentEspaceNotifier extends StateNotifier<ResidentEspaceState> {
     String? tacheJourId,
     required String motif,
     bool estUrgente = false,
+    String? propositionNotes,
+    bool? propositionHasAnimal,
+    String? propositionTypeAnimal,
   }) async {
     state = state.copyWith(isSendingDemande: true, clearErrorDemandes: true);
     final result = await _repo.creerDemande(
       residentId: _residentId,
+      residentPrenom: _residentPrenom,
+      residentNom: _residentNom,
       type: type,
       tacheJourId: tacheJourId,
       motif: motif,
       estUrgente: estUrgente,
+      propositionNotes: propositionNotes,
+      propositionHasAnimal: propositionHasAnimal,
+      propositionTypeAnimal: propositionTypeAnimal,
     );
     return result.fold(
       (f) {

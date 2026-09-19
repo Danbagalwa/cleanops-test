@@ -44,4 +44,5 @@ class SupabaseService {
   static const String tachesAireCommune = 'taches_aire_commune';
   static const String resetsAireCommune = 'resets_aire_commune';
   static const String demandesResidents = 'demandes_residents';
+  static const String demandesEquipe = 'demandes_equipe';
 }

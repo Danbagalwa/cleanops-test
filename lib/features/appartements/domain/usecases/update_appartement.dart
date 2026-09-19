@@ -14,6 +14,9 @@ class UpdateAppartement {
       numero: params.numero,
       taille: params.taille,
       minutesBase: params.minutesBase,
+      notes: params.notes,
+      hasAnimal: params.hasAnimal,
+      typeAnimal: params.typeAnimal,
     );
   }
 }
@@ -23,14 +26,21 @@ class UpdateAppartementParams extends Equatable {
   final String numero;
   final String taille;
   final int minutesBase;
+  final String? notes;
+  final bool hasAnimal;
+  final String? typeAnimal;
 
   const UpdateAppartementParams({
     required this.id,
     required this.numero,
     required this.taille,
     required this.minutesBase,
+    this.notes,
+    this.hasAnimal = false,
+    this.typeAnimal,
   });
 
   @override
-  List<Object> get props => [id, numero, taille, minutesBase];
+  List<Object?> get props =>
+      [id, numero, taille, minutesBase, notes, hasAnimal, typeAnimal];
 }

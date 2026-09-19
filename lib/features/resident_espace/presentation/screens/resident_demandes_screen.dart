@@ -27,6 +27,10 @@ class _ResidentDemandesScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = ref.watch(
+      residentEspaceNotifierProvider.select((s) => s.isLoadingDemandes),
+    );
+
     return Scaffold(
       backgroundColor: AppColors.grisLight,
       appBar: AppBar(
@@ -40,6 +44,26 @@ class _ResidentDemandesScreenState
             fontSize: 18,
           ),
         ),
+        actions: [
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    color: Colors.white, strokeWidth: 2.5),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+              tooltip: 'Actualiser',
+              onPressed: () => ref
+                  .read(residentEspaceNotifierProvider.notifier)
+                  .chargerDemandes(),
+            ),
+        ],
       ),
       body: TabDemandes(onNouvelleDemande: _ouvrirNouvelleDemande),
     );

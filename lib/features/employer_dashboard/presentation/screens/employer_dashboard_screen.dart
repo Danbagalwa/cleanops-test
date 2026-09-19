@@ -102,10 +102,6 @@ class _MobileLayout extends StatelessWidget {
           const SizedBox(height: AppSizes.md),
           _TeamProgress(progressions: state.progressions),
         ],
-        const SizedBox(height: AppSizes.md),
-        const _SectionTitle(title: 'Accès rapide'),
-        const SizedBox(height: AppSizes.sm),
-        const _ActionsRapides(columns: 2),
         const SizedBox(height: AppSizes.xxl),
       ],
     );
@@ -196,10 +192,6 @@ class _DesktopLayout extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _SectionTitle(title: 'Accès rapide'),
-                            SizedBox(height: AppSizes.md),
-                            _ActionsRapides(columns: 2),
-                            SizedBox(height: AppSizes.md),
                             _InfoCard(),
                           ],
                         ),
@@ -231,7 +223,10 @@ class _BienvenuCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSizes.xl),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSizes.lg,
+        vertical: AppSizes.md,
+      ),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [AppColors.rouge, AppColors.rougeFonce],
@@ -257,33 +252,16 @@ class _BienvenuCard extends StatelessWidget {
                   '$_salutation, ${employee?.prenom ?? ''} 👋',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 26,
+                    fontSize: 17,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: AppSizes.xs),
+                const SizedBox(height: 3),
                 Text(
                   DateHelper.formatDate(DateTime.now()),
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: AppSizes.md),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    employee?.role.label ?? 'Responsable',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    color: Colors.white70,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -292,7 +270,7 @@ class _BienvenuCard extends StatelessWidget {
           // Cache l'icone massive en version mobile si l'écran est trop petit
           if (MediaQuery.of(context).size.width > 360)
             Container(
-              padding: const EdgeInsets.all(AppSizes.lg),
+              padding: const EdgeInsets.all(AppSizes.sm),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
@@ -300,7 +278,7 @@ class _BienvenuCard extends StatelessWidget {
               child: const Icon(
                 Icons.manage_accounts_rounded,
                 color: Colors.white,
-                size: 44,
+                size: 26,
               ),
             ),
         ],
@@ -458,195 +436,6 @@ class _StatCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Actions rapides ───────────────────────────────────────
-class _ActionsRapides extends StatelessWidget {
-  final int columns;
-  const _ActionsRapides({this.columns = 1});
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      const _ActionData(
-          icon: Icons.task_alt_rounded,
-          label: 'Progression du jour',
-          subtitle: 'Avancement en temps réel',
-          color: AppColors.fait,
-          route: AppRoutes.progressionJour),
-      const _ActionData(
-          icon: Icons.calendar_month_rounded,
-          label: 'Planning',
-          subtitle: 'Gérer les horaires',
-          color: AppColors.absent,
-          route: AppRoutes.planning),
-      const _ActionData(
-          icon: Icons.apartment_rounded,
-          label: 'Appartements',
-          subtitle: 'Accès & résidents',
-          color: AppColors.fait,
-          route: AppRoutes.appartements),
-      const _ActionData(
-          icon: Icons.bar_chart_rounded,
-          label: 'Statistiques',
-          subtitle: 'Rapports & données',
-          color: AppColors.rouge,
-          route: AppRoutes.statistiques),
-      const _ActionData(
-          icon: Icons.sticky_note_2_rounded,
-          label: 'Mémo',
-          subtitle: 'Messages internes',
-          color: AppColors.aVerifier,
-          route: AppRoutes.memo),
-      const _ActionData(
-          icon: Icons.person_off_outlined,
-          label: 'Absences',
-          subtitle: 'Gérer les absences',
-          color: AppColors.rouge,
-          route: AppRoutes.presences),
-      const _ActionData(
-          icon: Icons.apartment_rounded,
-          label: 'Aires communes',
-          subtitle: 'Suivi des espaces communs',
-          color: Color(0xFF00897B),
-          route: AppRoutes.aireCommune),
-      const _ActionData(
-          icon: Icons.campaign_rounded,
-          label: 'Messages semaine',
-          subtitle: 'Message motivationnel équipe',
-          color: AppColors.rouge,
-          route: AppRoutes.messagesSemaine),
-    ];
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 10.0;
-        final count = constraints.maxWidth < 380 ? 1 : columns;
-        final width = (constraints.maxWidth - spacing * (count - 1)) / count;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: actions.asMap().entries.map((entry) {
-            return SizedBox(
-              width: width,
-              child: _ActionTile(data: entry.value)
-                  .animate(
-                    delay: Duration(milliseconds: 120 + entry.key * 35),
-                  )
-                  .fadeIn(duration: 250.ms)
-                  .slideY(begin: .04, end: 0),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-}
-
-class _ActionData {
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final Color color;
-  final String route;
-  const _ActionData(
-      {required this.icon,
-      required this.label,
-      required this.subtitle,
-      required this.color,
-      required this.route});
-}
-
-class _ActionTile extends StatefulWidget {
-  final _ActionData data;
-  const _ActionTile({required this.data});
-
-  @override
-  State<_ActionTile> createState() => _ActionTileState();
-}
-
-class _ActionTileState extends State<_ActionTile> {
-  bool _isHovered = false; // Gestion manuelle du Hover pour le Web
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        transform: _isHovered
-            ? Matrix4.translationValues(4, 0, 0)
-            : Matrix4.identity(), // Léger décalage au survol
-        child: Material(
-          color: Colors.white,
-          elevation: _isHovered ? 4 : 0,
-          shadowColor: Colors.black.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          child: InkWell(
-            onTap: () => context.go(widget.data.route),
-            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-            child: Container(
-              padding: const EdgeInsets.all(AppSizes.md),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _isHovered
-                      ? widget.data.color.withValues(alpha: 0.5)
-                      : Colors.transparent,
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: widget.data.color.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                    ),
-                    child: Icon(widget.data.icon,
-                        color: widget.data.color, size: 22),
-                  ),
-                  const SizedBox(width: AppSizes.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.data.label,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.noir,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.data.subtitle,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.grisText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 14,
-                    color:
-                        _isHovered ? widget.data.color : AppColors.grisMedium,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

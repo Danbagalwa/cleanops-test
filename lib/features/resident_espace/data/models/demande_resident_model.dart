@@ -14,6 +14,9 @@ class DemandeResidentModel extends DemandeResident {
     super.residentAccepte,
     required super.estUrgente,
     required super.createdAt,
+    super.propositionNotes,
+    super.propositionHasAnimal,
+    super.propositionTypeAnimal,
   });
 
   factory DemandeResidentModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +37,9 @@ class DemandeResidentModel extends DemandeResident {
       createdAt: json['date_creation'] != null
           ? DateTime.parse(json['date_creation'] as String)
           : DateTime.now(),
+      propositionNotes: json['proposition_notes'] as String?,
+      propositionHasAnimal: json['proposition_has_animal'] as bool?,
+      propositionTypeAnimal: json['proposition_type_animal'] as String?,
     );
   }
 }

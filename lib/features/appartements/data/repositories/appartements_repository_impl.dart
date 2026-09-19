@@ -24,12 +24,18 @@ class AppartementsRepositoryImpl implements AppartementsRepository {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     try {
       final result = await datasource.addAppartement(
         numero: numero,
         taille: taille,
         minutesBase: minutesBase,
+        notes: notes,
+        hasAnimal: hasAnimal,
+        typeAnimal: typeAnimal,
       );
       return Right(result);
     } on DoublonException catch (e) {
@@ -45,6 +51,9 @@ class AppartementsRepositoryImpl implements AppartementsRepository {
     required String numero,
     required String taille,
     required int minutesBase,
+    String? notes,
+    bool hasAnimal = false,
+    String? typeAnimal,
   }) async {
     try {
       final result = await datasource.updateAppartement(
@@ -52,6 +61,9 @@ class AppartementsRepositoryImpl implements AppartementsRepository {
         numero: numero,
         taille: taille,
         minutesBase: minutesBase,
+        notes: notes,
+        hasAnimal: hasAnimal,
+        typeAnimal: typeAnimal,
       );
       return Right(result);
     } on ServerException catch (e) {

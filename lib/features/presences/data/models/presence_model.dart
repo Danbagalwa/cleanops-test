@@ -11,7 +11,12 @@ class PresenceModel extends Presence {
     super.alerteEnvoyee,
     super.valideParId,
     super.employee,
+    super.heureDebut,
+    super.heureFin,
   });
+
+  static String? _heure(dynamic v) =>
+      v is String && v.length >= 5 ? v.substring(0, 5) : null;
 
   factory PresenceModel.fromJson(Map<String, dynamic> json) {
     return PresenceModel(
@@ -27,6 +32,8 @@ class PresenceModel extends Presence {
       employee: json['employees'] != null
           ? EmployeeModel.fromJson(json['employees'] as Map<String, dynamic>)
           : null,
+      heureDebut: _heure(json['heure_debut']),
+      heureFin: _heure(json['heure_fin']),
     );
   }
 

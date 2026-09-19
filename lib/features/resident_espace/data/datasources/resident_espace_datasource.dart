@@ -46,6 +46,13 @@ String _fmtDateFr(DateTime d) =>
 
 String _periodeFr(String? p) => p == 'AM' ? 'Matin' : 'Après-midi';
 
+String _typeDemandeLabel(TypeDemande t) => switch (t) {
+      TypeDemande.reprogrammer => 'reprogrammer un ménage',
+      TypeDemande.annuler => 'annuler un ménage',
+      TypeDemande.commentaire => 'a laissé un commentaire',
+      TypeDemande.infoAppartement => 'informations sur l\'appartement',
+    };
+
 // ─────────────────────────────────────────────────────────
 
 abstract class ResidentEspaceDatasource {
@@ -53,10 +60,15 @@ abstract class ResidentEspaceDatasource {
   Future<List<DemandeResidentModel>> getDemandes(String residentId);
   Future<DemandeResidentModel> creerDemande({
     required String residentId,
+    required String residentPrenom,
+    required String residentNom,
     required TypeDemande type,
     String? tacheJourId,
     required String motif,
     bool estUrgente = false,
+    String? propositionNotes,
+    bool? propositionHasAnimal,
+    String? propositionTypeAnimal,
   });
   Future<DemandeResidentModel> accepterProposition({
     required String demandeId,
@@ -78,6 +90,18 @@ abstract class ResidentEspaceDatasource {
     DateTime? propositionDate,
     String? propositionPeriode,
   });
+
+  /// Valide la proposition d'infos appartement : applique notes/animal sur
+  /// l'appartement du résident et résout la demande.
+  Future<DemandeResidentModel> validerInfoAppartement({
+    required String demandeId,
+  });
+
+  /// Refuse la proposition d'infos appartement sans l'appliquer.
+  Future<DemandeResidentModel> refuserInfoAppartement({
+    required String demandeId,
+    required String reponse,
+  });
 }
 
 // ─────────────────────────────────────────────────────────
@@ -90,7 +114,8 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
   static const _kSelectDemande =
       'id, resident_id, type, tache_jour_id, motif, statut, reponse, '
       'proposition_date, proposition_periode, resident_accepte, est_urgente, '
-      'date_creation';
+      'date_creation, proposition_notes, proposition_has_animal, '
+      'proposition_type_animal';
 
   static const _kSelectNotif =
       'id, resident_id, tache_jour_id, type, message, is_lue, date_envoi';
@@ -213,10 +238,15 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
   @override
   Future<DemandeResidentModel> creerDemande({
     required String residentId,
+    required String residentPrenom,
+    required String residentNom,
     required TypeDemande type,
     String? tacheJourId,
     required String motif,
     bool estUrgente = false,
+    String? propositionNotes,
+    bool? propositionHasAnimal,
+    String? propositionTypeAnimal,
   }) async {
     try {
       final data = await SupabaseService.client
@@ -228,10 +258,21 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
             'motif': motif.trim(),
             'statut': 'EnAttente',
             'est_urgente': estUrgente,
+            'proposition_notes': propositionNotes,
+            'proposition_has_animal': propositionHasAnimal,
+            'proposition_type_animal': propositionTypeAnimal,
           })
           .select(_kSelectDemande)
           .single();
-      return DemandeResidentModel.fromJson(data);
+      final demande = DemandeResidentModel.fromJson(data);
+
+      final message = estUrgente
+          ? 'Urgent — $residentPrenom $residentNom : ${_typeDemandeLabel(type)}'
+          : '$residentPrenom $residentNom : ${_typeDemandeLabel(type)}';
+
+      await _notifierResponsables(demande.id, message);
+
+      return demande;
     } catch (e) {
       throw ServerException('Erreur envoi demande : $e');
     }
@@ -400,9 +441,109 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
     }
   }
 
+  @override
+  Future<DemandeResidentModel> validerInfoAppartement({
+    required String demandeId,
+  }) async {
+    try {
+      final demandeRow = await SupabaseService.client
+          .from(SupabaseService.demandesResidents)
+          .select(_kSelectDemande)
+          .eq('id', demandeId)
+          .single();
+      final demande = DemandeResidentModel.fromJson(demandeRow);
+
+      final residentRow = await SupabaseService.client
+          .from(SupabaseService.residents)
+          .select('appartement_id')
+          .eq('id', demande.residentId)
+          .single();
+      final appartementId = residentRow['appartement_id'] as String;
+
+      await SupabaseService.client
+          .from(SupabaseService.appartements)
+          .update({
+            'notes': demande.propositionNotes,
+            'has_animal': demande.propositionHasAnimal ?? false,
+            'type_animal': demande.propositionHasAnimal == true
+                ? demande.propositionTypeAnimal
+                : null,
+          })
+          .eq('id', appartementId);
+
+      final data = await SupabaseService.client
+          .from(SupabaseService.demandesResidents)
+          .update({
+            'statut': 'Resolue',
+            'reponse':
+                'Informations validées et appliquées à votre appartement.',
+            'date_resolution': DateTime.now().toIso8601String(),
+            'date_reponse': DateTime.now().toIso8601String(),
+          })
+          .eq('id', demandeId)
+          .select(_kSelectDemande)
+          .single();
+
+      final updated = DemandeResidentModel.fromJson(data);
+
+      await SupabaseService.client
+          .from(SupabaseService.notificationsResidents)
+          .insert({
+        'resident_id': demande.residentId,
+        'type': 'ChangementDate',
+        'message': 'Les informations de votre appartement ont été validées.',
+        'is_lue': false,
+      });
+
+      return updated;
+    } catch (e) {
+      throw ServerException('Erreur validation infos appartement : $e');
+    }
+  }
+
+  @override
+  Future<DemandeResidentModel> refuserInfoAppartement({
+    required String demandeId,
+    required String reponse,
+  }) async {
+    try {
+      final data = await SupabaseService.client
+          .from(SupabaseService.demandesResidents)
+          .update({
+            'statut': 'Resolue',
+            'reponse': reponse,
+            'date_resolution': DateTime.now().toIso8601String(),
+            'date_reponse': DateTime.now().toIso8601String(),
+          })
+          .eq('id', demandeId)
+          .select(_kSelectDemande)
+          .single();
+
+      final demande = DemandeResidentModel.fromJson(data);
+
+      await SupabaseService.client
+          .from(SupabaseService.notificationsResidents)
+          .insert({
+        'resident_id': demande.residentId,
+        'type': 'ChangementDate',
+        'message':
+            'Votre proposition d\'informations sur l\'appartement a été refusée : $reponse',
+        'is_lue': false,
+      });
+
+      return demande;
+    } catch (e) {
+      throw ServerException('Erreur refus infos appartement : $e');
+    }
+  }
+
   // ── Helpers privés ────────────────────────────────────────
 
-  Future<void> _notifierResponsables(String demandeId, String message) async {
+  Future<void> _notifierResponsables(
+    String demandeId,
+    String message, {
+    String type = 'DemandeRepondue',
+  }) async {
     final rolesResponsables = RoleType.values
         .where((role) => role.isResponsable)
         .map((role) => role.label)
@@ -417,7 +558,7 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
     final batch = (responsables as List)
         .map((r) => {
               'destinataire_id': r['id'] as String,
-              'type': 'DemandeRepondue',
+              'type': type,
               'message': message,
               'entity_id': demandeId,
               'entity_type': 'Demande',

@@ -175,12 +175,6 @@ class _MobileLayout extends ConsumerWidget {
               '${AppRoutes.tacheJour}?date=${jour.date.toIso8601String().split('T')[0]}',
             ),
           ),
-          const SizedBox(height: AppSizes.md),
-
-          // ── Actions rapides ───────────────────────────
-          const _SectionTitle(title: 'Accès rapide'),
-          const SizedBox(height: AppSizes.sm),
-          _ActionsRapides(),
         ],
 
         // ── Erreur ───────────────────────────────────────
@@ -246,10 +240,6 @@ class _DesktopLayout extends ConsumerWidget {
                     '${AppRoutes.tacheJour}?date=${jour.date.toIso8601String().split('T')[0]}',
                   ),
                 ),
-                const SizedBox(height: AppSizes.md),
-                const _SectionTitle(title: 'Accès rapide'),
-                const SizedBox(height: AppSizes.sm),
-                _ActionsRapides(),
               ],
               if (state.error != null) _ErrorCard(message: state.error!),
             ],
@@ -613,133 +603,6 @@ class _StatItem extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: AppColors.grisDark),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Actions rapides ───────────────────────────────────────
-class _ActionsRapides extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _ActionItem(
-        icon: Icons.today_rounded,
-        label: 'Ma Journée',
-        color: AppColors.rouge,
-        onTap: () => context.go(AppRoutes.tacheJour),
-      ),
-      _ActionItem(
-        icon: Icons.calendar_month_rounded,
-        label: 'Mon Planning',
-        color: AppColors.absent,
-        onTap: () => context.go(AppRoutes.planning),
-      ),
-      _ActionItem(
-        icon: Icons.chat_bubble_outline_rounded,
-        label: 'Mémo',
-        color: AppColors.fait,
-        onTap: () => context.go(AppRoutes.memo),
-      ),
-      _ActionItem(
-        icon: Icons.group_rounded,
-        label: 'Chat Équipe',
-        color: AppColors.aVerifier,
-        onTap: () => context.go(AppRoutes.chatGroupe),
-      ),
-      _ActionItem(
-        icon: Icons.assignment_ind_outlined,
-        label: 'Tâches dispo.',
-        color: AppColors.fait,
-        onTap: () => context.go(AppRoutes.tachesDisponibles),
-      ),
-      _ActionItem(
-        icon: Icons.apartment_rounded,
-        label: 'Aires communes',
-        color: const Color(0xFF00897B),
-        onTap: () => context.go(AppRoutes.aireCommune),
-      ),
-    ];
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: AppSizes.md,
-      mainAxisSpacing: AppSizes.md,
-      childAspectRatio: 1.6,
-      children: actions.asMap().entries.map((e) {
-        return e.value
-            .animate(delay: Duration(milliseconds: e.key * 80))
-            .fadeIn(duration: 300.ms)
-            .slideY(begin: 0.2, end: 0);
-      }).toList(),
-    );
-  }
-}
-
-class _ActionItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ActionItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        child: Container(
-          padding: const EdgeInsets.all(AppSizes.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppSizes.sm),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(width: AppSizes.sm),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.noir,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 12,
-                color: AppColors.grisText,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

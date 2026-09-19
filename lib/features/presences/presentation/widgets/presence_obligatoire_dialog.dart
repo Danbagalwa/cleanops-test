@@ -25,13 +25,15 @@ class PresenceObligatoireDialog extends ConsumerWidget {
       }
     });
 
+    final maxDialogHeight = MediaQuery.of(context).size.height * 0.88;
+
     return Dialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSizes.radiusXl),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
+        constraints: BoxConstraints(maxWidth: 400, maxHeight: maxDialogHeight),
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSizes.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -95,14 +97,41 @@ class PresenceObligatoireDialog extends ConsumerWidget {
 
 // ── Options de présence ────────────────────────────────────
 
-class _OptionsPresence extends ConsumerWidget {
+class _OptionsPresence extends ConsumerStatefulWidget {
   final String employeeId;
   const _OptionsPresence({required this.employeeId});
 
-  Future<void> _confirmer(
-    WidgetRef ref,
-    StatutPresence statut,
-  ) async {
+  @override
+  ConsumerState<_OptionsPresence> createState() => _OptionsPresenceState();
+}
+
+class _OptionsPresenceState extends ConsumerState<_OptionsPresence> {
+  bool _preciserHeures = false;
+  TimeOfDay _heureDebut = const TimeOfDay(hour: 8, minute: 0);
+  TimeOfDay _heureFin = const TimeOfDay(hour: 13, minute: 0);
+
+  String _fmt(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')} h ${t.minute.toString().padLeft(2, '0')}';
+
+  String _fmtDb(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  Future<void> _choisirHeure(bool debut) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: debut ? _heureDebut : _heureFin,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (debut) {
+        _heureDebut = picked;
+      } else {
+        _heureFin = picked;
+      }
+    });
+  }
+
+  Future<void> _confirmer(StatutPresence statut) async {
     final responsableIds = ref
         .read(employesNotifierProvider)
         .employes
@@ -110,17 +139,21 @@ class _OptionsPresence extends ConsumerWidget {
         .map((e) => e.id)
         .toList();
 
+    final avecHeures = statut == StatutPresence.present && _preciserHeures;
+
     await ref
-        .read(maPresenceNotifierProvider(employeeId).notifier)
+        .read(maPresenceNotifierProvider(widget.employeeId).notifier)
         .confirmer(
           date: DateTime.now(),
           statut: statut,
           responsableIds: responsableIds,
+          heureDebut: avecHeures ? _fmtDb(_heureDebut) : null,
+          heureFin: avecHeures ? _fmtDb(_heureFin) : null,
         );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return Column(
       children: [
         _OptionTile(
@@ -128,7 +161,17 @@ class _OptionsPresence extends ConsumerWidget {
           label: 'Présente',
           sublabel: 'Toute la journée',
           color: AppColors.fait,
-          onTap: () => _confirmer(ref, StatutPresence.present),
+          onTap: () => _confirmer(StatutPresence.present),
+        ),
+        const SizedBox(height: AppSizes.sm),
+        _PreciserHeuresCard(
+          active: _preciserHeures,
+          heureDebutLabel: _fmt(_heureDebut),
+          heureFinLabel: _fmt(_heureFin),
+          onToggle: (v) => setState(() => _preciserHeures = v),
+          onChoisirDebut: () => _choisirHeure(true),
+          onChoisirFin: () => _choisirHeure(false),
+          onConfirmer: () => _confirmer(StatutPresence.present),
         ),
         const SizedBox(height: AppSizes.sm),
         _OptionTile(
@@ -136,7 +179,7 @@ class _OptionsPresence extends ConsumerWidget {
           label: 'Absente ce matin',
           sublabel: 'AM seulement',
           color: AppColors.aVerifier,
-          onTap: () => _confirmer(ref, StatutPresence.absentMatin),
+          onTap: () => _confirmer(StatutPresence.absentMatin),
         ),
         const SizedBox(height: AppSizes.sm),
         _OptionTile(
@@ -144,7 +187,7 @@ class _OptionsPresence extends ConsumerWidget {
           label: 'Absente cet après-midi',
           sublabel: 'PM seulement',
           color: AppColors.aVerifier,
-          onTap: () => _confirmer(ref, StatutPresence.absentApresMidi),
+          onTap: () => _confirmer(StatutPresence.absentApresMidi),
         ),
         const SizedBox(height: AppSizes.sm),
         _OptionTile(
@@ -152,9 +195,174 @@ class _OptionsPresence extends ConsumerWidget {
           label: 'Absente aujourd\'hui',
           sublabel: 'Toute la journée',
           color: AppColors.refus,
-          onTap: () => _confirmer(ref, StatutPresence.absent),
+          onTap: () => _confirmer(StatutPresence.absent),
         ),
       ],
+    );
+  }
+}
+
+// ── Précision d'horaire (informatif — registre responsable) ─
+
+class _PreciserHeuresCard extends StatelessWidget {
+  final bool active;
+  final String heureDebutLabel;
+  final String heureFinLabel;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onChoisirDebut;
+  final VoidCallback onChoisirFin;
+  final VoidCallback onConfirmer;
+
+  const _PreciserHeuresCard({
+    required this.active,
+    required this.heureDebutLabel,
+    required this.heureFinLabel,
+    required this.onToggle,
+    required this.onChoisirDebut,
+    required this.onChoisirFin,
+    required this.onConfirmer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.grisLight,
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        border: Border.all(
+          color: active
+              ? AppColors.rouge.withValues(alpha: 0.3)
+              : Colors.transparent,
+        ),
+      ),
+      child: Column(
+        children: [
+          SwitchListTile(
+            value: active,
+            onChanged: onToggle,
+            title: const Text(
+              'Préciser mes heures',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              'Je travaille une partie de la journée seulement',
+              style: TextStyle(fontSize: 11.5),
+            ),
+            secondary: const Icon(Icons.access_time_rounded,
+                size: 20, color: AppColors.rouge),
+            activeThumbColor: AppColors.rouge,
+            dense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: AppSizes.sm),
+          ),
+          if (active) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSizes.sm, 0, AppSizes.sm, AppSizes.sm),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _HeureButton(
+                      label: 'De',
+                      heure: heureDebutLabel,
+                      onTap: onChoisirDebut,
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 16, color: AppColors.grisText),
+                  ),
+                  Expanded(
+                    child: _HeureButton(
+                      label: 'À',
+                      heure: heureFinLabel,
+                      onTap: onChoisirFin,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                  AppSizes.sm, 0, AppSizes.sm, AppSizes.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      size: 12, color: AppColors.grisText),
+                  SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Information transmise au responsable à titre de '
+                      'registre — n\'affecte pas vos tâches du jour.',
+                      style:
+                          TextStyle(fontSize: 10.5, color: AppColors.grisText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSizes.sm, 0, AppSizes.sm, AppSizes.sm),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onConfirmer,
+                  icon: const Icon(Icons.check_rounded, size: 17),
+                  label: const Text('Confirmer ma présence'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.fait,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HeureButton extends StatelessWidget {
+  final String label;
+  final String heure;
+  final VoidCallback onTap;
+
+  const _HeureButton({
+    required this.label,
+    required this.heure,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+          border: Border.all(color: AppColors.grisMedium),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 10, color: AppColors.grisText)),
+            Text(heure,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.noir)),
+          ],
+        ),
+      ),
     );
   }
 }

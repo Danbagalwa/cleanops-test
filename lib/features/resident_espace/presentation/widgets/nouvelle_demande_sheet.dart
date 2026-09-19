@@ -74,9 +74,16 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
   String? _motifError;
   String? _submitError;
 
+  // ── Section infos appartement (notes / animal) ────────────
+  bool _hasAnimalInfo = false;
+  final _typeAnimalController = TextEditingController();
+  final _notesInfoController = TextEditingController();
+
   @override
   void dispose() {
     _motifController.dispose();
+    _typeAnimalController.dispose();
+    _notesInfoController.dispose();
     super.dispose();
   }
 
@@ -150,6 +157,44 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
               tacheJourId: tache?.estProjection == true ? null : tache?.id,
               motif: motif,
               estUrgente: _avertissementUrgent,
+            );
+
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.of(context).pop(true);
+    } else {
+      final erreur = ref.read(residentEspaceNotifierProvider).errorDemandes;
+      setState(
+          () => _submitError = erreur ?? 'Erreur lors de l\'envoi. Réessayez.');
+    }
+  }
+
+  Future<void> _soumettreInfoAppartement() async {
+    final notes = _notesInfoController.text.trim();
+    final typeAnimal = _typeAnimalController.text.trim();
+
+    if (!_hasAnimalInfo && notes.isEmpty) {
+      setState(() => _submitError =
+          'Indiquez la présence d\'un animal ou une note à transmettre.');
+      return;
+    }
+    setState(() => _submitError = null);
+
+    final motif = [
+      if (_hasAnimalInfo)
+        'Animal présent${typeAnimal.isNotEmpty ? " : $typeAnimal" : ""}',
+      if (notes.isNotEmpty) notes,
+    ].join(' — ');
+
+    final success =
+        await ref.read(residentEspaceNotifierProvider.notifier).creerDemande(
+              type: TypeDemande.infoAppartement,
+              motif: motif,
+              propositionNotes: notes.isEmpty ? null : notes,
+              propositionHasAnimal: _hasAnimalInfo,
+              propositionTypeAnimal:
+                  _hasAnimalInfo && typeAnimal.isNotEmpty ? typeAnimal : null,
             );
 
     if (!mounted) return;
@@ -288,6 +333,18 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
                   _submitError = null;
                 }),
               ),
+              const SizedBox(height: AppSizes.sm),
+              _TypeCard(
+                icon: Icons.info_outline_rounded,
+                label: 'Informations sur mon appartement',
+                subtitle: 'Animal présent, note importante...',
+                selected: _type == TypeDemande.infoAppartement,
+                onTap: () => setState(() {
+                  _type = TypeDemande.infoAppartement;
+                  _tacheSelectee = null;
+                  _submitError = null;
+                }),
+              ),
               const SizedBox(height: AppSizes.lg),
 
               // Sélection de tâche
@@ -340,8 +397,152 @@ class _NouvelleDemandeSheetState extends ConsumerState<NouvelleDemandeSheet> {
                 ),
               ],
 
+              // Section dédiée — infos appartement (notes / animal)
+              if (_type == TypeDemande.infoAppartement) ...[
+                if (_submitError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(AppSizes.sm),
+                    margin: const EdgeInsets.only(bottom: AppSizes.sm),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline_rounded,
+                            size: 16, color: Colors.red.shade700),
+                        const SizedBox(width: AppSizes.sm),
+                        Expanded(
+                          child: Text(
+                            _submitError!,
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.grisLight,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  ),
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        value: _hasAnimalInfo,
+                        onChanged: (v) => setState(() {
+                          _hasAnimalInfo = v;
+                          if (!v) _typeAnimalController.clear();
+                          _submitError = null;
+                        }),
+                        title: const Text(
+                          'Présence d\'un animal',
+                          style: TextStyle(fontSize: 13.5),
+                        ),
+                        secondary: const Icon(Icons.pets_rounded, size: 20),
+                        activeThumbColor: AppColors.rouge,
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSizes.sm,
+                        ),
+                      ),
+                      if (_hasAnimalInfo)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSizes.sm,
+                            0,
+                            AppSizes.sm,
+                            AppSizes.sm,
+                          ),
+                          child: TextFormField(
+                            controller: _typeAnimalController,
+                            decoration: const InputDecoration(
+                              labelText: 'Type d\'animal',
+                              hintText: 'Ex: Chat, Chien...',
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSizes.md),
+                const _SectionLabel('Notes pour l\'équipe'),
+                const SizedBox(height: AppSizes.sm),
+                TextField(
+                  controller: _notesInfoController,
+                  maxLines: 4,
+                  maxLength: 500,
+                  onChanged: (_) {
+                    if (_submitError != null) {
+                      setState(() => _submitError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    hintText:
+                        'Ex: Merci de bien refermer la porte, code d\'accès...',
+                    hintStyle: const TextStyle(
+                        color: AppColors.grisText, fontSize: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      borderSide: const BorderSide(color: AppColors.grisMedium),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      borderSide: const BorderSide(color: AppColors.rouge),
+                    ),
+                    contentPadding: const EdgeInsets.all(AppSizes.md),
+                  ),
+                ),
+                const SizedBox(height: AppSizes.sm),
+                const Row(
+                  children: [
+                    Icon(Icons.verified_user_outlined,
+                        size: 13, color: AppColors.grisText),
+                    SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Ces informations seront validées par le responsable avant d\'être appliquées.',
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.grisText),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSizes.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: isSending ? null : _soumettreInfoAppartement,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.rouge,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      ),
+                    ),
+                    child: isSending
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Envoyer la demande',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+
               // Motif
-              if (_type != null) ...[
+              if (_type != null && _type != TypeDemande.infoAppartement) ...[
                 const _SectionLabel('Motif'),
                 const SizedBox(height: AppSizes.sm),
                 // Message d'erreur de soumission

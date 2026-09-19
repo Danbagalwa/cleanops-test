@@ -19,7 +19,8 @@ abstract class TacheJourDatasource {
 }
 
 class TacheJourDatasourceImpl implements TacheJourDatasource {
-  static const _join = '*, appartements(id, numero, taille, minutes_base)';
+  static const _join =
+      '*, appartements(id, numero, taille, minutes_base, notes, has_animal, type_animal)';
   static const _joursNoms = [
     'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche',
   ];
