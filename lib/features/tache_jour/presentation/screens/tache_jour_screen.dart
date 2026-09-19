@@ -106,26 +106,16 @@ class _TacheJourScreenState extends ConsumerState<TacheJourScreen> {
         ? ref.watch(maPresenceNotifierProvider(employee.id)).maPresence?.statut
         : null;
 
-    // Determine which periods are visible based on presence
-    final showAm = presenceStatut == null ||
-        presenceStatut == StatutPresence.present ||
-        presenceStatut == StatutPresence.absentApresMidi;
-    final showPm = presenceStatut == null ||
-        presenceStatut == StatutPresence.present ||
-        presenceStatut == StatutPresence.absentMatin;
-
-    // Les tâches prises volontairement (is_transfert_temp) restent toujours visibles.
-    // Les tâches actuellement dans le pool (libérées, statut=Disponible) sont masquées.
-    final visibleAmTaches = (showAm
-            ? state.amTaches
-            : state.amTaches.where((t) => t.isTransfertTemp).toList())
-        .where((t) => !_poolTaskIds.contains(t.id))
-        .toList();
-    final visiblePmTaches = (showPm
-            ? state.pmTaches
-            : state.pmTaches.where((t) => t.isTransfertTemp).toList())
-        .where((t) => !_poolTaskIds.contains(t.id))
-        .toList();
+    // Une absence ne masque PAS les tâches : elles restent visibles chez la
+    // préposée tant que le responsable ne les a pas
+    //  - transférées à une autre préposée (employee_id change : la requête ne
+    //    les renvoie plus), ou
+    //  - libérées à l'équipe (elles sont alors dans le pool, statut =
+    //    Disponible, et masquées ici).
+    final visibleAmTaches =
+        state.amTaches.where((t) => !_poolTaskIds.contains(t.id)).toList();
+    final visiblePmTaches =
+        state.pmTaches.where((t) => !_poolTaskIds.contains(t.id)).toList();
 
     return Scaffold(
       backgroundColor: AppColors.grisLight,
@@ -299,8 +289,6 @@ class _DesktopLayout extends StatelessWidget {
                         taches: amTaches,
                         dateStr: dateStr,
                         updatingIds: state.updatingIds,
-                        hidden: absenceStatut == StatutPresence.absentMatin ||
-                            absenceStatut == StatutPresence.absent,
                       ),
                     ),
                     const SizedBox(width: AppSizes.md),
@@ -312,9 +300,6 @@ class _DesktopLayout extends StatelessWidget {
                         taches: pmTaches,
                         dateStr: dateStr,
                         updatingIds: state.updatingIds,
-                        hidden:
-                            absenceStatut == StatutPresence.absentApresMidi ||
-                                absenceStatut == StatutPresence.absent,
                       ),
                     ),
                   ],
@@ -367,8 +352,6 @@ class _MobileLayout extends StatelessWidget {
             taches: amTaches,
             dateStr: dateStr,
             updatingIds: state.updatingIds,
-            hidden: absenceStatut == StatutPresence.absentMatin ||
-                absenceStatut == StatutPresence.absent,
           ),
           const SizedBox(height: AppSizes.md),
           _MobileSection(
@@ -378,8 +361,6 @@ class _MobileLayout extends StatelessWidget {
             taches: pmTaches,
             dateStr: dateStr,
             updatingIds: state.updatingIds,
-            hidden: absenceStatut == StatutPresence.absentApresMidi ||
-                absenceStatut == StatutPresence.absent,
           ),
           const SizedBox(height: AppSizes.xxl),
         ],
@@ -396,7 +377,6 @@ class _Panel extends StatelessWidget {
   final List<TacheJour> taches;
   final String dateStr;
   final Set<String> updatingIds;
-  final bool hidden;
 
   const _Panel({
     required this.label,
@@ -405,7 +385,6 @@ class _Panel extends StatelessWidget {
     required this.taches,
     required this.dateStr,
     required this.updatingIds,
-    this.hidden = false,
   });
 
   @override
@@ -431,32 +410,30 @@ class _Panel extends StatelessWidget {
               label: label,
               icon: icon,
               color: color,
-              count: hidden ? 0 : taches.length,
+              count: taches.length,
             ),
 
-            // ── Liste, état vide ou masqué ───────────────
+            // ── Liste ou état vide ───────────────────────
             Expanded(
-              child: hidden
-                  ? _PanelHidden(label: label, color: color)
-                  : taches.isEmpty
-                      ? _PanelEmpty(label: label, color: color)
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: AppSizes.sm),
-                          itemCount: taches.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            indent: AppSizes.md,
-                            endIndent: AppSizes.md,
-                            color: Color(0xFFF0F0F0),
-                          ),
-                          itemBuilder: (_, i) => TacheCardWidget(
-                            tache: taches[i],
-                            dateStr: dateStr,
-                            isUpdating: updatingIds.contains(taches[i].id),
-                            inPanel: true,
-                          ),
-                        ),
+              child: taches.isEmpty
+                  ? _PanelEmpty(label: label, color: color)
+                  : ListView.separated(
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                      itemCount: taches.length,
+                      separatorBuilder: (_, __) => const Divider(
+                        height: 1,
+                        indent: AppSizes.md,
+                        endIndent: AppSizes.md,
+                        color: Color(0xFFF0F0F0),
+                      ),
+                      itemBuilder: (_, i) => TacheCardWidget(
+                        tache: taches[i],
+                        dateStr: dateStr,
+                        isUpdating: updatingIds.contains(taches[i].id),
+                        inPanel: true,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -473,7 +450,6 @@ class _MobileSection extends StatelessWidget {
   final List<TacheJour> taches;
   final String dateStr;
   final Set<String> updatingIds;
-  final bool hidden;
 
   const _MobileSection({
     required this.label,
@@ -482,7 +458,6 @@ class _MobileSection extends StatelessWidget {
     required this.taches,
     required this.dateStr,
     required this.updatingIds,
-    this.hidden = false,
   });
 
   @override
@@ -508,11 +483,9 @@ class _MobileSection extends StatelessWidget {
               label: label,
               icon: icon,
               color: color,
-              count: hidden ? 0 : taches.length,
+              count: taches.length,
             ),
-            if (hidden)
-              _PanelHidden(label: label, color: color)
-            else if (taches.isEmpty)
+            if (taches.isEmpty)
               _PanelEmpty(label: label, color: color)
             else
               Column(
@@ -610,39 +583,6 @@ class _PanelHeader extends StatelessWidget {
   }
 }
 
-// ── État masqué (absence) d'un panneau ───────────────────
-class _PanelHidden extends StatelessWidget {
-  final String label;
-  final Color color;
-
-  const _PanelHidden({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.visibility_off_rounded,
-            size: 36,
-            color: AppColors.grisMedium,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Tâches masquées — absence $label',
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.grisText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── État vide d'un panneau ────────────────────────────────
 class _PanelEmpty extends StatelessWidget {
   final String label;
@@ -687,17 +627,17 @@ class _AbsenceBanner extends StatelessWidget {
       StatutPresence.absent => (
           Icons.person_off_outlined,
           AppColors.rouge,
-          'Vous êtes absente aujourd\'hui. Aucune tâche à effectuer.',
+          'Vous êtes absente aujourd\'hui. Vos tâches restent visibles tant que le responsable ne les a pas transférées à une autre préposée ou libérées à l\'équipe.',
         ),
       StatutPresence.absentMatin => (
           Icons.wb_sunny_outlined,
           AppColors.aVerifier,
-          'Vous êtes absente ce matin. Seules les tâches de l\'après-midi sont visibles.',
+          'Vous êtes absente ce matin. Vos tâches du matin restent visibles tant que le responsable ne les a pas transférées à une autre préposée ou libérées à l\'équipe.',
         ),
       StatutPresence.absentApresMidi => (
           Icons.nights_stay_outlined,
           AppColors.aVerifier,
-          'Vous êtes absente cet après-midi. Seules les tâches du matin sont visibles.',
+          'Vous êtes absente cet après-midi. Vos tâches de l\'après-midi restent visibles tant que le responsable ne les a pas transférées à une autre préposée ou libérées à l\'équipe.',
         ),
       _ => (Icons.info_outline_rounded, AppColors.grisDark, ''),
     };
