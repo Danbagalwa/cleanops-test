@@ -77,6 +77,16 @@ const List<ReceptionSection> receptionSections = [
   ),
 ];
 
+/// Route de la section Résidents (recherche).
+const String receptionResidentsRoute = '/reception/residents';
+
+/// Modèle de route de la fiche d'un appartement.
+const String receptionFichePattern = '/reception/residents/:appartementId';
+
+/// Route de la fiche d'un appartement.
+String receptionFicheRoute(String appartementId) =>
+    '$receptionResidentsRoute/$appartementId';
+
 /// Vrai pour l'écran d'accueil de la Réception et ses 5 sections, et pour eux
 /// seuls. `/receptionniste` ou `/reception-x` ne correspondent pas.
 bool estRouteReception(String location) =>

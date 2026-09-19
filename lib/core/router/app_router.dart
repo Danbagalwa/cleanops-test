@@ -28,6 +28,8 @@ import '../../features/resident_espace/presentation/screens/demandes_residents_r
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/reception/presentation/screens/reception_dashboard_screen.dart';
+import '../../features/reception/presentation/screens/reception_fiche_screen.dart';
+import '../../features/reception/presentation/screens/reception_residents_screen.dart';
 import '../../features/reception/presentation/screens/reception_section_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/demandes_equipe_responsable_screen.dart';
@@ -362,9 +364,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           for (final section in receptionSections)
             GoRoute(
               path: section.route,
-              builder: (context, state) =>
-                  ReceptionSectionScreen(section: section),
+              // Section Résidents construite ; les autres sont provisoires.
+              builder: (context, state) => section.route ==
+                      receptionResidentsRoute
+                  ? const ReceptionResidentsScreen()
+                  : ReceptionSectionScreen(section: section),
             ),
+          GoRoute(
+            path: receptionFichePattern,
+            builder: (context, state) => ReceptionFicheScreen(
+              appartementId: state.pathParameters['appartementId'] ?? '',
+            ),
+          ),
 
           // ── Espace résident ─────────────────────────────
           GoRoute(
