@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 import '../../../../core/errors/exceptions.dart';
+import '../../../../core/services/generation_service.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../domain/entities/reset_aire_commune.dart';
 import '../models/tache_aire_commune_model.dart';
@@ -56,37 +57,14 @@ class AireCommuneDatasourceImpl implements AireCommuneDatasource {
     }
   }
 
-  /// Crée les zones de la semaine courante à partir du modèle de la semaine
-  /// précédente. Sans effet si aucun modèle n'existe (première utilisation).
+  /// Filet de sécurité : la création des zones et la remise à zéro sont
+  /// normalement faites par pg_cron. Si la semaine courante n'a aucune zone,
+  /// le serveur la crée depuis la plus récente semaine connue (et non plus
+  /// seulement la semaine précédente). Sans effet si aucun modèle n'existe.
   Future<void> _initialiserSemaineCourante(String lundiCourant) async {
-    final now = DateTime.now();
-    final lundi = now.subtract(Duration(days: now.weekday - 1));
-    final lundiPrecStr =
-        DateFormat('yyyy-MM-dd').format(lundi.subtract(const Duration(days: 7)));
-
-    final template = await SupabaseService.client
-        .from(SupabaseService.tachesAireCommune)
-        .select('categorie, zone')
-        .eq('semaine_date', lundiPrecStr);
-
-    if ((template as List).isEmpty) return;
-
-    final inserts = template
-        .map<Map<String, dynamic>>((z) => {
-              'categorie': z['categorie'] as String,
-              'zone': z['zone'] as String,
-              'semaine_date': lundiCourant,
-              // statut par défaut 'AFaire' en BDD — pas besoin de le passer
-            })
-        .toList();
-
-    await SupabaseService.client
-        .from(SupabaseService.tachesAireCommune)
-        .upsert(
-          inserts,
-          onConflict: 'semaine_date,categorie,zone',
-          ignoreDuplicates: true,
-        );
+    await GenerationService.assurerZonesAiresCommunes(
+      DateTime.parse(lundiCourant),
+    );
   }
 
   @override

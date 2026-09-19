@@ -1,5 +1,6 @@
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/helpers/semaine_helper.dart';
+import '../../../../core/services/generation_service.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../models/semaine_model.dart';
 
@@ -10,16 +11,6 @@ abstract class EmployeeDashboardDatasource {
 
 class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
   const EmployeeDashboardDatasourceImpl();
-
-  static const _joursNoms = [
-    'Lundi',
-    'Mardi',
-    'Mercredi',
-    'Jeudi',
-    'Vendredi',
-    'Samedi',
-    'Dimanche',
-  ];
 
   @override
   Future<SemaineModel> getSemaineCourante({
@@ -42,9 +33,10 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
             .order('numero_tache'),
       );
 
-      // Si aucune tâche pour toute la semaine → générer depuis les templates
+      // Filet de sécurité : la génération est normalement faite par pg_cron.
+      // Si aucune tâche n'existe pour la semaine, le serveur crée ce qui manque.
       if (taches.isEmpty) {
-        await _genererSemaine(employeeId, lundi, numeroSemaine);
+        await GenerationService.assurerTachesSemaine(lundi);
         taches = List<Map<String, dynamic>>.from(
           await SupabaseService.table(SupabaseService.tachesJour)
               .select('*, appartements(numero, taille, minutes_base)')
@@ -80,47 +72,6 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
     } catch (e) {
       throw ServerException('Erreur chargement semaine : $e');
     }
-  }
-
-  // Génère toutes les tâches de la semaine depuis les planning_templates en un seul batch
-  Future<void> _genererSemaine(
-      String employeeId, DateTime lundi, int numeroSemaine) async {
-    final templates =
-        await SupabaseService.table(SupabaseService.planningTemplates)
-            .select('*')
-            .eq('employee_id', employeeId)
-            .eq('numero_semaine', numeroSemaine)
-            .inFilter('jour', [
-      'Lundi',
-      'Mardi',
-      'Mercredi',
-      'Jeudi',
-      'Vendredi'
-    ]).order('numero_tache');
-
-    final list = templates as List;
-    if (list.isEmpty) return;
-
-    final rows = list.map<Map<String, dynamic>>((t) {
-      final jourIndex = _joursNoms.indexOf(t['jour'] as String);
-      final date = lundi.add(Duration(days: jourIndex < 0 ? 0 : jourIndex));
-      final dateStr = date.toIso8601String().split('T')[0];
-      return {
-        'planning_template_id': t['id'],
-        'employee_id': employeeId,
-        'appartement_id': t['appartement_id'],
-        'numero_semaine': t['numero_semaine'] as int,
-        'semaine_reelle': dateStr,
-        'jour': t['jour'],
-        'periode': t['periode'],
-        'numero_tache': t['numero_tache'] as int,
-        'statut': 'NonCommencé',
-        'is_transfert_temp': false,
-        'is_ajoutee': false,
-      };
-    }).toList();
-
-    await SupabaseService.table(SupabaseService.tachesJour).insert(rows);
   }
 
   @override
