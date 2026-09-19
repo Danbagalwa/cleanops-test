@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
-import 'package:jazz_teasdale/features/auth/domain/entities/employee.dart';
+import 'package:cleanops/features/auth/domain/entities/employee.dart';
 import '../constants/app_colors.dart';
 import '../router/app_router.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';

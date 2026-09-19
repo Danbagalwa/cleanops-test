@@ -143,7 +143,7 @@ class TabProfil extends ConsumerWidget {
           ),
           const SizedBox(height: AppSizes.sm),
           const Text(
-            'Jazz Teasdale · v1.0',
+            'CleanOps · v1.0',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 11, color: AppColors.grisText),
           ),
@@ -160,7 +160,7 @@ class TabProfil extends ConsumerWidget {
       builder: (_) => AlertDialog(
         title: const Text('À propos'),
         content: const Text(
-          'Application de la résidence Jazz Teasdale.\n\n'
+          'Application CleanOps de gestion de l’entretien ménager.\n\n'
           'Gérez vos demandes de ménage et consultez vos dates de service directement depuis votre appareil.',
         ),
         actions: [

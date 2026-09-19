@@ -1,4 +1,4 @@
-import 'package:jazz_teasdale/features/auth/domain/entities/employee.dart';
+import 'package:cleanops/features/auth/domain/entities/employee.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/errors/exceptions.dart';

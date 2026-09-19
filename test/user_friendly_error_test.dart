@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jazz_teasdale/core/errors/user_friendly_error.dart';
+import 'package:cleanops/core/errors/user_friendly_error.dart';
 
 void main() {
   test('masque une erreur PostgreSQL technique', () {

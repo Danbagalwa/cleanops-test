@@ -1,4 +1,4 @@
-package com.example.jazz_teasdale
+package com.example.cleanops
 
 import io.flutter.embedding.android.FlutterActivity
 

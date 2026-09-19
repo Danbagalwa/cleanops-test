@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // ── Couleurs principales Jazz Teasdale ──────────────────
+  // ── Couleurs principales CleanOps ───────────────────
   static const Color rouge = Color.fromARGB(255, 55, 50, 201);
   static const Color rougeFonce = Color.fromARGB(255, 72, 67, 224);
   static const Color rougeLight = Color.fromARGB(255, 82, 85, 244);

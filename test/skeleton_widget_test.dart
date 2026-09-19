@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:jazz_teasdale/core/widgets/skeleton_widget.dart';
+import 'package:cleanops/core/widgets/skeleton_widget.dart';
 
 void main() {
   testWidgets('affiche une structure de liste pendant le chargement',

@@ -1,5 +1,5 @@
-name: jazz_teasdale
-description: Application de gestion d'entretien ménager — Résidence Jazz Teasdale
+name: cleanops
+description: Application de gestion d'entretien ménager — CleanOps
 publish_to: 'none'
 version: 1.0.0+1
 

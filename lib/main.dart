@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:jazz_teasdale/features/auth/presentation/providers/auth_provider.dart';
+import 'package:cleanops/features/auth/presentation/providers/auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/router/app_router.dart';
@@ -86,7 +86,7 @@ class _BootstrapAppState extends State<_BootstrapApp> {
         overrides: [
           sharedPreferencesProvider.overrideWithValue(preferences),
         ],
-        child: const JazzTeasdaleApp(),
+        child: const CleanOpsApp(),
       );
     }
 
@@ -262,8 +262,8 @@ class _StartupError extends StatelessWidget {
   }
 }
 
-class JazzTeasdaleApp extends ConsumerWidget {
-  const JazzTeasdaleApp({super.key});
+class CleanOpsApp extends ConsumerWidget {
+  const CleanOpsApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
