@@ -1,0 +1,74 @@
+-- ============================================================================
+-- Retrait du droit d'exécution public sur archive_old_historique()
+-- ============================================================================
+-- RISQUE
+--   archive_old_historique() supprime les lignes de plus d'un an de
+--   historique_actions ET de notifications. Elle était exécutable par PUBLIC,
+--   anon et authenticated, donc appelable en RPC avec la clé publique de
+--   l'application. Elle est SECURITY INVOKER et anon dispose de tous les droits
+--   sur les tables (RLS non activée sur notifications) : un appel externe
+--   s'exécutait réellement. Sans effet aujourd'hui (aucune ligne n'a un an, le
+--   projet date de mai 2026), mais n'importe qui pourrait déclencher la
+--   suppression dès que des lignes atteindront un an.
+--
+-- CONTEXTE
+--   * Aucun appelant : ni Dart, ni autre fonction SQL, ni vue, ni trigger.
+--   * Elle n'est PLANIFIÉE NULLE PART (aucune tâche pg_cron) : l'archivage
+--     n'a jamais lieu automatiquement. Voir la proposition ci-dessous.
+--
+-- CORRECTIF
+--   Retrait de EXECUTE à PUBLIC, anon et authenticated. Le droit par défaut de
+--   PUBLIC est retiré explicitement : anon en hérite. postgres (propriétaire,
+--   utilisateur des tâches pg_cron) et service_role conservent le droit.
+--   La fonction n'est ni supprimée ni modifiée : seuls les droits changent.
+--   Aucune donnée n'est touchée.
+--
+-- LIMITE
+--   Tant que la RLS n'est pas activée, anon peut toujours supprimer des lignes
+--   de notifications directement via l'API de tables ; ce correctif ferme le
+--   chemin par la fonction, pas celui-là.
+--
+-- POUR ANNULER : GRANT EXECUTE ON FUNCTION public.archive_old_historique()
+--   TO PUBLIC, anon, authenticated;  (déconseillé)
+-- ============================================================================
+
+REVOKE EXECUTE ON FUNCTION public.archive_old_historique()
+  FROM PUBLIC, anon, authenticated;
+
+
+-- ============================================================================
+-- PROPOSITION (NON ACTIVE) : planifier l'archivage une fois par mois
+-- ============================================================================
+-- À décider par le responsable du projet. Le bloc ci-dessous est en commentaire
+-- et ne s'exécute pas. Pour l'activer, le décommenter dans une migration
+-- dédiée (même schéma que 202607290002 et 202609190001 : on remplace le job
+-- du même nom).
+--
+--   « 0 8 1 * * »  = le 1er de chaque mois à 08:00 UTC, soit 04:00 (heure d'été)
+--   ou 03:00 (heure d'hiver) à Toronto, avant le début de journée. La fonction
+--   compare des dates avec NOW() et un intervalle d'un an : elle ne dépend pas
+--   du fuseau, donc aucun contrôle d'heure locale n'est nécessaire.
+--
+-- ATTENTION avant d'activer : la fonction supprime aussi les NOTIFICATIONS de
+-- plus d'un an (pas seulement l'historique d'actions). Vérifier que c'est bien
+-- la durée de conservation voulue.
+--
+-- DO $$
+-- DECLARE
+--   v_job_id bigint;
+-- BEGIN
+--   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+--     FOR v_job_id IN
+--       SELECT jobid FROM cron.job WHERE jobname = 'cleanops-archive-historique'
+--     LOOP
+--       PERFORM cron.unschedule(v_job_id);
+--     END LOOP;
+--
+--     PERFORM cron.schedule(
+--       'cleanops-archive-historique',
+--       '0 8 1 * *',
+--       'SELECT public.archive_old_historique();'
+--     );
+--   END IF;
+-- END
+-- $$;
