@@ -286,6 +286,34 @@ List<_NavGroup> _mobileOverflowGroups(List<_NavGroup> groups) => groups
 // AppShell
 // ─────────────────────────────────────────────────────────
 
+/// Écran de refus affiché à la place de toute page pour un profil sans accès
+/// (Réception, tant que sa destination n'existe pas). Ne montre aucune donnée.
+class _AccesNonDisponible extends StatelessWidget {
+  const _AccesNonDisponible();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_outline_rounded, size: 40),
+              SizedBox(height: 12),
+              Text(
+                'Accès non disponible pour ce profil.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
   final String location;
@@ -340,20 +368,32 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final employee = ref.watch(employeeCourantProvider);
-    final isResponsable = ref.watch(isResponsableProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
+    // Réception : aucun écran n'existe encore et elle n'hérite d'aucun droit.
+    // On n'affiche JAMAIS la page demandée (`widget.child`) : ceinture de
+    // sécurité en plus du routeur.
+    if (employee?.isReception == true) {
+      return const _AccesNonDisponible();
+    }
+
+    // Switch EXHAUSTIF sur le profil : plus de repli implicite vers la
+    // préposée pour un profil qui n'y a pas droit.
     final _NavItem dashboard;
     final List<_NavGroup> groups;
-    if (employee?.isResident == true) {
-      dashboard = _residentDashboard;
-      groups = _residentGroups;
-    } else if (isResponsable) {
-      dashboard = _responsableDashboard;
-      groups = _responsableGroups;
-    } else {
-      dashboard = _preposeeDashboard;
-      groups = _preposeeGroups;
+    switch (employee?.profil) {
+      case ProfilAcces.resident:
+        dashboard = _residentDashboard;
+        groups = _residentGroups;
+      case ProfilAcces.responsable:
+        dashboard = _responsableDashboard;
+        groups = _responsableGroups;
+      case ProfilAcces.reception:
+        return const _AccesNonDisponible();
+      case ProfilAcces.preposee:
+      case null:
+        dashboard = _preposeeDashboard;
+        groups = _preposeeGroups;
     }
 
     final activeRoute = _computeActiveRoute(dashboard, groups);

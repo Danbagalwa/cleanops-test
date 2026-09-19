@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/domain/entities/employee.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/employee_dashboard/presentation/screens/employee_dashboard_screen.dart';
 import '../../features/employer_dashboard/presentation/screens/employer_dashboard_screen.dart';
@@ -109,6 +110,54 @@ const _routesProtegees = [
   '/resident',
 ];
 
+// ── Redirection selon le profil d'accès ───────────────────
+/// Décide de la redirection d'une navigation selon l'utilisateur connecté.
+///
+/// Fonction pure (sans GoRouter) : testée directement. Le `switch` sur le
+/// profil est EXHAUSTIF, donc un profil ne peut jamais retomber par défaut sur
+/// celui d'un autre (c'était le cas de la Réception, traitée en responsable).
+@visibleForTesting
+String? redirectionSelonAcces({
+  required Employee? employee,
+  required String location,
+}) {
+  final isOnSplash = location == AppRoutes.splash;
+  final isOnLogin = location == AppRoutes.login;
+  final isProtege = _routesProtegees.any((r) => location.startsWith(r));
+
+  // Non authentifié sur route protégée → login
+  if (employee == null) {
+    return isProtege ? AppRoutes.login : null;
+  }
+
+  return switch (employee.profil) {
+    // Réception : ACCÈS FERMÉ PAR DÉFAUT. Aucun écran Réception n'existe
+    // encore et elle n'hérite d'aucun droit du responsable : toute page autre
+    // que la connexion est refusée, sans exception (routes protégées,
+    // inconnues ou sous-routes). La destination de la Réception est une
+    // décision en attente.
+    ProfilAcces.reception => isOnLogin ? null : AppRoutes.login,
+
+    // Résident — confiné à /resident/*
+    ProfilAcces.resident => isOnSplash || isOnLogin
+        ? AppRoutes.residentDashboard
+        : (location.startsWith(AppRoutes.residentDashboard)
+            ? null
+            : AppRoutes.residentDashboard),
+
+    // Responsable — tableau de bord à la connexion, accès aux routes
+    ProfilAcces.responsable =>
+      isOnSplash || isOnLogin ? AppRoutes.employerDashboard : null,
+
+    // Préposée — tableau de bord à la connexion, jamais la route responsable
+    ProfilAcces.preposee => isOnSplash || isOnLogin
+        ? AppRoutes.employeeDashboard
+        : (location.startsWith('/employeur')
+            ? AppRoutes.employeeDashboard
+            : null),
+  };
+}
+
 // ── Router provider ───────────────────────────────────────
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -116,44 +165,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
 
     // ── Redirection globale ───────────────────────────────
-    redirect: (context, state) {
-      final authState = ref.read(authNotifierProvider);
-      final employee = authState.employee;
-      final location = state.matchedLocation;
-
-      final isOnSplash = location == AppRoutes.splash;
-      final isOnLogin = location == AppRoutes.login;
-      final isProtege = _routesProtegees.any((r) => location.startsWith(r));
-
-      // Non authentifié sur route protégée → login
-      if (employee == null && isProtege) {
-        return AppRoutes.login;
-      }
-
-      // Authentifié sur splash/login → dashboard selon rôle
-      if (employee != null && (isOnSplash || isOnLogin)) {
-        if (employee.isResident) return AppRoutes.residentDashboard;
-        return employee.isResponsable
-            ? AppRoutes.employerDashboard
-            : AppRoutes.employeeDashboard;
-      }
-
-      // Résident — confiné à /resident/*
-      if (employee != null &&
-          employee.isResident &&
-          !location.startsWith(AppRoutes.residentDashboard)) {
-        return AppRoutes.residentDashboard;
-      }
-
-      // Préposée sur route responsable → rediriger
-      if (employee != null &&
-          employee.isPreposee &&
-          location.startsWith('/employeur')) {
-        return AppRoutes.employeeDashboard;
-      }
-
-      return null;
-    },
+    redirect: (context, state) => redirectionSelonAcces(
+      employee: ref.read(authNotifierProvider).employee,
+      location: state.matchedLocation,
+    ),
 
     errorBuilder: (context, state) => const _ErrorScreen(),
 

@@ -2,6 +2,13 @@ import 'package:equatable/equatable.dart';
 
 enum RoleType { employe, superviseurMenage, direction, reception, admin, resident }
 
+/// Profil d'accès : ce qu'un rôle a le droit de faire dans l'application.
+///
+/// Déduit du rôle par un `switch` EXHAUSTIF ([RoleTypeExtension.profil]) :
+/// ajouter un rôle sans décider de son profil est une erreur de compilation,
+/// jamais un repli silencieux vers un autre profil.
+enum ProfilAcces { preposee, responsable, reception, resident }
+
 extension RoleTypeExtension on RoleType {
   String get label {
     switch (this) {
@@ -20,8 +27,25 @@ extension RoleTypeExtension on RoleType {
     }
   }
 
-  bool get isResponsable =>
-      this != RoleType.employe && this != RoleType.resident;
+  /// Profil d'accès du rôle.
+  ///
+  /// Admin, Direction et SuperviseurMenage restent dans « responsable » : leur
+  /// fusion en un seul rôle est un chantier séparé. La Réception a son propre
+  /// profil et n'hérite d'AUCUN droit du responsable.
+  ProfilAcces get profil => switch (this) {
+        RoleType.employe => ProfilAcces.preposee,
+        RoleType.superviseurMenage ||
+        RoleType.direction ||
+        RoleType.admin =>
+          ProfilAcces.responsable,
+        RoleType.reception => ProfilAcces.reception,
+        RoleType.resident => ProfilAcces.resident,
+      };
+
+  /// Vrai pour les seuls profils « responsable » (Réception exclue).
+  bool get isResponsable => profil == ProfilAcces.responsable;
+
+  bool get isReception => profil == ProfilAcces.reception;
 
   static RoleType fromString(String value) {
     switch (value) {
@@ -72,6 +96,10 @@ class Employee extends Equatable {
   bool get isPreposee => role == RoleType.employe;
 
   bool get isResponsable => role.isResponsable;
+
+  bool get isReception => role.isReception;
+
+  ProfilAcces get profil => role.profil;
 
   bool get isResident => role == RoleType.resident;
 

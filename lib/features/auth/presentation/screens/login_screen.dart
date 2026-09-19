@@ -1126,17 +1126,25 @@ Future<void> _handlePinLogic(
     final employee = ref.read(authNotifierProvider).employee;
     if (employee == null) return;
 
-    switch (employee.role) {
-      case RoleType.employe:
+    switch (employee.profil) {
+      case ProfilAcces.preposee:
         context.go(AppRoutes.employeeDashboard);
         break;
-      case RoleType.superviseurMenage:
-      case RoleType.admin:
-      case RoleType.direction:
-      case RoleType.reception:
+      case ProfilAcces.responsable:
         context.go(AppRoutes.employerDashboard);
         break;
-      case RoleType.resident:
+      case ProfilAcces.reception:
+        // Aucune destination n'existe encore pour la Réception, et elle
+        // n'hérite d'aucun droit du responsable : la session est refermée.
+        await notifier.logout();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('L\'accès Réception n\'est pas encore disponible.'),
+          ),
+        );
+        break;
+      case ProfilAcces.resident:
         context.go(AppRoutes.residentDashboard);
         break;
     }

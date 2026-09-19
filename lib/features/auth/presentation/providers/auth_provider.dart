@@ -60,6 +60,8 @@ class AuthState {
 
   bool get isResponsable => employee?.isResponsable ?? false;
 
+  bool get isReception => employee?.isReception ?? false;
+
   bool get isAdmin => employee?.role == RoleType.admin;
 
   AuthState copyWith({
@@ -196,6 +198,14 @@ final isPreposeeProvider = Provider<bool>((ref) {
 
 final isResponsableProvider = Provider<bool>((ref) {
   return ref.watch(authNotifierProvider).isResponsable;
+});
+
+final isReceptionProvider = Provider<bool>((ref) {
+  return ref.watch(authNotifierProvider).isReception;
+});
+
+final profilAccesProvider = Provider<ProfilAcces?>((ref) {
+  return ref.watch(authNotifierProvider).employee?.profil;
 });
 
 final roleActuelProvider = Provider<RoleType?>((ref) {
