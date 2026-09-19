@@ -1,0 +1,44 @@
+-- ============================================================================
+-- Retrait du droit d'exécution public sur reset_aire_commune_semaine()
+-- ============================================================================
+-- RISQUE
+--   reset_aire_commune_semaine() était exécutable par PUBLIC, anon et
+--   authenticated, donc appelable en RPC (/rest/v1/rpc/...) avec la clé
+--   publique embarquée dans l'application web. Elle est SECURITY INVOKER et
+--   anon dispose de tous les droits sur les tables (RLS non activée) : un appel
+--   externe s'exécutait réellement.
+--   Elle n'est PAS idempotente : à chaque appel elle remet à « AFaire » toutes
+--   les zones d'aires communes de la semaine en cours (effaçant les
+--   confirmations déjà faites) et ajoute une ligne « reset automatique » dans
+--   resets_aire_commune. Quiconque connaissait son nom pouvait donc effacer le
+--   travail confirmé de la semaine et polluer l'historique.
+--
+-- CONTEXTE
+--   * Aucun appelant : ni Dart, ni autre fonction SQL, ni vue, ni trigger, ni
+--     pg_cron.
+--   * Elle est remplacée fonctionnellement par reset_aires_communes_auto()
+--     (planifiée par pg_cron, idempotente, non exposée à anon / authenticated)
+--     et par generer_zones_aires_communes() pour la création des zones.
+--     reset_aires_communes_auto() ne dépend pas de la fonction retirée.
+--
+-- CORRECTIF
+--   Retrait de EXECUTE à PUBLIC, anon et authenticated. Le droit par défaut de
+--   PUBLIC doit être retiré explicitement : anon en hérite, révoquer seulement
+--   anon et authenticated ne suffirait pas. postgres (propriétaire) et
+--   service_role conservent le droit : un appel manuel reste possible, depuis
+--   l'éditeur SQL ou une clé service_role, pour une reprise exceptionnelle.
+--
+-- La fonction n'est ni supprimée ni modifiée : seuls les droits changent.
+-- Aucune donnée n'est touchée.
+--
+-- LIMITE À CONNAÎTRE
+--   Tant que la RLS n'est pas activée (report volontaire), anon peut toujours
+--   modifier taches_aire_commune directement via l'API de tables ; ce
+--   correctif ferme le chemin par la fonction, pas ce chemin-là.
+--
+-- POUR ANNULER : GRANT EXECUTE ON FUNCTION public.reset_aire_commune_semaine()
+--   TO PUBLIC, anon, authenticated;  (déconseillé)
+-- ============================================================================
+
+REVOKE EXECUTE ON FUNCTION public.reset_aire_commune_semaine()
+  FROM PUBLIC, anon, authenticated;
