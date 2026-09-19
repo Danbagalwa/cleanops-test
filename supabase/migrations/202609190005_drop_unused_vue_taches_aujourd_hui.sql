@@ -1,0 +1,37 @@
+-- ============================================================================
+-- Suppression de la vue inutilisée vue_taches_aujourd_hui
+-- ============================================================================
+-- POURQUOI
+--   * Aucun appelant : ni Dart (code actuel et archive de juin), ni fonction
+--     SQL, ni vue, ni cron, ni trigger.
+--   * Son filtre était date_trunc('week', CURRENT_DATE), soit le LUNDI de la
+--     semaine, alors que taches_jour.semaine_reelle contient la date de chaque
+--     jour : la vue ne renvoyait que les tâches du lundi, toute la semaine.
+--   * Elle n'était définie dans aucune migration du dépôt (créée à la main).
+--
+-- SÉCURITÉ
+--   DROP VIEW sans CASCADE : la migration échoue si un objet en dépend, plutôt
+--   que de le supprimer en silence. Aucune donnée n'est touchée (une vue ne
+--   stocke rien).
+--
+-- NON CONCERNÉS (décision séparée) : get_semaine_courante() et
+-- reset_aire_commune_semaine(), également inutilisées.
+--
+-- POUR RECRÉER LA VUE (définition d'origine, avec son défaut de logique) :
+--   CREATE VIEW public.vue_taches_aujourd_hui AS
+--   SELECT tj.id, tj.planning_template_id, tj.employee_id, tj.appartement_id,
+--     tj.numero_semaine, tj.semaine_reelle, tj.jour, tj.numero_tache,
+--     tj.minutes_finales, tj.statut, tj."confirmé_par", tj."confirmé_le",
+--     tj.is_transfert_temp, tj.is_ajoutee, tj.date_creation,
+--     tj.date_mise_a_jour, e.prenom AS employee_prenom, e.slug AS employee_slug,
+--     a.numero AS apt_numero, a.taille AS apt_taille, a.acces AS apt_acces,
+--     a.notes AS apt_notes, a.has_animal AS apt_has_animal,
+--     a.type_animal AS apt_type_animal, a.type AS apt_type
+--   FROM taches_jour tj
+--     JOIN employees e ON e.id = tj.employee_id
+--     JOIN appartements a ON a.id = tj.appartement_id
+--   WHERE tj.semaine_reelle = date_trunc('week', CURRENT_DATE::timestamptz);
+--   (droits d'origine : postgres, anon, authenticated, service_role)
+-- ============================================================================
+
+DROP VIEW IF EXISTS public.vue_taches_aujourd_hui;
