@@ -1,0 +1,33 @@
+-- ============================================================================
+-- Désactivation TEMPORAIRE de la RLS sur historique_actions
+-- ============================================================================
+-- DÉCISION : demandée par le responsable du projet « pour le moment », dans
+-- l'attente du chantier RLS global (reporté à la fin du développement).
+--
+-- PROBLÈME
+--   historique_actions avait la RLS activée SANS AUCUNE politique : tout accès
+--   par anon / authenticated était refusé, écritures comprises. L'application
+--   (absences_screen : libération, annulation, transfert de tâches) écrit dans
+--   cette table avec la clé publique ; l'échec était avalé par un catch vide.
+--   Résultat : la table est restée vide (0 ligne) depuis le début, et
+--   l'historique / l'annulation d'actions n'a jamais fonctionné.
+--   (Le défaut d'enum 'Tache' qui bloquait aussi ces écritures est corrigé
+--   côté Dart dans un commit séparé.)
+--
+-- CORRECTIF
+--   ALTER TABLE ... DISABLE ROW LEVEL SECURITY : l'application peut de nouveau
+--   écrire dans l'historique.
+--
+-- ⚠ CONSÉQUENCE DE SÉCURITÉ
+--   La table devient lisible, modifiable et supprimable par n'importe qui
+--   possédant la clé publique, comme les 22 autres tables du projet. C'est un
+--   journal d'audit : son intégrité n'est plus garantie tant que la RLS
+--   globale n'est pas en place. Le linter Supabase la signalera comme les
+--   autres (« RLS Disabled in Public »).
+--
+-- POUR REVENIR EN ARRIÈRE (à faire dans le chantier RLS, avec de vraies
+-- politiques, sinon les écritures de l'application sont de nouveau bloquées) :
+--   ALTER TABLE public.historique_actions ENABLE ROW LEVEL SECURITY;
+-- ============================================================================
+
+ALTER TABLE public.historique_actions DISABLE ROW LEVEL SECURITY;
