@@ -44,33 +44,86 @@ void main() {
     'chemin inconnu profond': '/a/b/c',
   };
 
-  group('Réception : accès fermé par défaut', () {
+  group('Réception : une seule destination, tout le reste est refusé', () {
     final reception = _avec(RoleType.reception);
 
-    for (final entree in routes.entries) {
-      test('${entree.key} (${entree.value}) est refusée', () {
+    for (final entree in {
+      ...routes,
+      'connexion': AppRoutes.login,
+    }.entries) {
+      test('${entree.key} (${entree.value}) renvoie vers l\'écran Réception',
+          () {
         expect(
           redirectionSelonAcces(employee: reception, location: entree.value),
-          AppRoutes.login,
+          AppRoutes.reception,
         );
       });
     }
 
-    test('seule la page de connexion n\'est pas redirigée', () {
+    test('l\'écran Réception lui-même est accessible', () {
       expect(
-        redirectionSelonAcces(employee: reception, location: AppRoutes.login),
+        redirectionSelonAcces(
+            employee: reception, location: AppRoutes.reception),
         isNull,
       );
     });
 
     test('n\'est jamais aiguillée vers un écran du responsable ni de la préposée',
         () {
-      for (final chemin in [AppRoutes.splash, AppRoutes.login]) {
+      for (final chemin in [
+        AppRoutes.splash,
+        AppRoutes.login,
+        '/employeur',
+        '/dashboard',
+        '/planning',
+      ]) {
         final cible =
             redirectionSelonAcces(employee: reception, location: chemin);
+        expect(cible, AppRoutes.reception, reason: chemin);
         expect(cible, isNot(AppRoutes.employerDashboard));
         expect(cible, isNot(AppRoutes.employeeDashboard));
       }
+    });
+  });
+
+  group('L\'écran Réception est réservé à la Réception', () {
+    const reception = AppRoutes.reception;
+
+    test('les responsables sont renvoyés vers leur tableau de bord', () {
+      for (final role in [
+        RoleType.admin,
+        RoleType.direction,
+        RoleType.superviseurMenage,
+      ]) {
+        expect(
+          redirectionSelonAcces(employee: _avec(role), location: reception),
+          AppRoutes.employerDashboard,
+          reason: '$role',
+        );
+      }
+    });
+
+    test('la préposée est renvoyée vers son tableau de bord', () {
+      expect(
+        redirectionSelonAcces(
+            employee: _avec(RoleType.employe), location: reception),
+        AppRoutes.employeeDashboard,
+      );
+    });
+
+    test('le résident est renvoyé vers son espace', () {
+      expect(
+        redirectionSelonAcces(
+            employee: _avec(RoleType.resident), location: reception),
+        AppRoutes.residentDashboard,
+      );
+    });
+
+    test('un visiteur non connecté est renvoyé vers la connexion', () {
+      expect(
+        redirectionSelonAcces(employee: null, location: reception),
+        AppRoutes.login,
+      );
     });
   });
 

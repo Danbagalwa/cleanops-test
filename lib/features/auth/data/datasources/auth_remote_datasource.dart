@@ -78,6 +78,8 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
     try {
       if (role == 'resident') {
         return await _loginResident(numeroApt: slug, pin: pin);
+      } else if (role == 'reception') {
+        return await _loginReception(slug: slug, pin: pin);
       } else {
         return await _loginEmployee(slug: slug, pin: pin, role: role);
       }
@@ -100,6 +102,31 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
         'p_slug': slug,
         'p_credential': pin,
         'p_is_responsable': role == 'responsable',
+      },
+    );
+
+    if (response == null) {
+      throw const AuthException('Identifiant ou code incorrect');
+    }
+
+    final employee = EmployeeModel.fromJson(response as Map<String, dynamic>);
+    await _sauvegarderSession(id: employee.id, slug: employee.slug);
+
+    return employee;
+  }
+
+  // ── Login Réception ───────────────────────────────────
+  // Fonction serveur dédiée : la Réception n'est plus acceptée par le
+  // parcours « responsable » de authenticate_employee.
+  Future<EmployeeModel> _loginReception({
+    required String slug,
+    required String pin,
+  }) async {
+    final response = await SupabaseService.client.rpc(
+      'authenticate_reception',
+      params: {
+        'p_slug': slug,
+        'p_credential': pin,
       },
     );
 

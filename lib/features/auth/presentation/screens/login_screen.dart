@@ -669,6 +669,15 @@ class _NiveauDeux extends StatelessWidget {
             sublabel: 'Identifiant + mot de passe (8 chiffres)',
             onTap: () => onRoleChange('responsable'),
           ),
+          const SizedBox(height: AppSizes.sm),
+          _RoleCard(
+            icon: Icons.support_agent_rounded,
+            iconColor: const Color(0xFF00695C),
+            iconBg: const Color(0xFFE0F2F1),
+            label: 'Réception',
+            sublabel: 'Identifiant + mot de passe (8 chiffres)',
+            onTap: () => onRoleChange('reception'),
+          ),
         ],
 
         // Formulaire selon rôle sélectionné
@@ -690,6 +699,18 @@ class _NiveauDeux extends StatelessWidget {
 
         if (roleSelecte == 'responsable')
           _FormResponsable(
+            isLoading: isLoading,
+            error: error,
+            onPinComplete: onPinComplete,
+            onBack: () => onRoleChange(null),
+          ),
+
+        // Réception : même saisie (identifiant + mot de passe), mais vérifiée
+        // par sa propre fonction serveur (authenticate_reception).
+        if (roleSelecte == 'reception')
+          _FormResponsable(
+            titre: 'Réception',
+            exemple: 'Ex : reception-jt',
             isLoading: isLoading,
             error: error,
             onPinComplete: onPinComplete,
@@ -953,12 +974,16 @@ class _FormResidentState extends State<_FormResident> {
 }
 
 class _FormResponsable extends StatefulWidget {
+  final String titre;
+  final String exemple;
   final bool isLoading;
   final String? error;
   final SlugPinCallback onPinComplete;
   final VoidCallback onBack;
 
   const _FormResponsable({
+    this.titre = 'Responsable',
+    this.exemple = 'Ex : responsable-jt',
     required this.isLoading,
     this.error,
     required this.onPinComplete,
@@ -983,7 +1008,7 @@ class _FormResponsableState extends State<_FormResponsable> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _RetourRole(label: 'Responsable', onBack: widget.onBack),
+        _RetourRole(label: widget.titre, onBack: widget.onBack),
         const SizedBox(height: AppSizes.lg),
 
         TextField(
@@ -991,7 +1016,7 @@ class _FormResponsableState extends State<_FormResponsable> {
           textInputAction: TextInputAction.next,
           decoration: _fieldDeco(
             label: 'Votre identifiant',
-            hint: 'Ex : responsable-jt',
+            hint: widget.exemple,
             icon: Icons.manage_accounts_outlined,
           ),
         ),
@@ -1134,15 +1159,7 @@ Future<void> _handlePinLogic(
         context.go(AppRoutes.employerDashboard);
         break;
       case ProfilAcces.reception:
-        // Aucune destination n'existe encore pour la Réception, et elle
-        // n'hérite d'aucun droit du responsable : la session est refermée.
-        await notifier.logout();
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('L\'accès Réception n\'est pas encore disponible.'),
-          ),
-        );
+        context.go(AppRoutes.reception);
         break;
       case ProfilAcces.resident:
         context.go(AppRoutes.residentDashboard);

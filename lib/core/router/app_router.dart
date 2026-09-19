@@ -26,6 +26,7 @@ import '../../features/resident_espace/presentation/screens/resident_demandes_sc
 import '../../features/resident_espace/presentation/screens/resident_profil_screen.dart';
 import '../../features/resident_espace/presentation/screens/demandes_residents_responsable_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/reception/presentation/screens/reception_en_construction_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/demandes_equipe_responsable_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/mes_demandes_equipe_screen.dart';
@@ -68,6 +69,8 @@ class AppRoutes {
   static const String tachesDisponibles = '/taches-disponibles';
   static const String progressionJour = '/progression-jour';
 
+  static const String reception = '/reception';
+
   static const String residentDashboard = '/resident';
   static const String residentDemandes = '/resident/demandes';
   static const String residentProfil = '/resident/profil';
@@ -108,6 +111,7 @@ const _routesProtegees = [
   '/profil',
   '/notifications',
   '/resident',
+  '/reception',
 ];
 
 // ── Redirection selon le profil d'accès ───────────────────
@@ -131,30 +135,37 @@ String? redirectionSelonAcces({
   }
 
   return switch (employee.profil) {
-    // Réception : ACCÈS FERMÉ PAR DÉFAUT. Aucun écran Réception n'existe
-    // encore et elle n'hérite d'aucun droit du responsable : toute page autre
-    // que la connexion est refusée, sans exception (routes protégées,
-    // inconnues ou sous-routes). La destination de la Réception est une
-    // décision en attente.
-    ProfilAcces.reception => isOnLogin ? null : AppRoutes.login,
+    // Réception : ACCÈS FERMÉ PAR DÉFAUT. Elle n'a qu'UNE destination, l'écran
+    // « vue Réception en construction » (option A) : toute autre page lui est
+    // refusée, sans exception (routes protégées, inconnues, sous-routes, et
+    // aussi la connexion et le démarrage une fois connectée). Elle n'hérite
+    // d'aucun droit du responsable.
+    ProfilAcces.reception =>
+      location == AppRoutes.reception ? null : AppRoutes.reception,
 
-    // Résident — confiné à /resident/*
+    // Résident — confiné à /resident/* (donc jamais /reception)
     ProfilAcces.resident => isOnSplash || isOnLogin
         ? AppRoutes.residentDashboard
         : (location.startsWith(AppRoutes.residentDashboard)
             ? null
             : AppRoutes.residentDashboard),
 
-    // Responsable — tableau de bord à la connexion, accès aux routes
-    ProfilAcces.responsable =>
-      isOnSplash || isOnLogin ? AppRoutes.employerDashboard : null,
+    // Responsable — tableau de bord à la connexion, accès aux routes, sauf
+    // l'écran réservé à la Réception
+    ProfilAcces.responsable => isOnSplash ||
+            isOnLogin ||
+            location.startsWith(AppRoutes.reception)
+        ? AppRoutes.employerDashboard
+        : null,
 
     // Préposée — tableau de bord à la connexion, jamais la route responsable
-    ProfilAcces.preposee => isOnSplash || isOnLogin
+    // ni l'écran réservé à la Réception
+    ProfilAcces.preposee => isOnSplash ||
+            isOnLogin ||
+            location.startsWith('/employeur') ||
+            location.startsWith(AppRoutes.reception)
         ? AppRoutes.employeeDashboard
-        : (location.startsWith('/employeur')
-            ? AppRoutes.employeeDashboard
-            : null),
+        : null,
   };
 }
 
@@ -181,6 +192,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // ── Login ──────────────────────────────────────────
       GoRoute(path: '/', builder: (context, state) => const LoginScreen()),
+
+      // ── Réception (destination temporaire, hors menu) ───
+      // Volontairement HORS du ShellRoute : aucun menu, aucune navigation vers
+      // les écrans du responsable ou de la préposée.
+      GoRoute(
+        path: AppRoutes.reception,
+        builder: (context, state) => const ReceptionEnConstructionScreen(),
+      ),
 
       // ── Shell — routes protégées ────────────────────────
       ShellRoute(

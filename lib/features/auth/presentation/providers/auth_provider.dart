@@ -124,7 +124,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> login({
     required String slug,
     required String pin,
-    String? role, // 'preposee', 'resident', 'responsable'
+    String? role, // 'preposee', 'resident', 'responsable', 'reception'
   }) async {
     if (!state.niveauUnValide) {
       state = state.copyWith(

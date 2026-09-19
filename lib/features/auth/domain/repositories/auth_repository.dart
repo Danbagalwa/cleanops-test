@@ -13,7 +13,7 @@ abstract class AuthRepository {
   Future<Either<Failure, Employee>> loginWithPin({
     required String slug,
     required String pin,
-    String? role, // 'preposee', 'resident', 'responsable'
+    String? role, // 'preposee', 'resident', 'responsable', 'reception'
   });
 
   // Récupérer l'employé en session

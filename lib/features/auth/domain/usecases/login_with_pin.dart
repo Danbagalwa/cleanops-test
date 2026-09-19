@@ -20,7 +20,7 @@ class LoginWithPin {
 class LoginParams extends Equatable {
   final String slug;
   final String pin;
-  final String? role; // 'preposee', 'resident', 'responsable'
+  final String? role; // 'preposee', 'resident', 'responsable', 'reception'
 
   const LoginParams({required this.slug, required this.pin, this.role});
 

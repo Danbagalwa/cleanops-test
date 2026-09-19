@@ -28,15 +28,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted) return;
 
     if (employee != null) {
-      // Réception : aucune destination n'existe encore et elle n'hérite
-      // d'aucun droit du responsable. Session refermée, retour à la connexion.
-      if (employee.isReception) {
-        await ref.read(authNotifierProvider.notifier).logout();
-        if (!mounted) return;
-        context.go(AppRoutes.login);
-        return;
-      }
-
       ref.read(authNotifierProvider.notifier).setEmployee(employee);
 
       switch (employee.profil) {
@@ -47,7 +38,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           context.go(AppRoutes.employerDashboard);
           break;
         case ProfilAcces.reception:
-          // Déjà traité ci-dessus.
+          context.go(AppRoutes.reception);
           break;
         case ProfilAcces.resident:
           context.go(AppRoutes.residentDashboard);
