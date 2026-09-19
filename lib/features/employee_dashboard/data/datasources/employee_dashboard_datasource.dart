@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/services/generation_service.dart';
@@ -11,6 +12,15 @@ abstract class EmployeeDashboardDatasource {
 
 class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
   const EmployeeDashboardDatasourceImpl();
+
+  /// Retire les tâches dont l'identifiant figure dans [liberees] (tâches
+  /// libérées à l'équipe, pas encore prises).
+  @visibleForTesting
+  static List<Map<String, dynamic>> sansTachesLiberees(
+    List<Map<String, dynamic>> taches,
+    Set<String> liberees,
+  ) =>
+      taches.where((t) => !liberees.contains(t['id'])).toList();
 
   @override
   Future<SemaineModel> getSemaineCourante({
@@ -44,6 +54,25 @@ class EmployeeDashboardDatasourceImpl implements EmployeeDashboardDatasource {
               .gte('semaine_reelle', lundiStr)
               .lte('semaine_reelle', vendrediStr)
               .order('numero_tache'),
+        );
+      }
+
+      // Une tâche libérée à l'équipe (pool, statut Disponible) n'est plus celle
+      // de la préposée : elle n'est pas comptée, comme dans « Ma Journée » et
+      // dans les rappels. Filtré APRÈS le filet de sécurité ci-dessus : une
+      // semaine dont toutes les tâches sont libérées n'est pas une semaine vide.
+      if (taches.isNotEmpty) {
+        final pool = await SupabaseService.table(
+                SupabaseService.tachesDisponibles)
+            .select('tache_jour_id')
+            .eq('statut', 'Disponible')
+            .inFilter(
+              'tache_jour_id',
+              taches.map((t) => t['id'] as String).toList(),
+            );
+        taches = sansTachesLiberees(
+          taches,
+          (pool as List).map((r) => r['tache_jour_id'] as String).toSet(),
         );
       }
 
