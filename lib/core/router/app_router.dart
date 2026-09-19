@@ -26,7 +26,9 @@ import '../../features/resident_espace/presentation/screens/resident_demandes_sc
 import '../../features/resident_espace/presentation/screens/resident_profil_screen.dart';
 import '../../features/resident_espace/presentation/screens/demandes_residents_responsable_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
-import '../../features/reception/presentation/screens/reception_en_construction_screen.dart';
+import '../../features/reception/presentation/reception_sections.dart';
+import '../../features/reception/presentation/screens/reception_dashboard_screen.dart';
+import '../../features/reception/presentation/screens/reception_section_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/demandes_equipe_responsable_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/mes_demandes_equipe_screen.dart';
@@ -135,13 +137,13 @@ String? redirectionSelonAcces({
   }
 
   return switch (employee.profil) {
-    // Réception : ACCÈS FERMÉ PAR DÉFAUT. Elle n'a qu'UNE destination, l'écran
-    // « vue Réception en construction » (option A) : toute autre page lui est
+    // Réception : ACCÈS FERMÉ PAR DÉFAUT. Elle n'accède qu'à son écran d'accueil
+    // et à ses 5 sections (`estRouteReception`) : toute autre page lui est
     // refusée, sans exception (routes protégées, inconnues, sous-routes, et
     // aussi la connexion et le démarrage une fois connectée). Elle n'hérite
     // d'aucun droit du responsable.
     ProfilAcces.reception =>
-      location == AppRoutes.reception ? null : AppRoutes.reception,
+      estRouteReception(location) ? null : AppRoutes.reception,
 
     // Résident — confiné à /resident/* (donc jamais /reception)
     ProfilAcces.resident => isOnSplash || isOnLogin
@@ -192,14 +194,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // ── Login ──────────────────────────────────────────
       GoRoute(path: '/', builder: (context, state) => const LoginScreen()),
-
-      // ── Réception (destination temporaire, hors menu) ───
-      // Volontairement HORS du ShellRoute : aucun menu, aucune navigation vers
-      // les écrans du responsable ou de la préposée.
-      GoRoute(
-        path: AppRoutes.reception,
-        builder: (context, state) => const ReceptionEnConstructionScreen(),
-      ),
 
       // ── Shell — routes protégées ────────────────────────
       ShellRoute(
@@ -357,6 +351,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/mes-demandes-equipe',
             builder: (context, state) => const MesDemandesEquipeScreen(),
           ),
+
+          // ── Réception : accueil + 5 sections ────────────
+          // Routes À PLAT (pas imbriquées) : aucune pile parasite. Le routeur
+          // n'y laisse entrer que la Réception (voir redirectionSelonAcces).
+          GoRoute(
+            path: receptionAccueilRoute,
+            builder: (context, state) => const ReceptionDashboardScreen(),
+          ),
+          for (final section in receptionSections)
+            GoRoute(
+              path: section.route,
+              builder: (context, state) =>
+                  ReceptionSectionScreen(section: section),
+            ),
 
           // ── Espace résident ─────────────────────────────
           GoRoute(

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cleanops/core/router/app_router.dart';
 import 'package:cleanops/features/auth/domain/entities/employee.dart';
+import 'package:cleanops/features/reception/presentation/reception_sections.dart';
 
 Employee _avec(RoleType role) => Employee(
       id: 'id',
@@ -60,12 +61,43 @@ void main() {
       });
     }
 
-    test('l\'écran Réception lui-même est accessible', () {
+    test('son accueil est accessible', () {
       expect(
         redirectionSelonAcces(
             employee: reception, location: AppRoutes.reception),
         isNull,
       );
+    });
+
+    for (final section in receptionSections) {
+      test('la section ${section.titre} (${section.route}) est accessible',
+          () {
+        expect(
+          redirectionSelonAcces(employee: reception, location: section.route),
+          isNull,
+        );
+      });
+    }
+
+    test('des chemins qui ressemblent à /reception ne sont PAS accessibles',
+        () {
+      for (final piege in [
+        '/receptionniste',
+        '/reception-x',
+        '/reception2',
+        '/receptio',
+      ]) {
+        expect(
+          redirectionSelonAcces(employee: reception, location: piege),
+          AppRoutes.reception,
+          reason: piege,
+        );
+      }
+    });
+
+    test('la route d\'accueil du routeur et celle des sections coïncident',
+        () {
+      expect(AppRoutes.reception, receptionAccueilRoute);
     });
 
     test('n\'est jamais aiguillée vers un écran du responsable ni de la préposée',

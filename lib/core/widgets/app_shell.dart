@@ -5,6 +5,7 @@ import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
 import '../../features/auth/domain/entities/employee.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/resident_espace/presentation/providers/resident_espace_provider.dart';
 
 // ── Dimensions sidebar ────────────────────────────────────
@@ -264,6 +265,34 @@ const List<_NavGroup> _residentGroups = [
 ];
 
 // ─────────────────────────────────────────────────────────
+// Réception — tableau de bord + les 5 sections de sa vue
+// ─────────────────────────────────────────────────────────
+
+const _NavItem _receptionDashboard = _NavItem(
+  icon: Icons.dashboard_outlined,
+  activeIcon: Icons.dashboard_rounded,
+  label: 'Tableau de bord',
+  shortLabel: 'Accueil',
+  route: receptionAccueilRoute,
+);
+
+// Construits depuis `receptionSections` (source unique des libellés et des
+// routes, partagée avec le tableau de bord et le routeur).
+final List<_NavGroup> _receptionGroups = [
+  _NavGroup(items: [
+    for (final s in receptionSections)
+      _NavItem(
+        icon: s.icon,
+        activeIcon: s.iconActive,
+        label: s.titre,
+        shortLabel: s.libelleCourt,
+        route: s.route,
+        mobilePrimary: true,
+      ),
+  ]),
+];
+
+// ─────────────────────────────────────────────────────────
 // Helpers — dérivation des items mobiles
 // ─────────────────────────────────────────────────────────
 
@@ -287,7 +316,8 @@ List<_NavGroup> _mobileOverflowGroups(List<_NavGroup> groups) => groups
 // ─────────────────────────────────────────────────────────
 
 /// Écran de refus affiché à la place de toute page pour un profil sans accès
-/// (Réception, tant que sa destination n'existe pas). Ne montre aucune donnée.
+/// (la Réception hors de son écran d'accueil et de ses 5 sections). Ne montre
+/// aucune donnée.
 class _AccesNonDisponible extends StatelessWidget {
   const _AccesNonDisponible();
 
@@ -370,10 +400,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     final employee = ref.watch(employeeCourantProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
-    // Réception : aucun écran n'existe encore et elle n'hérite d'aucun droit.
-    // On n'affiche JAMAIS la page demandée (`widget.child`) : ceinture de
+    // Réception : elle n'a accès qu'à son écran d'accueil et à ses 5 sections.
+    // Toute autre page n'est JAMAIS affichée (`widget.child`) : ceinture de
     // sécurité en plus du routeur.
-    if (employee?.isReception == true) {
+    if (employee?.isReception == true && !estRouteReception(widget.location)) {
       return const _AccesNonDisponible();
     }
 
@@ -389,7 +419,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         dashboard = _responsableDashboard;
         groups = _responsableGroups;
       case ProfilAcces.reception:
-        return const _AccesNonDisponible();
+        dashboard = _receptionDashboard;
+        groups = _receptionGroups;
       case ProfilAcces.preposee:
       case null:
         dashboard = _preposeeDashboard;
