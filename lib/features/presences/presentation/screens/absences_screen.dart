@@ -100,7 +100,7 @@ Future<void> _notifierEmployes({
               'type': type,
               'message': message,
               'entity_id': entityId,
-              'entity_type': 'Tache',
+              'entity_type': 'TacheJour',
             })
         .toList();
     await SupabaseService.table(SupabaseService.notifications).insert(rows);
@@ -120,7 +120,7 @@ Future<void> _insererHistorique({
     await SupabaseService.table(SupabaseService.historiqueActions).insert({
       'type': type,
       'entity_id': entityId,
-      'entity_type': 'Tache',
+      'entity_type': 'TacheJour',
       'employeur_id': employeurId,
       'note': note,
       'can_undo': canUndo,
