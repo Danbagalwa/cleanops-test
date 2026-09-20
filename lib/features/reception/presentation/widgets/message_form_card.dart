@@ -12,7 +12,10 @@ import '../providers/reception_residents_provider.dart';
 class MessageFormCard extends ConsumerStatefulWidget {
   final FicheAppartement fiche;
 
-  const MessageFormCard({super.key, required this.fiche});
+  /// Appelé après un envoi réussi (par exemple pour fermer la fenêtre).
+  final VoidCallback? onEnvoye;
+
+  const MessageFormCard({super.key, required this.fiche, this.onEnvoye});
 
   @override
   ConsumerState<MessageFormCard> createState() => _MessageFormCardState();
@@ -62,6 +65,7 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Message transmis à l\'administration.')),
       );
+      widget.onEnvoye?.call();
     } on ReceptionErreur catch (e) {
       if (!mounted) return;
       setState(() {

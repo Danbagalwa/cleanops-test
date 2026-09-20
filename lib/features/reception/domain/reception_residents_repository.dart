@@ -17,7 +17,8 @@ class ReceptionErreur implements Exception {
 /// des champs autorisés. Cette interface n'expose aucun accès direct aux
 /// tâches, donc aucun moyen d'atteindre le motif d'un non-réalisé.
 abstract class ReceptionResidentsRepository {
-  Future<List<AppartementResultat>> rechercher(String recherche);
+  /// Tous les résidents actifs avec leur appartement (une ligne par résident).
+  Future<List<ResidentLigne>> residents();
 
   /// `null` si l'appartement n'existe pas.
   Future<FicheAppartement?> fiche(String appartementId);

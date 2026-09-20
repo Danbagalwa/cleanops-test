@@ -31,22 +31,30 @@ class _EnvoiRecu {
 }
 
 class _DepotSimule implements ReceptionResidentsRepository {
-  final List<AppartementResultat> resultats;
+  final List<ResidentLigne> lignes;
   FicheAppartement? ficheRenvoyee;
   Object? erreurEnvoi;
-  final recherches = <String>[];
+  Object? erreurListe;
+  Object? erreurFiche;
+  int chargementsListe = 0;
+  final fichesDemandees = <String>[];
   final envois = <_EnvoiRecu>[];
 
-  _DepotSimule({this.resultats = const [], this.ficheRenvoyee});
+  _DepotSimule({this.lignes = const [], this.ficheRenvoyee});
 
   @override
-  Future<List<AppartementResultat>> rechercher(String recherche) async {
-    recherches.add(recherche);
-    return resultats;
+  Future<List<ResidentLigne>> residents() async {
+    chargementsListe++;
+    if (erreurListe != null) throw erreurListe!;
+    return lignes;
   }
 
   @override
-  Future<FicheAppartement?> fiche(String appartementId) async => ficheRenvoyee;
+  Future<FicheAppartement?> fiche(String appartementId) async {
+    fichesDemandees.add(appartementId);
+    if (erreurFiche != null) throw erreurFiche!;
+    return ficheRenvoyee;
+  }
 
   @override
   Future<void> envoyerMessage({
@@ -97,9 +105,10 @@ Future<void> _afficher(
   WidgetTester tester,
   _DepotSimule depot, {
   String initiale = receptionResidentsRoute,
+  Size taille = const Size(1000, 1400),
 }) async {
   tester.view.devicePixelRatio = 1.0;
-  tester.view.physicalSize = const Size(1000, 1400);
+  tester.view.physicalSize = taille;
   addTearDown(tester.view.reset);
 
   final router = GoRouter(
@@ -130,72 +139,234 @@ Future<void> _afficher(
   await tester.pumpAndSettle();
 }
 
-Future<void> _taper(WidgetTester tester, Finder champ, String texte) async {
-  await tester.enterText(champ, texte);
-  await tester.pump(const Duration(milliseconds: 400));
-  await tester.pumpAndSettle();
-}
+ResidentLigne _ligne(String prenom, String nom, String numero,
+        {String? apt, int? etage = 1}) =>
+    ResidentLigne(
+      residentId: 'r-$numero-$prenom',
+      prenom: prenom,
+      nom: nom,
+      appartementId: apt ?? 'a$numero',
+      numero: numero,
+      etage: etage,
+    );
+
+final _troisResidents = [
+  _ligne('Jeanne', 'Tremblay', '101', apt: 'a1'),
+  _ligne('Paul', 'Gagnon', '202', etage: 2),
+  _ligne('Marie', 'Roy', '303', etage: null),
+];
 
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('fr_FR', null);
   });
 
-  group('Recherche', () {
-    testWidgets('invite à chercher, sans interroger le serveur', (tester) async {
-      final depot = _DepotSimule();
-      await _afficher(tester, depot);
-
-      expect(find.text('Recherchez un appartement pour consulter sa fiche.'),
-          findsOneWidget);
-      expect(depot.recherches, isEmpty);
-    });
-
-    testWidgets('affiche les résultats et ouvre la fiche au toucher',
+  group('Tableau des résidents', () {
+    testWidgets('s\'ouvre directement sur le tableau, sans rien chercher',
         (tester) async {
-      final depot = _DepotSimule(
-        resultats: const [
-          AppartementResultat(
-              id: 'a1', numero: '101', etage: 1, residents: ['Jeanne Tremblay']),
-        ],
-        ficheRenvoyee: _fiche(),
-      );
+      final depot = _DepotSimule(lignes: _troisResidents);
       await _afficher(tester, depot);
 
-      await _taper(tester, find.byType(TextField), '101');
-
-      expect(depot.recherches, ['101']);
-      expect(find.text('Appartement 101 · Étage 1'), findsOneWidget);
+      expect(depot.chargementsListe, 1);
+      for (final t in ['NOM', 'APPARTEMENT', 'ÉTAGE', 'ACTIONS']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
       expect(find.text('Jeanne Tremblay'), findsOneWidget);
-
-      await tester.tap(find.text('Appartement 101 · Étage 1'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Statut du jour'), findsOneWidget);
+      expect(find.text('Paul Gagnon'), findsOneWidget);
+      expect(find.text('Marie Roy'), findsOneWidget);
+      expect(find.text('Apt 101'), findsOneWidget);
+      expect(find.text('Étage 2'), findsOneWidget);
+      expect(find.text('Résidents  (3)'), findsOneWidget);
     });
 
-    testWidgets('aucun résultat', (tester) async {
+    testWidgets('un étage inconnu s\'affiche « — »', (tester) async {
+      await _afficher(tester, _DepotSimule(lignes: [_troisResidents[2]]));
+      expect(find.text('—'), findsOneWidget);
+    });
+
+    testWidgets('chaque ligne propose les trois actions', (tester) async {
+      await _afficher(tester, _DepotSimule(lignes: _troisResidents));
+
+      expect(find.byTooltip('Voir la fiche'), findsNWidgets(3));
+      expect(find.byTooltip('Imprimer le calendrier'), findsNWidgets(3));
+      expect(find.byTooltip('Envoyer un message'), findsNWidgets(3));
+    });
+
+    testWidgets('aucun résident actif', (tester) async {
       await _afficher(tester, _DepotSimule());
-      await _taper(tester, find.byType(TextField), 'zzz');
-
-      expect(find.text('Aucun appartement ne correspond à cette recherche.'),
-          findsOneWidget);
+      expect(find.text('Aucun résident'), findsOneWidget);
     });
 
-    testWidgets('n\'interroge le serveur qu\'après la pause de saisie',
+    testWidgets('une erreur de chargement propose de réessayer',
         (tester) async {
-      final depot = _DepotSimule();
+      final depot = _DepotSimule(lignes: _troisResidents)
+        ..erreurListe = const ReceptionErreur('Réseau indisponible.');
       await _afficher(tester, depot);
 
-      await tester.enterText(find.byType(TextField), '1');
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.enterText(find.byType(TextField), '10');
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(depot.recherches, isEmpty);
+      expect(find.text('Réessayer'), findsOneWidget);
+      expect(depot.chargementsListe, 1);
 
-      await tester.pump(const Duration(milliseconds: 400));
+      depot.erreurListe = null;
+      await tester.tap(find.text('Réessayer'));
       await tester.pumpAndSettle();
-      expect(depot.recherches, ['10']);
+
+      expect(depot.chargementsListe, 2);
+      expect(find.text('Jeanne Tremblay'), findsOneWidget);
+    });
+
+    group('recherche', () {
+      testWidgets('par nom ou prénom', (tester) async {
+        await _afficher(tester, _DepotSimule(lignes: _troisResidents));
+
+        await tester.enterText(find.byType(TextField), 'gagn');
+        await tester.pump();
+
+        expect(find.text('Paul Gagnon'), findsOneWidget);
+        expect(find.text('Jeanne Tremblay'), findsNothing);
+      });
+
+      testWidgets('par numéro d\'appartement', (tester) async {
+        await _afficher(tester, _DepotSimule(lignes: _troisResidents));
+
+        await tester.enterText(find.byType(TextField), '303');
+        await tester.pump();
+
+        expect(find.text('Marie Roy'), findsOneWidget);
+        expect(find.text('Paul Gagnon'), findsNothing);
+      });
+
+      testWidgets('aucun résultat, puis effacer', (tester) async {
+        await _afficher(tester, _DepotSimule(lignes: _troisResidents));
+
+        await tester.enterText(find.byType(TextField), 'zzz');
+        await tester.pump();
+        expect(find.text('Aucun résultat'), findsOneWidget);
+
+        await tester.tap(find.text('Effacer la recherche'));
+        await tester.pump();
+        expect(find.text('Jeanne Tremblay'), findsOneWidget);
+      });
+    });
+
+    group('pagination', () {
+      final douze = [
+        for (var i = 1; i <= 12; i++) _ligne('Prénom$i', 'Nom', '${100 + i}'),
+      ];
+
+      testWidgets('10 lignes par page', (tester) async {
+        await _afficher(tester, _DepotSimule(lignes: douze));
+
+        expect(find.text('Prénom1 Nom'), findsOneWidget);
+        expect(find.text('Prénom10 Nom'), findsOneWidget);
+        expect(find.text('Prénom11 Nom'), findsNothing);
+        expect(find.text('1–10 sur 12'), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Suivant'));
+        await tester.pump();
+
+        expect(find.text('Prénom11 Nom'), findsOneWidget);
+        expect(find.text('Prénom1 Nom'), findsNothing);
+        expect(find.text('11–12 sur 12'), findsOneWidget);
+      });
+
+      testWidgets('pas de pagination pour 10 résidents ou moins',
+          (tester) async {
+        await _afficher(tester, _DepotSimule(lignes: douze.take(10).toList()));
+        expect(find.byTooltip('Suivant'), findsNothing);
+      });
+    });
+
+    testWidgets('sur mobile : cartes avec les mêmes actions', (tester) async {
+      await _afficher(tester, _DepotSimule(lignes: _troisResidents),
+          taille: const Size(420, 900));
+
+      expect(find.text('NOM'), findsNothing);
+      expect(find.text('Jeanne Tremblay'), findsOneWidget);
+      expect(find.text('Apt 101 · Étage 1'), findsOneWidget);
+      expect(find.byTooltip('Voir la fiche'), findsNWidgets(3));
+      expect(find.byTooltip('Envoyer un message'), findsNWidgets(3));
+    });
+
+    group('actions', () {
+      testWidgets('« Voir la fiche » ouvre la fiche de l\'appartement',
+          (tester) async {
+        final depot =
+            _DepotSimule(lignes: _troisResidents, ficheRenvoyee: _fiche());
+        await _afficher(tester, depot);
+
+        await tester.tap(find.byTooltip('Voir la fiche').first);
+        await tester.pumpAndSettle();
+
+        expect(depot.fichesDemandees, ['a1']);
+        expect(find.text('Statut du jour'), findsOneWidget);
+      });
+
+      testWidgets('toucher la ligne ouvre aussi la fiche', (tester) async {
+        final depot =
+            _DepotSimule(lignes: _troisResidents, ficheRenvoyee: _fiche());
+        await _afficher(tester, depot);
+
+        await tester.tap(find.text('Jeanne Tremblay'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Statut du jour'), findsOneWidget);
+      });
+
+      testWidgets('« Imprimer » sans date planifiée : message, pas d\'aperçu',
+          (tester) async {
+        final depot = _DepotSimule(
+            lignes: _troisResidents, ficheRenvoyee: _fiche(dates: const []));
+        await _afficher(tester, depot);
+
+        await tester.tap(find.byTooltip('Imprimer le calendrier').first);
+        await tester.pumpAndSettle();
+
+        expect(depot.fichesDemandees, ['a1']);
+        expect(
+          find.text('Aucune date de ménage planifiée pour l\'appartement 101.'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets('« Imprimer » : si la fiche ne se charge pas, l\'erreur '
+          's\'affiche', (tester) async {
+        final depot = _DepotSimule(lignes: _troisResidents)
+          ..erreurFiche = const ReceptionErreur('Impossible de charger la fiche.');
+        await _afficher(tester, depot);
+
+        await tester.tap(find.byTooltip('Imprimer le calendrier').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Impossible de charger la fiche.'), findsOneWidget);
+      });
+
+      testWidgets('« Message » ouvre le formulaire et l\'envoi le ferme',
+          (tester) async {
+        final depot =
+            _DepotSimule(lignes: _troisResidents, ficheRenvoyee: _fiche());
+        await _afficher(tester, depot);
+
+        await tester.tap(find.byTooltip('Envoyer un message').first);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Jeanne Tremblay · Apt 101'), findsOneWidget);
+        expect(find.text('Message à l\'administration'), findsOneWidget);
+
+        await tester.enterText(
+          find.descendant(
+              of: find.byType(Dialog), matching: find.byType(TextField)),
+          'Prévenir avant de passer',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Envoyer'));
+        await tester.pumpAndSettle();
+
+        expect(depot.envois, hasLength(1));
+        expect(depot.envois.single.appartementId, 'a1');
+        expect(depot.envois.single.auteurId, 'r1');
+        expect(depot.envois.single.message, 'Prévenir avant de passer');
+        expect(find.text('Message à l\'administration'), findsNothing);
+      });
     });
   });
 

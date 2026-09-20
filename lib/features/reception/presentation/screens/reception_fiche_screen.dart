@@ -3,13 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../pdf/presentation/screens/resident_cleaning_dates_pdf_screen.dart';
-import '../../../resident_espace/domain/entities/tache_resident.dart';
-import '../../../tache_jour/domain/entities/tache_jour.dart';
 import '../../domain/reception_models.dart';
 import '../providers/reception_residents_provider.dart';
 import '../reception_sections.dart';
 import '../widgets/message_form_card.dart';
+import '../widgets/reception_actions.dart';
 
 /// Fiche d'un appartement pour la Réception : LECTURE SEULE.
 ///
@@ -213,33 +211,6 @@ class _CalendrierCard extends StatelessWidget {
 
   const _CalendrierCard({required this.fiche});
 
-  void _imprimer(BuildContext context) {
-    final taches = [
-      for (final d in fiche.prochainesDates)
-        TacheResident(
-          id: '${fiche.id}-${d.date.toIso8601String()}-${d.periode}',
-          appartementId: fiche.id,
-          semaineReelle: d.date,
-          jour: d.jour,
-          periode: d.periode == 'AM' ? PeriodeType.am : PeriodeType.pm,
-          statut: StatutTache.nonCommence,
-          prenomPreposee: d.employePrenom,
-        ),
-    ];
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ResidentCleaningDatesPdfScreen(
-          taches: taches,
-          residentName: fiche.residents.isEmpty
-              ? 'Résident(e)'
-              : fiche.residents.join(' et '),
-          apartmentNumber: fiche.numero,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final dates = fiche.prochainesDates;
@@ -276,7 +247,9 @@ class _CalendrierCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: OutlinedButton.icon(
-              onPressed: dates.isEmpty ? null : () => _imprimer(context),
+              onPressed: dates.isEmpty
+                  ? null
+                  : () => ouvrirImpressionCalendrier(context, fiche),
               icon: const Icon(Icons.print_rounded),
               label: const Text('Imprimer le calendrier'),
             ),

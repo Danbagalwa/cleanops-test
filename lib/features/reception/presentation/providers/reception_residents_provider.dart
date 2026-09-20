@@ -8,10 +8,10 @@ final receptionResidentsRepositoryProvider =
   (_) => const ReceptionResidentsRepositoryImpl(),
 );
 
-/// Résultats de la recherche pour un texte donné.
-final receptionRechercheProvider = FutureProvider.autoDispose
-    .family<List<AppartementResultat>, String>((ref, recherche) {
-  return ref.watch(receptionResidentsRepositoryProvider).rechercher(recherche);
+/// Tableau des résidents (un résident actif par ligne, avec son appartement).
+final receptionResidentsListeProvider =
+    FutureProvider.autoDispose<List<ResidentLigne>>((ref) {
+  return ref.watch(receptionResidentsRepositoryProvider).residents();
 });
 
 /// Fiche d'un appartement.

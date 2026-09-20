@@ -9,20 +9,20 @@ class ReceptionResidentsRepositoryImpl implements ReceptionResidentsRepository {
   const ReceptionResidentsRepositoryImpl();
 
   @override
-  Future<List<AppartementResultat>> rechercher(String recherche) async {
+  Future<List<ResidentLigne>> residents() async {
     try {
-      final data = await SupabaseService.client.rpc(
-        'reception_rechercher_appartements',
-        params: {'p_recherche': recherche},
-      );
+      final data =
+          await SupabaseService.client.rpc('reception_lister_residents');
       return [
         for (final item in (data as List? ?? const []))
-          AppartementResultat.fromJson(item as Map<String, dynamic>),
+          ResidentLigne.fromJson(item as Map<String, dynamic>),
       ];
     } on PostgrestException catch (e) {
-      throw ReceptionErreur(_message(e, 'La recherche a échoué.'));
+      throw ReceptionErreur(
+          _message(e, 'Impossible de charger la liste des résidents.'));
     } catch (_) {
-      throw const ReceptionErreur('La recherche a échoué.');
+      throw const ReceptionErreur(
+          'Impossible de charger la liste des résidents.');
     }
   }
 

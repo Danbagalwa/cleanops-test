@@ -133,15 +133,34 @@ void main() {
       expect(f.etage, isNull);
     });
 
-    test('résultat de recherche', () {
-      final r = AppartementResultat.fromJson({
-        'id': 'a1',
+    test('ligne du tableau des résidents', () {
+      final r = ResidentLigne.fromJson({
+        'resident_id': 'r1',
+        'prenom': 'Jeanne',
+        'nom': 'Tremblay',
+        'appartement_id': 'a1',
         'numero': '101',
         'etage': 1,
-        'residents': ['Jeanne Tremblay'],
       });
+      expect(r.residentId, 'r1');
+      expect(r.appartementId, 'a1');
       expect(r.numero, '101');
-      expect(r.residents, ['Jeanne Tremblay']);
+      expect(r.etage, 1);
+      expect(r.nomComplet, 'Jeanne Tremblay');
+      expect(r.initiales, 'JT');
+    });
+
+    test('ligne sans étage', () {
+      final r = ResidentLigne.fromJson({
+        'resident_id': 'r1',
+        'prenom': 'dan',
+        'nom': 'bagalwa',
+        'appartement_id': 'a1',
+        'numero': '101',
+        'etage': null,
+      });
+      expect(r.etage, isNull);
+      expect(r.initiales, 'DB');
     });
   });
 }

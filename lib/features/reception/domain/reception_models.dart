@@ -109,29 +109,39 @@ class StatutDuJour {
   }
 }
 
-/// Résultat de la recherche d'un appartement.
-class AppartementResultat {
-  final String id;
+/// Une ligne du tableau des résidents : un résident actif et son appartement.
+class ResidentLigne {
+  final String residentId;
+  final String prenom;
+  final String nom;
+  final String appartementId;
   final String numero;
   final int? etage;
-  final List<String> residents;
 
-  const AppartementResultat({
-    required this.id,
+  const ResidentLigne({
+    required this.residentId,
+    required this.prenom,
+    required this.nom,
+    required this.appartementId,
     required this.numero,
     this.etage,
-    this.residents = const [],
   });
 
-  factory AppartementResultat.fromJson(Map<String, dynamic> json) =>
-      AppartementResultat(
-        id: json['id'] as String,
+  factory ResidentLigne.fromJson(Map<String, dynamic> json) => ResidentLigne(
+        residentId: json['resident_id'] as String,
+        prenom: json['prenom'] as String,
+        nom: json['nom'] as String,
+        appartementId: json['appartement_id'] as String,
         numero: json['numero'] as String,
         etage: json['etage'] as int?,
-        residents: [
-          for (final r in (json['residents'] as List? ?? const [])) r as String,
-        ],
       );
+
+  String get nomComplet => '$prenom $nom';
+
+  String get initiales {
+    String premiere(String s) => s.isEmpty ? '' : s[0].toUpperCase();
+    return '${premiere(prenom)}${premiere(nom)}';
+  }
 }
 
 /// Employé concerné par l'appartement (destinataire de « Transmettre aussi à
