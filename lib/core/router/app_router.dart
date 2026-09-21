@@ -28,6 +28,7 @@ import '../../features/resident_espace/presentation/screens/demandes_residents_r
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/reception/presentation/screens/reception_dashboard_screen.dart';
+import '../../features/reception/presentation/screens/reception_a_aviser_screen.dart';
 import '../../features/reception/presentation/screens/reception_equipe_screen.dart';
 import '../../features/reception/presentation/screens/reception_fiche_screen.dart';
 import '../../features/reception/presentation/screens/reception_residents_screen.dart';
@@ -370,6 +371,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               builder: (context, state) => switch (section.route) {
                 receptionResidentsRoute => const ReceptionResidentsScreen(),
                 receptionEquipeRoute => const ReceptionEquipeScreen(),
+                receptionAAviserRoute => const ReceptionAAviserScreen(),
                 _ => ReceptionSectionScreen(section: section),
               },
             ),

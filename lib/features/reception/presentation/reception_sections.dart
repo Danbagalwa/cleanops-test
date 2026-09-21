@@ -83,6 +83,9 @@ const String receptionResidentsRoute = '/reception/residents';
 /// Route de la section Équipe (présence et horaire du jour).
 const String receptionEquipeRoute = '/reception/equipe';
 
+/// Route de la section À aviser (résidents sans application à prévenir).
+const String receptionAAviserRoute = '/reception/a-aviser';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 
