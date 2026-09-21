@@ -184,13 +184,12 @@ void main() {
   });
 
   group('Tableau de bord : profil et déconnexion', () {
-    testWidgets('profil et déconnexion, sans notifications', (tester) async {
+    testWidgets('notifications, profil et déconnexion', (tester) async {
       await _afficher(tester, initiale: receptionAccueilRoute);
 
+      expect(find.byTooltip('Notifications'), findsOneWidget);
       expect(find.byTooltip('Mon profil'), findsOneWidget);
       expect(find.byTooltip('Se déconnecter'), findsOneWidget);
-      expect(find.byTooltip('Notifications'), findsNothing,
-          reason: 'la Réception n\'a pas accès aux notifications');
     });
 
     testWidgets('l\'icône du profil ouvre « Mon profil »', (tester) async {

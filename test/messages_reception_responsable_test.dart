@@ -704,6 +704,32 @@ void main() {
       expect(ctx.depot.reponses.single.reponse, 'Vu.');
     });
 
+    testWidgets('ouvert directement sur les messages (depuis une notification)',
+        (tester) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1200, 1600);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            employeeCourantProvider.overrideWithValue(_admin),
+            messagesReceptionResponsableRepositoryProvider
+                .overrideWithValue(_DepotMessages(_jeu())),
+            residentEspaceRepositoryProvider
+                .overrideWithValue(_DepotResidents()),
+          ],
+          child: const MaterialApp(
+            home: DemandesResidentsResponsableScreen(ouvrirMessages: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
+      expect(find.text('Tous types'), findsNothing);
+    });
+
     testWidgets('sur mobile', (tester) async {
       await ecran(tester, taille: const Size(420, 1200));
 

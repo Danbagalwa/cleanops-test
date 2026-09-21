@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:cleanops/features/auth/domain/entities/employee.dart';
 import 'package:cleanops/features/auth/presentation/providers/auth_provider.dart';
+import 'package:cleanops/features/notifications/presentation/providers/notifications_provider.dart';
 import 'package:cleanops/features/reception/presentation/reception_sections.dart';
 import 'package:cleanops/features/reception/presentation/screens/reception_dashboard_screen.dart';
 import 'package:cleanops/features/reception/presentation/screens/reception_section_screen.dart';
@@ -40,7 +41,10 @@ Future<void> _afficher(WidgetTester tester, {Size taille = const Size(1000, 900)
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [employeeCourantProvider.overrideWithValue(_reception)],
+      overrides: [
+        employeeCourantProvider.overrideWithValue(_reception),
+        unreadNotificationsCountProvider.overrideWithValue(0),
+      ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );

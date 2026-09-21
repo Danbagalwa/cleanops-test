@@ -22,7 +22,14 @@ String _typeLabelFor(TypeDemande t) => switch (t) {
     };
 
 class DemandesResidentsResponsableScreen extends ConsumerStatefulWidget {
-  const DemandesResidentsResponsableScreen({super.key});
+  /// Ouvre directement l'onglet « Messages de la réception » (par exemple depuis
+  /// une notification).
+  final bool ouvrirMessages;
+
+  const DemandesResidentsResponsableScreen({
+    super.key,
+    this.ouvrirMessages = false,
+  });
 
   @override
   ConsumerState<DemandesResidentsResponsableScreen> createState() =>
@@ -31,7 +38,8 @@ class DemandesResidentsResponsableScreen extends ConsumerStatefulWidget {
 
 class _DemandesResidentsResponsableScreenState
     extends ConsumerState<DemandesResidentsResponsableScreen> {
-  _Onglet _onglet = _Onglet.demandes;
+  late _Onglet _onglet =
+      widget.ouvrirMessages ? _Onglet.messages : _Onglet.demandes;
   _StatutFiltre _statutFiltre = _StatutFiltre.tous;
   TypeDemande? _typeFiltre;
 

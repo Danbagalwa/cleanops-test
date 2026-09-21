@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../reception/presentation/reception_sections.dart'
+    show receptionMessagesRoute;
 import '../../domain/entities/notification.dart';
 import '../providers/notifications_provider.dart';
 
@@ -39,9 +42,9 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           onPressed: () {
             final employee = ref.read(employeeCourantProvider);
             context.backOrHome(
-              employee?.isResponsable == true
-                  ? AppRoutes.employerDashboard
-                  : AppRoutes.employeeDashboard,
+              employee == null
+                  ? AppRoutes.employeeDashboard
+                  : accueilDe(employee),
             );
           },
           icon: const Icon(Icons.arrow_back_rounded),
@@ -188,6 +191,20 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   String? _routeFor(AppNotification notification) {
+    final profil = ref.read(employeeCourantProvider)?.profil;
+
+    // Message transmis par la Réception : la Réception retrouve la liste de ses
+    // messages, le responsable l'onglet « Messages de la réception ».
+    if (notification.type == 'MessageReception') {
+      return switch (profil) {
+        ProfilAcces.reception => receptionMessagesRoute,
+        ProfilAcces.responsable => AppRoutes.demandesResidentsMessages,
+        _ => null,
+      };
+    }
+    // Le reste des écrans est fermé à la Réception.
+    if (profil == ProfilAcces.reception) return null;
+
     return switch (notification.category) {
       NotificationCategory.absence => AppRoutes.presences,
       NotificationCategory.demande => AppRoutes.demandesResidents,

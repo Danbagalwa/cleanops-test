@@ -11,13 +11,16 @@ class DashboardAccountActions extends ConsumerWidget {
   /// Route de l'écran « Mon profil » de ce profil d'accès.
   final String profilRoute;
 
-  /// Affiche l'icône des notifications. La Réception n'en a pas : elle n'accède
-  /// pas à cet écran.
+  /// Route de l'écran des notifications de ce profil d'accès.
+  final String notificationsRoute;
+
+  /// Affiche l'icône des notifications.
   final bool avecNotifications;
 
   const DashboardAccountActions({
     super.key,
     this.profilRoute = AppRoutes.profil,
+    this.notificationsRoute = AppRoutes.notifications,
     this.avecNotifications = true,
   });
 
@@ -29,7 +32,7 @@ class DashboardAccountActions extends ConsumerWidget {
         if (avecNotifications) ...[
           IconButton(
             tooltip: 'Notifications',
-            onPressed: () => context.go(AppRoutes.notifications),
+            onPressed: () => context.go(notificationsRoute),
             style: IconButton.styleFrom(
               foregroundColor: Colors.white,
               backgroundColor: Colors.white.withValues(alpha: .14),

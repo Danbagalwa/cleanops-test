@@ -40,12 +40,12 @@ class ReceptionDashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
-        // Profil et déconnexion, comme pour les autres utilisateurs. Pas de
-        // notifications : la Réception n'a pas accès à cet écran.
+        // Notifications, profil et déconnexion, comme pour les autres
+        // utilisateurs, vers les écrans de la Réception.
         actions: const [
           DashboardAccountActions(
             profilRoute: receptionProfilRoute,
-            avecNotifications: false,
+            notificationsRoute: receptionNotificationsRoute,
           ),
           SizedBox(width: AppSizes.md),
         ],

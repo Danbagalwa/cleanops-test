@@ -56,6 +56,19 @@ extension GoRouterBackX on BuildContext {
   }
 }
 
+/// Accueil vers lequel revenir depuis un écran partagé (profil, notifications),
+/// selon le profil d'accès.
+///
+/// `switch` exhaustif : un nouveau profil oblige à choisir sa destination, et la
+/// Réception ne retombe jamais sur l'accueil d'un autre profil (elle n'y a pas
+/// accès).
+String accueilDe(Employee employee) => switch (employee.profil) {
+      ProfilAcces.reception => receptionAccueilRoute,
+      ProfilAcces.responsable => AppRoutes.employerDashboard,
+      ProfilAcces.preposee => AppRoutes.employeeDashboard,
+      ProfilAcces.resident => AppRoutes.residentDashboard,
+    };
+
 // ── Routes ────────────────────────────────────────────────
 class AppRoutes {
   AppRoutes._();
@@ -88,6 +101,13 @@ class AppRoutes {
   static const String messagesSemaine = '/messages-semaine';
   static const String residents = '/residents';
   static const String demandesResidents = '/demandes/residents';
+
+  /// Valeur du paramètre `onglet` qui ouvre « Messages de la réception ».
+  static const String ongletMessagesReception = 'messages';
+
+  /// Demandes résidents, directement sur l'onglet « Messages de la réception ».
+  static const String demandesResidentsMessages =
+      '$demandesResidents?onglet=$ongletMessagesReception';
   static const String demandesEquipe = '/demandes/equipe';
   static const String mesDemandesEquipe = '/mes-demandes-equipe';
   static const String profil = '/profil';
@@ -341,8 +361,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           // Demandes résidents (responsable)
           GoRoute(
             path: '/demandes/residents',
-            builder: (context, state) =>
-                const DemandesResidentsResponsableScreen(),
+            builder: (context, state) => DemandesResidentsResponsableScreen(
+              ouvrirMessages: state.uri.queryParameters['onglet'] ==
+                  AppRoutes.ongletMessagesReception,
+            ),
           ),
 
           // Demandes équipe — congé / absence planifiée (responsable)
@@ -382,6 +404,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: receptionProfilRoute,
             builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: receptionNotificationsRoute,
+            builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
             path: receptionFichePattern,

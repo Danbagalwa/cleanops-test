@@ -97,6 +97,10 @@ const String receptionMessagesRoute = '/reception/messages';
 /// des 5 sections : elle n'apparaît ni dans le menu ni sur le tableau de bord.
 const String receptionProfilRoute = '/reception/profil';
 
+/// Route des notifications de la Réception (même écran que les autres profils).
+/// Sous `/reception/`, donc dans son périmètre. Pas une des 5 sections.
+const String receptionNotificationsRoute = '/reception/notifications';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 
