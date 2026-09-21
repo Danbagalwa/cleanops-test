@@ -43,6 +43,69 @@ class ReceptionResidentsRepositoryImpl implements ReceptionResidentsRepository {
   }
 
   @override
+  Future<List<AppartementLibre>> appartementsLibres() async {
+    const erreur = 'Impossible de charger les appartements libres.';
+    try {
+      final data =
+          await SupabaseService.client.rpc('reception_appartements_libres');
+      return [
+        for (final item in (data as List? ?? const []))
+          AppartementLibre.fromJson(item as Map<String, dynamic>),
+      ];
+    } on PostgrestException catch (e) {
+      throw ReceptionErreur(_message(e, erreur));
+    } catch (_) {
+      throw const ReceptionErreur(erreur);
+    }
+  }
+
+  @override
+  Future<List<ResponsableDemandeur>> responsables() async {
+    const erreur = 'Impossible de charger la liste des responsables.';
+    try {
+      final data = await SupabaseService.client.rpc('reception_responsables');
+      return [
+        for (final item in (data as List? ?? const []))
+          ResponsableDemandeur.fromJson(item as Map<String, dynamic>),
+      ];
+    } on PostgrestException catch (e) {
+      throw ReceptionErreur(_message(e, erreur));
+    } catch (_) {
+      throw const ReceptionErreur(erreur);
+    }
+  }
+
+  @override
+  Future<ResidentInscrit> inscrireResident({
+    required String appartementId,
+    required String auteurId,
+    required String prenom,
+    required String nom,
+    required String demandeParId,
+    required bool aApplication,
+  }) async {
+    const erreur = "L'inscription n'a pas pu être enregistrée.";
+    try {
+      final data = await SupabaseService.client.rpc(
+        'reception_inscrire_resident',
+        params: {
+          'p_appartement_id': appartementId,
+          'p_auteur_id': auteurId,
+          'p_prenom': prenom,
+          'p_nom': nom,
+          'p_demande_par': demandeParId,
+          'p_a_application': aApplication,
+        },
+      );
+      return ResidentInscrit.fromJson(data as Map<String, dynamic>);
+    } on PostgrestException catch (e) {
+      throw ReceptionErreur(_message(e, erreur));
+    } catch (_) {
+      throw const ReceptionErreur(erreur);
+    }
+  }
+
+  @override
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,

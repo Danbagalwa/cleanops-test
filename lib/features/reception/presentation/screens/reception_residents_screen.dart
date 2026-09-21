@@ -8,6 +8,7 @@ import '../../../../core/widgets/skeleton_widget.dart';
 import '../../domain/reception_models.dart';
 import '../providers/reception_residents_provider.dart';
 import '../reception_sections.dart';
+import '../widgets/inscription_resident_dialog.dart';
 import '../widgets/reception_actions.dart';
 
 const _kPageSize = 10;
@@ -78,7 +79,30 @@ class _ReceptionResidentsScreenState
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          if (isDesktop)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSizes.md),
+              child: FilledButton.icon(
+                onPressed: () => ouvrirInscriptionResident(context),
+                icon: const Icon(Icons.person_add_rounded, size: 18),
+                label: const Text('Inscrire un résident'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.rouge,
+                ),
+              ),
+            ),
+        ],
       ),
+      floatingActionButton: isDesktop
+          ? null
+          : FloatingActionButton(
+              tooltip: 'Inscrire un résident',
+              onPressed: () => ouvrirInscriptionResident(context),
+              backgroundColor: AppColors.rouge,
+              child: const Icon(Icons.person_add_rounded, color: Colors.white),
+            ),
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(

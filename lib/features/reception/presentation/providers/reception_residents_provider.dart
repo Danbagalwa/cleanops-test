@@ -14,6 +14,18 @@ final receptionResidentsListeProvider =
   return ref.watch(receptionResidentsRepositoryProvider).residents();
 });
 
+/// Appartements sans occupant actif (formulaire d'inscription).
+final receptionAppartementsLibresProvider =
+    FutureProvider.autoDispose<List<AppartementLibre>>((ref) {
+  return ref.watch(receptionResidentsRepositoryProvider).appartementsLibres();
+});
+
+/// Responsables qu'on peut désigner comme demandeur d'une inscription.
+final receptionResponsablesProvider =
+    FutureProvider.autoDispose<List<ResponsableDemandeur>>((ref) {
+  return ref.watch(receptionResidentsRepositoryProvider).responsables();
+});
+
 /// Fiche d'un appartement.
 final receptionFicheProvider =
     FutureProvider.autoDispose.family<FicheAppartement?, String>((ref, id) {

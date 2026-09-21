@@ -23,6 +23,24 @@ abstract class ReceptionResidentsRepository {
   /// `null` si l'appartement n'existe pas.
   Future<FicheAppartement?> fiche(String appartementId);
 
+  /// Appartements sans occupant actif (où l'on peut inscrire un résident).
+  Future<List<AppartementLibre>> appartementsLibres();
+
+  /// Responsables qu'on peut désigner comme demandeur d'une inscription.
+  Future<List<ResponsableDemandeur>> responsables();
+
+  /// Inscrit un résident sur un appartement libre, à la demande d'un
+  /// responsable. N'assigne AUCUN ménage. La date d'arrivée est remplie par le
+  /// serveur.
+  Future<ResidentInscrit> inscrireResident({
+    required String appartementId,
+    required String auteurId,
+    required String prenom,
+    required String nom,
+    required String demandeParId,
+    required bool aApplication,
+  });
+
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,

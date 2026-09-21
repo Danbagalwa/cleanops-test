@@ -60,6 +60,23 @@ class _DepotSimule implements ReceptionResidentsRepository {
   }
 
   @override
+  Future<List<AppartementLibre>> appartementsLibres() async => const [];
+
+  @override
+  Future<List<ResponsableDemandeur>> responsables() async => const [];
+
+  @override
+  Future<ResidentInscrit> inscrireResident({
+    required String appartementId,
+    required String auteurId,
+    required String prenom,
+    required String nom,
+    required String demandeParId,
+    required bool aApplication,
+  }) async =>
+      throw UnimplementedError('couvert par reception_inscription_test.dart');
+
+  @override
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,

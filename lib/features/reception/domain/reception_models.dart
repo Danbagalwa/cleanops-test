@@ -235,3 +235,83 @@ class FicheAppartement {
     );
   }
 }
+
+/// Un appartement sans occupant actif, où la Réception peut inscrire un
+/// résident.
+class AppartementLibre {
+  final String id;
+  final String numero;
+  final int? etage;
+
+  const AppartementLibre({required this.id, required this.numero, this.etage});
+
+  factory AppartementLibre.fromJson(Map<String, dynamic> json) =>
+      AppartementLibre(
+        id: json['appartement_id'] as String,
+        numero: json['numero'] as String,
+        etage: json['etage'] as int?,
+      );
+
+  String get libelle =>
+      etage == null ? 'Apt $numero' : 'Apt $numero · Étage $etage';
+
+  // Égalité par identifiant : la sélection survit au rechargement de la liste.
+  @override
+  bool operator ==(Object other) => other is AppartementLibre && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+/// Un responsable qu'on peut désigner comme demandeur d'une inscription.
+class ResponsableDemandeur {
+  final String id;
+  final String prenom;
+  final String nom;
+
+  const ResponsableDemandeur({
+    required this.id,
+    required this.prenom,
+    required this.nom,
+  });
+
+  factory ResponsableDemandeur.fromJson(Map<String, dynamic> json) =>
+      ResponsableDemandeur(
+        id: json['id'] as String,
+        prenom: json['prenom'] as String,
+        nom: json['nom'] as String,
+      );
+
+  String get nomComplet => '$prenom $nom';
+
+  @override
+  bool operator ==(Object other) =>
+      other is ResponsableDemandeur && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+/// Résultat d'une inscription : le résident créé et sa date d'arrivée, remplie
+/// automatiquement par le serveur.
+class ResidentInscrit {
+  final String residentId;
+  final String numero;
+  final DateTime dateArrivee;
+
+  const ResidentInscrit({
+    required this.residentId,
+    required this.numero,
+    required this.dateArrivee,
+  });
+
+  factory ResidentInscrit.fromJson(Map<String, dynamic> json) =>
+      ResidentInscrit(
+        residentId: json['resident_id'] as String,
+        numero: json['numero'] as String,
+        dateArrivee: DateTime.parse(json['date_arrivee'] as String),
+      );
+
+  /// « 21/09/2026 ».
+  String get dateArriveeCourte => DateFormat('dd/MM/yyyy').format(dateArrivee);
+}
