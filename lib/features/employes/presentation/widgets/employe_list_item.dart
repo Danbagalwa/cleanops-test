@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../auth/domain/entities/employee.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 
 // Libellé UI par rôle
 String roleDisplay(RoleType role) {
@@ -75,22 +77,14 @@ class EmployeListItem extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
+                AvatarProfil(
+                  proprietaire: ProprietairePhoto.de(employe),
+                  initiales: initials,
+                  rayon: 16,
+                  couleurFond: color.withValues(alpha: 0.15),
+                  couleurTexte: color,
+                  tailleTexte: 12,
+                  poidsTexte: FontWeight.bold,
                 ),
                 const SizedBox(width: AppSizes.sm),
                 Expanded(
@@ -222,22 +216,14 @@ class EmployeListItem extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                    ),
-                  ),
+                AvatarProfil(
+                  proprietaire: ProprietairePhoto.de(employe),
+                  initiales: initials,
+                  rayon: 22,
+                  couleurFond: color.withValues(alpha: 0.15),
+                  couleurTexte: color,
+                  tailleTexte: 15,
+                  poidsTexte: FontWeight.bold,
                 ),
                 const SizedBox(width: AppSizes.md),
                 Expanded(

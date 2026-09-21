@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/chat_message.dart';
 
 class ChatBubble extends StatelessWidget {
@@ -198,17 +200,14 @@ class ChatBubble extends StatelessWidget {
             width: 32,
             height: 32,
             child: isStreakEnd
-                ? CircleAvatar(
-                    radius: 16,
-                    backgroundColor: prenomColor,
-                    child: Text(
-                      _initiale,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                ? AvatarProfil(
+                    proprietaire: ProprietairePhoto(
+                        TypeProprietairePhoto.employe, message.auteurId),
+                    initiales: _initiale,
+                    rayon: 16,
+                    couleurFond: prenomColor,
+                    tailleTexte: 13,
+                    poidsTexte: FontWeight.w600,
                   )
                 : null,
           ),

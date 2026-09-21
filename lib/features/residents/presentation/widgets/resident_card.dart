@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/resident.dart';
 import 'desactivation_dialog.dart';
 import 'pin_attribution_dialog.dart';
@@ -34,7 +36,11 @@ class ResidentCard extends StatelessWidget {
           child: Row(
             children: [
               // Avatar initiales
-              _Avatar(initiales: resident.initiales, isActif: resident.isActif),
+              _Avatar(
+                residentId: resident.id,
+                initiales: resident.initiales,
+                isActif: resident.isActif,
+              ),
               const SizedBox(width: AppSizes.md),
 
               // Infos
@@ -123,30 +129,27 @@ class ResidentCard extends StatelessWidget {
 // ── Avatar ────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
+  final String residentId;
   final String initiales;
   final bool isActif;
 
-  const _Avatar({required this.initiales, required this.isActif});
+  const _Avatar({
+    required this.residentId,
+    required this.initiales,
+    required this.isActif,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = isActif ? AppColors.rouge : AppColors.grisMedium;
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initiales,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
+    return AvatarProfil(
+      proprietaire:
+          ProprietairePhoto(TypeProprietairePhoto.resident, residentId),
+      initiales: initiales,
+      rayon: 21,
+      couleurFond: color.withValues(alpha: 0.12),
+      couleurTexte: color,
+      tailleTexte: 14,
     );
   }
 }

@@ -70,6 +70,7 @@ AvisResident _avis(
 }) =>
     AvisResident(
       id: id,
+      residentId: 'r$id',
       prenom: prenom,
       nom: nom,
       appartementId: 'a$numero',

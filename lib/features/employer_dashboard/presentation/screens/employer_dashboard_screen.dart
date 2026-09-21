@@ -7,6 +7,8 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/widgets/dashboard_account_actions.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/progression_jour.dart';
@@ -533,17 +535,15 @@ class _TeamProgress extends StatelessWidget {
           for (final item in sorted.take(4)) ...[
             Row(
               children: [
-                CircleAvatar(
-                  radius: 15,
-                  backgroundColor: AppColors.rouge.withValues(alpha: .09),
-                  child: Text(
-                    item.prenom.isEmpty ? '?' : item.prenom[0].toUpperCase(),
-                    style: const TextStyle(
-                      color: AppColors.rouge,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                AvatarProfil(
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.employe, item.employeeId),
+                  initiales:
+                      item.prenom.isEmpty ? '?' : item.prenom[0].toUpperCase(),
+                  rayon: 15,
+                  couleurFond: AppColors.rouge.withValues(alpha: .09),
+                  couleurTexte: AppColors.rouge,
+                  tailleTexte: 12,
                 ),
                 const SizedBox(width: 10),
                 Expanded(

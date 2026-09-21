@@ -78,6 +78,9 @@ enum ActionAvis {
 /// Un résident sans application à prévenir.
 class AvisResident {
   final String id;
+
+  /// Le résident concerné (sa photo de profil s'il en a une).
+  final String residentId;
   final String prenom;
   final String nom;
   final String appartementId;
@@ -99,6 +102,7 @@ class AvisResident {
 
   const AvisResident({
     required this.id,
+    required this.residentId,
     required this.prenom,
     required this.nom,
     required this.appartementId,
@@ -113,6 +117,7 @@ class AvisResident {
 
   factory AvisResident.fromJson(Map<String, dynamic> json) => AvisResident(
         id: json['id'] as String,
+        residentId: json['resident_id'] as String,
         prenom: json['prenom'] as String,
         nom: json['nom'] as String,
         appartementId: json['appartement_id'] as String,

@@ -5,6 +5,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
+
 import '../../domain/entities/progression_jour.dart';
 import '../providers/employer_dashboard_provider.dart';
 
@@ -140,7 +143,7 @@ class _ProgressionJourScreenState
               const SizedBox(height: AppSizes.xs),
               ...sansTaches.map((p) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                    child: _InactiveCard(prenom: p.prenom),
+                    child: _InactiveCard(employeeId: p.employeeId, prenom: p.prenom),
                   )),
             ],
 
@@ -493,17 +496,15 @@ class _ProgressionCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: barColor.withValues(alpha: 0.12),
-                child: Text(
-                  initiale,
-                  style: TextStyle(
-                    color: barColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              AvatarProfil(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.employe, p.employeeId),
+                initiales: initiale,
+                rayon: 22,
+                couleurFond: barColor.withValues(alpha: 0.12),
+                couleurTexte: barColor,
+                tailleTexte: 16,
+                poidsTexte: FontWeight.bold,
               ),
               const SizedBox(width: AppSizes.sm),
               Expanded(
@@ -612,8 +613,9 @@ class _ProgressionCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────
 
 class _InactiveCard extends StatelessWidget {
+  final String employeeId;
   final String prenom;
-  const _InactiveCard({required this.prenom});
+  const _InactiveCard({required this.employeeId, required this.prenom});
 
   @override
   Widget build(BuildContext context) {
@@ -628,17 +630,15 @@ class _InactiveCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: AppColors.grisMedium,
-            child: Text(
-              initiale,
-              style: const TextStyle(
-                color: AppColors.grisDark,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          AvatarProfil(
+            proprietaire:
+                ProprietairePhoto(TypeProprietairePhoto.employe, employeeId),
+            initiales: initiale,
+            rayon: 17,
+            couleurFond: AppColors.grisMedium,
+            couleurTexte: AppColors.grisDark,
+            tailleTexte: 13,
+            poidsTexte: FontWeight.w600,
           ),
           const SizedBox(width: AppSizes.sm),
           Expanded(

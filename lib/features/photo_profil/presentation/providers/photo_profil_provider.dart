@@ -26,7 +26,17 @@ final compressionPhotoProvider = Provider<CompressionPhoto>(
 );
 
 /// La photo d'un utilisateur : octets JPEG, ou `null` s'il n'en a pas.
+///
+/// Gardée en mémoire pour la session : les listes (résidents, équipe…) ne la
+/// redemandent pas à chaque défilement. Elle est rechargée après un changement
+/// de photo (`ref.invalidate`).
 final photoProfilProvider = FutureProvider.autoDispose
-    .family<Uint8List?, ProprietairePhoto>((ref, proprietaire) {
-  return ref.watch(photoProfilRepositoryProvider).lire(proprietaire);
+    .family<Uint8List?, ProprietairePhoto>((ref, proprietaire) async {
+  final lien = ref.keepAlive();
+  try {
+    return await ref.watch(photoProfilRepositoryProvider).lire(proprietaire);
+  } catch (_) {
+    lien.close(); // un échec n'est pas gardé : il sera retenté
+    rethrow;
+  }
 });

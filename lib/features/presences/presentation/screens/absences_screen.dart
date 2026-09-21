@@ -7,6 +7,8 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../employes/presentation/providers/employes_provider.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/presence.dart';
 import '../providers/presence_provider.dart';
 
@@ -327,14 +329,15 @@ class _HeureRegistreRow extends StatelessWidget {
 
     return Row(
       children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.absent.withValues(alpha: 0.12),
-          child: Text(initiale,
-              style: const TextStyle(
-                  color: AppColors.absent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold)),
+        AvatarProfil(
+          proprietaire: ProprietairePhoto(
+              TypeProprietairePhoto.employe, presence.employeeId),
+          initiales: initiale,
+          rayon: 16,
+          couleurFond: AppColors.absent.withValues(alpha: 0.12),
+          couleurTexte: AppColors.absent,
+          tailleTexte: 12,
+          poidsTexte: FontWeight.bold,
         ),
         const SizedBox(width: AppSizes.sm),
         Expanded(
@@ -444,14 +447,15 @@ class _AbsenceCardState extends ConsumerState<_AbsenceCard> {
             // ── En-tête employée ─────────────────────────
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: color.withValues(alpha: 0.12),
-                  child: Text(initiale,
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
+                AvatarProfil(
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.employe, p.employeeId),
+                  initiales: initiale,
+                  rayon: 22,
+                  couleurFond: color.withValues(alpha: 0.12),
+                  couleurTexte: color,
+                  tailleTexte: 16,
+                  poidsTexte: FontWeight.bold,
                 ),
                 const SizedBox(width: AppSizes.md),
                 Expanded(

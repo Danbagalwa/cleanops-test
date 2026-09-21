@@ -7,6 +7,8 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/widgets/error_widget.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/reception_avis_models.dart';
 import '../../domain/reception_residents_repository.dart' show ReceptionErreur;
 import '../providers/reception_avis_provider.dart';
@@ -592,7 +594,12 @@ class _AvisRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _AvatarCircle(initiales: avis.initiales, size: 30, fontSize: 11),
+              _AvatarCircle(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.resident, avis.residentId),
+                initiales: avis.initiales,
+                size: 30,
+                fontSize: 11),
               const SizedBox(width: AppSizes.sm),
               Expanded(
                 flex: 2,
@@ -689,7 +696,12 @@ class _AvisRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _AvatarCircle(initiales: avis.initiales, size: 42, fontSize: 14),
+              _AvatarCircle(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.resident, avis.residentId),
+                initiales: avis.initiales,
+                size: 42,
+                fontSize: 14),
               const SizedBox(width: AppSizes.md),
               Expanded(
                 child: Column(
@@ -754,11 +766,13 @@ class _AvisRow extends StatelessWidget {
 }
 
 class _AvatarCircle extends StatelessWidget {
+  final ProprietairePhoto proprietaire;
   final String initiales;
   final double size;
   final double fontSize;
 
   const _AvatarCircle({
+    required this.proprietaire,
     required this.initiales,
     required this.size,
     required this.fontSize,
@@ -766,22 +780,13 @@ class _AvatarCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: AppColors.rouge.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initiales,
-        style: TextStyle(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-          color: AppColors.rouge,
-        ),
-      ),
+    return AvatarProfil(
+      proprietaire: proprietaire,
+      initiales: initiales,
+      rayon: size / 2,
+      couleurFond: AppColors.rouge.withValues(alpha: 0.12),
+      couleurTexte: AppColors.rouge,
+      tailleTexte: fontSize,
     );
   }
 }

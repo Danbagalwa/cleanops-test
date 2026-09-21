@@ -5,6 +5,8 @@ import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
 import '../../features/auth/domain/entities/employee.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/photo_profil/domain/photo_profil_models.dart';
+import '../../features/photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/resident_espace/presentation/providers/resident_espace_provider.dart';
 
@@ -1155,17 +1157,15 @@ class _SidebarFooter extends StatelessWidget {
   }
 
   Widget _buildAvatar() {
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: AppColors.rouge.withValues(alpha: 0.12),
-      child: Text(
-        _initiales,
-        style: const TextStyle(
-          color: AppColors.rouge,
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+    final e = employee;
+    return AvatarProfil(
+      proprietaire: e == null ? null : ProprietairePhoto.de(e),
+      initiales: _initiales,
+      rayon: 18,
+      couleurFond: AppColors.rouge.withValues(alpha: 0.12),
+      couleurTexte: AppColors.rouge,
+      tailleTexte: 13,
+      poidsTexte: FontWeight.bold,
     );
   }
 

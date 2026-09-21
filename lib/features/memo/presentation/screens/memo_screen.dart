@@ -6,6 +6,8 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/memo.dart';
 import '../providers/memo_provider.dart';
 
@@ -42,6 +44,21 @@ String _titreConversation(List<Memo> memos, bool isResponsable) {
     return memos.first.auteurPrenom ?? 'Préposée';
   }
   return 'Responsable';
+}
+
+/// À qui appartient la photo de l'interlocuteur : la préposée pour le
+/// responsable, l'auteur d'un message du responsable pour la préposée.
+ProprietairePhoto? _proprietaireConversation(
+    List<Memo> memos, bool isResponsable, String preposeeId) {
+  if (isResponsable) {
+    return ProprietairePhoto(TypeProprietairePhoto.employe, preposeeId);
+  }
+  for (final m in memos) {
+    if (!m.estDeEmploye) {
+      return ProprietairePhoto(TypeProprietairePhoto.employe, m.auteurId);
+    }
+  }
+  return null;
 }
 
 bool _sameDay(DateTime a, DateTime b) =>
@@ -302,6 +319,8 @@ class _ConversationPanelState extends ConsumerState<_ConversationPanel> {
           _PanelHeader(
             topPad: topPad,
             titre: titre,
+            proprietaire: _proprietaireConversation(
+                state.memos, true, widget.preposeeId),
             onRefresh: () => ref
                 .read(memoConversationNotifierProvider(widget.preposeeId)
                     .notifier)
@@ -378,9 +397,13 @@ class _ConversationPanelState extends ConsumerState<_ConversationPanel> {
 class _PanelHeader extends StatelessWidget {
   final double topPad;
   final String titre;
+  final ProprietairePhoto? proprietaire;
   final VoidCallback onRefresh;
   const _PanelHeader(
-      {required this.topPad, required this.titre, required this.onRefresh});
+      {required this.topPad,
+      required this.titre,
+      required this.proprietaire,
+      required this.onRefresh});
 
   @override
   Widget build(BuildContext context) {
@@ -391,12 +414,13 @@ class _PanelHeader extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(AppSizes.md, topPad + 12, AppSizes.xs, 12),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 19,
-            backgroundColor: couleur,
-            child: Text(initiale,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+          AvatarProfil(
+            proprietaire: proprietaire,
+            initiales: initiale,
+            rayon: 19,
+            couleurFond: couleur,
+            tailleTexte: 14,
+            poidsTexte: FontWeight.w700,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -572,14 +596,14 @@ class _ConversationScaffoldState
               EdgeInsets.only(left: widget.showBack ? 0 : AppSizes.sm),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 19,
-                backgroundColor: couleur,
-                child: Text(initiale,
-                    style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white)),
+              AvatarProfil(
+                proprietaire: _proprietaireConversation(
+                    state.memos, widget.isResponsable, widget.preposeeId),
+                initiales: initiale,
+                rayon: 19,
+                couleurFond: couleur,
+                tailleTexte: 14,
+                poidsTexte: FontWeight.w700,
               ),
               const SizedBox(width: 10),
               Column(
@@ -736,14 +760,14 @@ class _ConversationTile extends StatelessWidget {
               horizontal: AppSizes.md, vertical: 10),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 27,
-                backgroundColor: couleur,
-                child: Text(initiale,
-                    style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white)),
+              AvatarProfil(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.employe, resume.employeeId),
+                initiales: initiale,
+                rayon: 27,
+                couleurFond: couleur,
+                tailleTexte: 18,
+                poidsTexte: FontWeight.w700,
               ),
               const SizedBox(width: 14),
               Expanded(

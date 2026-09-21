@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/message_semaine.dart';
 import '../providers/message_semaine_provider.dart'
     show getMessageAutomatique, messageSemaineNotifierProvider, messagesFete;
@@ -468,14 +470,14 @@ class _ActiveMessageCard extends StatelessWidget {
           const SizedBox(height: 18),
           Row(
             children: [
-              const CircleAvatar(
-                radius: 14,
-                backgroundColor: Color(0xFFEDEDFC),
-                child: Icon(
-                  Icons.person_outline_rounded,
-                  size: 16,
-                  color: AppColors.rouge,
-                ),
+              AvatarProfil(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.employe, message.creePar),
+                initiales: '',
+                icone: Icons.person_outline_rounded,
+                rayon: 14,
+                couleurFond: const Color(0xFFEDEDFC),
+                couleurTexte: AppColors.rouge,
               ),
               const SizedBox(width: 9),
               Expanded(

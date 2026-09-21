@@ -8,11 +8,19 @@ import '../providers/photo_profil_provider.dart';
 /// initiales. Tant que la photo charge, ou si elle échoue, les initiales restent
 /// affichées (jamais de trou ni d'erreur à l'écran).
 class AvatarProfil extends ConsumerWidget {
-  final ProprietairePhoto proprietaire;
+  /// À qui est l'avatar. `null` : pas de photo possible, seulement les initiales.
+  final ProprietairePhoto? proprietaire;
   final String initiales;
   final double rayon;
   final Color couleurFond;
   final Color couleurTexte;
+
+  /// Taille et graisse du texte des initiales (par défaut selon le rayon).
+  final double? tailleTexte;
+  final FontWeight poidsTexte;
+
+  /// Icône affichée à la place des initiales quand il n'y a pas de photo.
+  final IconData? icone;
 
   const AvatarProfil({
     super.key,
@@ -21,11 +29,16 @@ class AvatarProfil extends ConsumerWidget {
     this.rayon = 36,
     required this.couleurFond,
     this.couleurTexte = Colors.white,
+    this.tailleTexte,
+    this.poidsTexte = FontWeight.w800,
+    this.icone,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final octets = ref.watch(photoProfilProvider(proprietaire)).valueOrNull;
+    final p = proprietaire;
+    final octets =
+        p == null ? null : ref.watch(photoProfilProvider(p)).valueOrNull;
 
     return Semantics(
       label: octets == null ? 'Initiales' : 'Photo de profil',
@@ -33,14 +46,16 @@ class AvatarProfil extends ConsumerWidget {
         radius: rayon,
         backgroundColor: couleurFond,
         foregroundImage: octets == null ? null : MemoryImage(octets),
-        child: Text(
-          initiales.isEmpty ? '?' : initiales,
-          style: TextStyle(
-            color: couleurTexte,
-            fontSize: rayon * 0.6,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        child: icone != null
+            ? Icon(icone, size: rayon * 1.15, color: couleurTexte)
+            : Text(
+                initiales.isEmpty ? '?' : initiales,
+                style: TextStyle(
+                  color: couleurTexte,
+                  fontSize: tailleTexte ?? rayon * 0.6,
+                  fontWeight: poidsTexte,
+                ),
+              ),
       ),
     );
   }

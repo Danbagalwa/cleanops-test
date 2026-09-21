@@ -4,6 +4,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/demande_equipe.dart';
 import '../providers/demande_equipe_provider.dart';
 
@@ -161,16 +163,16 @@ class _DemandeCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.rouge.withValues(alpha: 0.12),
-                child: Text(
-                  nomComplet.isNotEmpty ? nomComplet[0].toUpperCase() : '?',
-                  style: const TextStyle(
-                      color: AppColors.rouge,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold),
-                ),
+              AvatarProfil(
+                proprietaire: ProprietairePhoto(
+                    TypeProprietairePhoto.employe, demande.employeeId),
+                initiales:
+                    nomComplet.isNotEmpty ? nomComplet[0].toUpperCase() : '?',
+                rayon: 16,
+                couleurFond: AppColors.rouge.withValues(alpha: 0.12),
+                couleurTexte: AppColors.rouge,
+                tailleTexte: 12,
+                poidsTexte: FontWeight.bold,
               ),
               const SizedBox(width: AppSizes.sm),
               Expanded(

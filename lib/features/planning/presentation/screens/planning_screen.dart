@@ -6,6 +6,8 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/widgets/error_widget.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../appartements/presentation/providers/appartements_provider.dart';
@@ -433,18 +435,15 @@ class _TeamEmployeeRow extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor:
-                        AppColors.rouge.withValues(alpha: 0.12),
-                    child: Text(
-                      '${employee.prenom.isNotEmpty ? employee.prenom[0] : ''}${employee.nom.isNotEmpty ? employee.nom[0] : ''}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.rouge,
-                      ),
-                    ),
+                  AvatarProfil(
+                    proprietaire: ProprietairePhoto.de(employee),
+                    initiales:
+                        '${employee.prenom.isNotEmpty ? employee.prenom[0] : ''}${employee.nom.isNotEmpty ? employee.nom[0] : ''}',
+                    rayon: 14,
+                    couleurFond: AppColors.rouge.withValues(alpha: 0.12),
+                    couleurTexte: AppColors.rouge,
+                    tailleTexte: 11,
+                    poidsTexte: FontWeight.bold,
                   ),
                   const SizedBox(width: 6),
                   Expanded(

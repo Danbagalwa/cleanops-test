@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../providers/auth_provider.dart';
 
 class ResidentHomeScreen extends ConsumerWidget {
@@ -46,7 +48,12 @@ class ResidentHomeScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Carte de bienvenue ──────────────────────────
-            _CarteAccueil(prenom: prenom, apt: apt),
+            _CarteAccueil(
+              prenom: prenom,
+              apt: apt,
+              proprietaire:
+                  employee == null ? null : ProprietairePhoto.de(employee),
+            ),
             const SizedBox(height: AppSizes.lg),
 
             // ── Infos appartement ───────────────────────────
@@ -95,8 +102,13 @@ class ResidentHomeScreen extends ConsumerWidget {
 class _CarteAccueil extends StatelessWidget {
   final String prenom;
   final String apt;
+  final ProprietairePhoto? proprietaire;
 
-  const _CarteAccueil({required this.prenom, required this.apt});
+  const _CarteAccueil({
+    required this.prenom,
+    required this.apt,
+    required this.proprietaire,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -119,22 +131,13 @@ class _CarteAccueil extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              prenom.isNotEmpty ? prenom[0].toUpperCase() : '?',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-              ),
-            ),
+          AvatarProfil(
+            proprietaire: proprietaire,
+            initiales: prenom.isNotEmpty ? prenom[0].toUpperCase() : '?',
+            rayon: 28,
+            couleurFond: Colors.white.withValues(alpha: 0.2),
+            tailleTexte: 24,
+            poidsTexte: FontWeight.w900,
           ),
           const SizedBox(width: AppSizes.md),
           Expanded(

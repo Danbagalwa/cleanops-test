@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/resident.dart';
 
 class ResidentListItem extends StatelessWidget {
@@ -41,6 +43,7 @@ class ResidentListItem extends StatelessWidget {
         child: Row(
           children: [
             _AvatarCircle(
+              residentId: resident.id,
               initiales: resident.initiales,
               isActif: resident.isActif,
               size: 30,
@@ -149,6 +152,7 @@ class ResidentListItem extends StatelessWidget {
         child: Row(
           children: [
             _AvatarCircle(
+              residentId: resident.id,
               initiales: resident.initiales,
               isActif: resident.isActif,
               size: 42,
@@ -222,12 +226,14 @@ class ResidentListItem extends StatelessWidget {
 // ── Sous-widgets ──────────────────────────────────────────
 
 class _AvatarCircle extends StatelessWidget {
+  final String residentId;
   final String initiales;
   final bool isActif;
   final double size;
   final double fontSize;
 
   const _AvatarCircle({
+    required this.residentId,
     required this.initiales,
     required this.isActif,
     required this.size,
@@ -237,22 +243,14 @@ class _AvatarCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isActif ? AppColors.rouge : AppColors.grisMedium;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initiales,
-        style: TextStyle(
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
+    return AvatarProfil(
+      proprietaire:
+          ProprietairePhoto(TypeProprietairePhoto.resident, residentId),
+      initiales: initiales,
+      rayon: size / 2,
+      couleurFond: color.withValues(alpha: 0.12),
+      couleurTexte: color,
+      tailleTexte: fontSize,
     );
   }
 }
