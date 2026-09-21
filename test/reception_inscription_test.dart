@@ -109,6 +109,14 @@ class _DepotPin implements ReceptionPinRepository {
   Future<List<ResidentPin>> residents() async => const [];
 
   @override
+  Future<bool> changerStatutApplication({
+    required String residentId,
+    required String auteurId,
+    required bool aApplication,
+  }) async =>
+      aApplication;
+
+  @override
   Future<PinGenere> genererPin({
     required String residentId,
     required String auteurId,

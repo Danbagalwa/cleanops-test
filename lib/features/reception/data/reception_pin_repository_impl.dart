@@ -26,6 +26,30 @@ class ReceptionPinRepositoryImpl implements ReceptionPinRepository {
   }
 
   @override
+  Future<bool> changerStatutApplication({
+    required String residentId,
+    required String auteurId,
+    required bool aApplication,
+  }) async {
+    const erreur = "Le statut n'a pas pu être modifié.";
+    try {
+      final data = await SupabaseService.client.rpc(
+        'reception_changer_statut_application',
+        params: {
+          'p_resident_id': residentId,
+          'p_auteur_id': auteurId,
+          'p_a_application': aApplication,
+        },
+      );
+      return (data as Map<String, dynamic>)['a_application'] as bool;
+    } on PostgrestException catch (e) {
+      throw ReceptionErreur(_message(e, erreur));
+    } catch (_) {
+      throw const ReceptionErreur(erreur);
+    }
+  }
+
+  @override
   Future<PinGenere> genererPin({
     required String residentId,
     required String auteurId,

@@ -69,6 +69,24 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
     });
   }
 
+  Future<void> _changerStatut(ResidentPin resident) async {
+    final change = await showDialog<bool>(
+      context: context,
+      builder: (_) => _StatutDialog(resident: resident),
+    );
+    if (change != true || !mounted) return;
+
+    ref.invalidate(receptionPinListeProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${resident.nomComplet} est maintenant '
+          "${resident.aApplication ? 'Sans app' : 'Inscrit'}.",
+        ),
+      ),
+    );
+  }
+
   Future<void> _lancer(ResidentPin resident) async {
     final pin = await showDialog<PinGenere>(
       context: context,
@@ -183,6 +201,7 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
             resident: r,
             isAlternate: i.isOdd,
             onPin: () => _lancer(r),
+            onStatut: () => _changerStatut(r),
           );
         }
 
@@ -282,7 +301,7 @@ class _ColumnHeader extends StatelessWidget {
           Expanded(child: Text('APPARTEMENT', style: labelStyle)),
           Expanded(child: Text('STATUT', style: labelStyle)),
           Expanded(child: Text('PIN', style: labelStyle)),
-          SizedBox(width: 56, child: Text('ACTIONS', style: labelStyle)),
+          SizedBox(width: 84, child: Text('ACTIONS', style: labelStyle)),
         ],
       ),
     );
@@ -455,16 +474,27 @@ class _PinRow extends StatelessWidget {
   final ResidentPin resident;
   final bool isAlternate;
   final VoidCallback onPin;
+  final VoidCallback onStatut;
 
   const _PinRow({
     super.key,
     required this.resident,
     required this.isAlternate,
     required this.onPin,
+    required this.onStatut,
   });
 
   String get _libelleAction =>
       resident.aPin ? 'Réinitialiser le PIN' : 'Générer le PIN';
+
+  Widget _statutAction() => _IconBtn(
+        icon: Icons.swap_horiz_rounded,
+        color: AppColors.grisDark,
+        tooltip: resident.aApplication
+            ? 'Marquer sans application'
+            : 'Marquer inscrit',
+        onTap: onStatut,
+      );
 
   Widget _action() => _IconBtn(
         icon: resident.aPin ? Icons.lock_reset_rounded : Icons.key_rounded,
@@ -535,10 +565,10 @@ class _PinRow extends StatelessWidget {
               ),
             ),
             SizedBox(
-              width: 56,
+              width: 84,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
-                children: [_action()],
+                children: [_statutAction(), _action()],
               ),
             ),
           ],
@@ -615,6 +645,7 @@ class _PinRow extends StatelessWidget {
                 ],
               ),
             ),
+            _statutAction(),
             _action(),
           ],
         ),
@@ -715,6 +746,114 @@ class _IconBtn extends StatelessWidget {
 // ══════════════════════════════════════════════════════════
 // CONFIRMATION, PUIS AFFICHAGE UNIQUE DU PIN
 // ══════════════════════════════════════════════════════════
+
+/// Confirmation du changement de statut : Inscrit (utilise l'application) ou
+/// Sans app. Explique ce que cela change avant d'agir. Ne touche ni au PIN, ni à
+/// l'état actif du résident, ni au planning.
+class _StatutDialog extends ConsumerStatefulWidget {
+  final ResidentPin resident;
+
+  const _StatutDialog({required this.resident});
+
+  @override
+  ConsumerState<_StatutDialog> createState() => _StatutDialogState();
+}
+
+class _StatutDialogState extends ConsumerState<_StatutDialog> {
+  bool _envoi = false;
+  String? _erreur;
+
+  Future<void> _confirmer() async {
+    final auteur = ref.read(employeeCourantProvider);
+    if (auteur == null) {
+      setState(() => _erreur = 'Votre session a expiré. Reconnectez-vous.');
+      return;
+    }
+
+    setState(() {
+      _envoi = true;
+      _erreur = null;
+    });
+
+    try {
+      await ref.read(receptionPinRepositoryProvider).changerStatutApplication(
+            residentId: widget.resident.residentId,
+            auteurId: auteur.id,
+            aApplication: !widget.resident.aApplication,
+          );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on ReceptionErreur catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _envoi = false;
+        _erreur = e.message;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.resident;
+    final versSansApp = r.aApplication;
+    final cible = versSansApp ? 'Sans app' : 'Inscrit';
+
+    return AlertDialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      ),
+      title: Text('Passer en « $cible »'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${r.nomComplet} · Apt ${r.numero}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: AppSizes.sm),
+            Text(
+              versSansApp
+                  ? "Il ne recevra plus les notifications de l'application. Il "
+                      "faudra le prévenir soi-même quand son ménage change "
+                      '(onglet « À aviser »).'
+                  : "Il recevra désormais les notifications dans l'application."
+                      '${r.aPin ? '' : " Pensez à lui générer un PIN pour qu'il "
+                          'puisse se connecter.'}',
+              style: const TextStyle(height: 1.4),
+            ),
+            const SizedBox(height: AppSizes.xs),
+            const Text(
+              'Son PIN et son planning ne changent pas.',
+              style: TextStyle(height: 1.4, color: AppColors.grisDark),
+            ),
+            if (_erreur != null) ...[
+              const SizedBox(height: AppSizes.sm),
+              Text(_erreur!, style: const TextStyle(color: AppColors.refus)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _envoi ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: _envoi ? null : _confirmer,
+          child: _envoi
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Confirmer'),
+        ),
+      ],
+    );
+  }
+}
 
 class _ConfirmationDialog extends ConsumerStatefulWidget {
   final ResidentPin resident;

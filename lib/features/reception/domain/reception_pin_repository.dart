@@ -7,6 +7,15 @@ import 'reception_pin_models.dart';
 abstract class ReceptionPinRepository {
   Future<List<ResidentPin>> residents();
 
+  /// Fait passer un résident de « Inscrit » à « Sans app » (ou inversement).
+  /// Ne touche ni au PIN, ni à l'état actif, ni au planning. Renvoie le nouveau
+  /// statut (`true` = Inscrit).
+  Future<bool> changerStatutApplication({
+    required String residentId,
+    required String auteurId,
+    required bool aApplication,
+  });
+
   /// Génère (ou réinitialise) le PIN et le renvoie UNE seule fois.
   Future<PinGenere> genererPin({
     required String residentId,

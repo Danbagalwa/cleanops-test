@@ -31,8 +31,10 @@ class _DepotSimule implements ReceptionPinRepository {
   final List<ResidentPin> lignes;
   Object? erreurListe;
   Object? erreurGeneration;
+  Object? erreurStatut;
   int chargements = 0;
   final generations = <_Generation>[];
+  final changements = <({String residentId, String auteurId, bool aApplication})>[];
 
   _DepotSimule(this.lignes);
 
@@ -40,7 +42,33 @@ class _DepotSimule implements ReceptionPinRepository {
   Future<List<ResidentPin>> residents() async {
     chargements++;
     if (erreurListe != null) throw erreurListe!;
-    return lignes;
+    return List.of(lignes);
+  }
+
+  @override
+  Future<bool> changerStatutApplication({
+    required String residentId,
+    required String auteurId,
+    required bool aApplication,
+  }) async {
+    if (erreurStatut != null) throw erreurStatut!;
+    changements.add((
+      residentId: residentId,
+      auteurId: auteurId,
+      aApplication: aApplication,
+    ));
+    final i = lignes.indexWhere((l) => l.residentId == residentId);
+    final l = lignes[i];
+    lignes[i] = ResidentPin(
+      residentId: l.residentId,
+      prenom: l.prenom,
+      nom: l.nom,
+      appartementId: l.appartementId,
+      numero: l.numero,
+      aApplication: aApplication,
+      aPin: l.aPin,
+    );
+    return aApplication;
   }
 
   @override
@@ -261,6 +289,143 @@ void main() {
       expect(find.text('PIN non défini'), findsNWidgets(2));
       expect(find.byTooltip('Générer le PIN'), findsNWidgets(2));
       expect(find.byTooltip('Réinitialiser le PIN'), findsOneWidget);
+    });
+  });
+
+  group('Changer le statut (Inscrit / Sans app)', () {
+    testWidgets('une action de statut par ligne, selon le statut actuel',
+        (tester) async {
+      await _afficher(tester, _DepotSimule(_jeu()));
+
+      // Jeanne et Paul sont inscrits, Marie est sans app.
+      expect(find.byTooltip('Marquer sans application'), findsNWidgets(2));
+      expect(find.byTooltip('Marquer inscrit'), findsOneWidget);
+    });
+
+    testWidgets('confirmation avant d\'agir, et rien n\'est envoyé avant',
+        (tester) async {
+      final depot = _DepotSimule(_jeu());
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Marquer sans application').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Passer en « Sans app »'), findsOneWidget);
+      expect(find.text('Jeanne Tremblay · Apt 101'), findsOneWidget);
+      expect(find.textContaining("ne recevra plus les notifications"),
+          findsOneWidget);
+      expect(find.textContaining('À aviser'), findsOneWidget);
+      expect(find.text('Son PIN et son planning ne changent pas.'),
+          findsOneWidget);
+      expect(depot.changements, isEmpty);
+    });
+
+    testWidgets('Inscrit → Sans app : la valeur envoyée est l\'inverse',
+        (tester) async {
+      final depot = _DepotSimule(_jeu());
+      await _afficher(tester, depot);
+      final avant = depot.chargements;
+
+      await tester.tap(find.byTooltip('Marquer sans application').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmer'));
+      await tester.pumpAndSettle();
+
+      expect(depot.changements, hasLength(1));
+      expect(depot.changements.single.residentId, 'r1');
+      expect(depot.changements.single.auteurId, 'r1');
+      expect(depot.changements.single.aApplication, isFalse);
+      expect(find.text('Passer en « Sans app »'), findsNothing);
+      expect(find.text('Jeanne Tremblay est maintenant Sans app.'),
+          findsOneWidget);
+      expect(depot.chargements, greaterThan(avant));
+      expect(find.text('Sans app'), findsNWidgets(2),
+          reason: 'le tableau reflète le nouveau statut');
+    });
+
+    testWidgets('Sans app → Inscrit, sans PIN : on pense au PIN',
+        (tester) async {
+      final depot = _DepotSimule(_jeu());
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Marquer inscrit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Passer en « Inscrit »'), findsOneWidget);
+      expect(find.textContaining("recevra désormais les notifications"),
+          findsOneWidget);
+      expect(find.textContaining('générer un PIN'), findsOneWidget);
+
+      await tester.tap(find.text('Confirmer'));
+      await tester.pumpAndSettle();
+
+      expect(depot.changements.single.residentId, 'r3');
+      expect(depot.changements.single.aApplication, isTrue);
+      expect(find.text('Marie Roy est maintenant Inscrit.'), findsOneWidget);
+    });
+
+    testWidgets('Sans app → Inscrit, avec un PIN : aucun rappel de PIN',
+        (tester) async {
+      final liste = [_res('r9', 'Paul', 'Roy', '909', app: false, pin: true)];
+      await _afficher(tester, _DepotSimule(liste));
+
+      await tester.tap(find.byTooltip('Marquer inscrit'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('générer un PIN'), findsNothing);
+    });
+
+    testWidgets('annuler : rien n\'est modifié', (tester) async {
+      final depot = _DepotSimule(_jeu());
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Marquer sans application').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+
+      expect(depot.changements, isEmpty);
+      expect(find.textContaining('est maintenant'), findsNothing);
+      expect(depot.chargements, 1);
+    });
+
+    testWidgets('une erreur du serveur s\'affiche, rien ne change',
+        (tester) async {
+      final depot = _DepotSimule(_jeu())
+        ..erreurStatut = const ReceptionErreur('Le résident a déjà ce statut.');
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Marquer sans application').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Le résident a déjà ce statut.'), findsOneWidget);
+      expect(find.text('Passer en « Sans app »'), findsOneWidget);
+      expect(find.textContaining('est maintenant'), findsNothing);
+    });
+
+    testWidgets('changer le statut ne génère aucun PIN', (tester) async {
+      final depot = _DepotSimule(_jeu());
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Marquer inscrit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirmer'));
+      await tester.pumpAndSettle();
+
+      expect(depot.generations, isEmpty);
+      expect(find.text('PIN généré'), findsNothing);
+    });
+
+    testWidgets('sur mobile aussi', (tester) async {
+      await _afficher(tester, _DepotSimule(_jeu()),
+          taille: const Size(420, 900));
+
+      expect(find.byTooltip('Marquer sans application'), findsNWidgets(2));
+      expect(find.byTooltip('Marquer inscrit'), findsOneWidget);
+      // Et l'action du PIN reste présente à côté.
+      expect(find.byTooltip('Générer le PIN'), findsNWidgets(2));
     });
   });
 
