@@ -28,6 +28,7 @@ import '../../features/resident_espace/presentation/screens/demandes_residents_r
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/reception/presentation/screens/reception_dashboard_screen.dart';
+import '../../features/reception/presentation/screens/reception_equipe_screen.dart';
 import '../../features/reception/presentation/screens/reception_fiche_screen.dart';
 import '../../features/reception/presentation/screens/reception_residents_screen.dart';
 import '../../features/reception/presentation/screens/reception_section_screen.dart';
@@ -364,11 +365,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           for (final section in receptionSections)
             GoRoute(
               path: section.route,
-              // Section Résidents construite ; les autres sont provisoires.
-              builder: (context, state) => section.route ==
-                      receptionResidentsRoute
-                  ? const ReceptionResidentsScreen()
-                  : ReceptionSectionScreen(section: section),
+              // Sections construites : Résidents et Équipe ; les autres sont
+              // provisoires.
+              builder: (context, state) => switch (section.route) {
+                receptionResidentsRoute => const ReceptionResidentsScreen(),
+                receptionEquipeRoute => const ReceptionEquipeScreen(),
+                _ => ReceptionSectionScreen(section: section),
+              },
             ),
           GoRoute(
             path: receptionFichePattern,

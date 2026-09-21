@@ -80,6 +80,9 @@ const List<ReceptionSection> receptionSections = [
 /// Route de la section Résidents (recherche).
 const String receptionResidentsRoute = '/reception/residents';
 
+/// Route de la section Équipe (présence et horaire du jour).
+const String receptionEquipeRoute = '/reception/equipe';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 
