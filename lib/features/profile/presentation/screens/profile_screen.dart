@@ -7,6 +7,8 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/photo_profil_editeur.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -300,17 +302,12 @@ class _ProfileHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 31,
-            backgroundColor: Colors.white.withValues(alpha: .18),
-            child: Text(
-              initials,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+          // Photo de profil (ou initiales), modifiable : réduite avant l'envoi.
+          PhotoProfilEditeur(
+            proprietaire: ProprietairePhoto.de(employee),
+            initiales: initials,
+            rayon: 31,
+            couleurFond: Colors.white.withValues(alpha: .18),
           ),
           const SizedBox(width: 16),
           Expanded(

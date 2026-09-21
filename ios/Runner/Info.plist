@@ -78,6 +78,11 @@
     </dict>
 </array>
 
+<key>NSPhotoLibraryUsageDescription</key>
+<string>CleanOps a besoin d'accéder à vos photos pour choisir votre photo de profil.</string>
+<key>NSCameraUsageDescription</key>
+<string>CleanOps a besoin de l'appareil photo pour prendre votre photo de profil.</string>
+
 <key>FlutterDeepLinkingEnabled</key>
 <true/>
 </dict>

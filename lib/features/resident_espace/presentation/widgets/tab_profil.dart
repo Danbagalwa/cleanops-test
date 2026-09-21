@@ -6,6 +6,8 @@ import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../features/auth/domain/entities/employee.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/photo_profil_editeur.dart';
 
 class TabProfil extends ConsumerWidget {
   final Employee? employee;
@@ -43,24 +45,33 @@ class TabProfil extends ConsumerWidget {
             ),
             child: Column(
               children: [
-                // Avatar
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: const BoxDecoration(
-                    color: AppColors.rouge,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    initiales.isNotEmpty ? initiales : '?',
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
+                // Avatar : photo de profil du résident (réduite avant l'envoi),
+                // ou ses initiales.
+                if (employee != null)
+                  PhotoProfilEditeur(
+                    proprietaire: ProprietairePhoto.de(employee!),
+                    initiales: initiales.isNotEmpty ? initiales : '?',
+                    rayon: 36,
+                    couleurFond: AppColors.rouge,
+                  )
+                else
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: const BoxDecoration(
+                      color: AppColors.rouge,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      '?',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(height: AppSizes.md),
                 Text(
                   '$prenom $nom',
