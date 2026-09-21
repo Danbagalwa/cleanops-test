@@ -86,6 +86,9 @@ const String receptionEquipeRoute = '/reception/equipe';
 /// Route de la section À aviser (résidents sans application à prévenir).
 const String receptionAAviserRoute = '/reception/a-aviser';
 
+/// Route de la section PIN (générer ou réinitialiser le PIN d'un résident).
+const String receptionPinRoute = '/reception/pin';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 

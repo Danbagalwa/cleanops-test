@@ -31,6 +31,7 @@ import '../../features/reception/presentation/screens/reception_dashboard_screen
 import '../../features/reception/presentation/screens/reception_a_aviser_screen.dart';
 import '../../features/reception/presentation/screens/reception_equipe_screen.dart';
 import '../../features/reception/presentation/screens/reception_fiche_screen.dart';
+import '../../features/reception/presentation/screens/reception_pin_screen.dart';
 import '../../features/reception/presentation/screens/reception_residents_screen.dart';
 import '../../features/reception/presentation/screens/reception_section_screen.dart';
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
@@ -372,6 +373,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 receptionResidentsRoute => const ReceptionResidentsScreen(),
                 receptionEquipeRoute => const ReceptionEquipeScreen(),
                 receptionAAviserRoute => const ReceptionAAviserScreen(),
+                receptionPinRoute => const ReceptionPinScreen(),
                 _ => ReceptionSectionScreen(section: section),
               },
             ),
