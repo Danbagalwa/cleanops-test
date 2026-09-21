@@ -3,10 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../messages_reception_responsable/presentation/providers/messages_reception_responsable_provider.dart';
+import '../../../messages_reception_responsable/presentation/widgets/messages_reception_section.dart';
 import '../../domain/entities/demande_resident.dart';
 import '../providers/demandes_responsable_provider.dart';
 
 enum _StatutFiltre { tous, enAttente, repondues, resolues }
+
+/// Les deux listes de l'écran : les demandes venues du portail des résidents et
+/// les messages que la Réception transmet au responsable.
+enum _Onglet { demandes, messages }
 
 String _typeLabelFor(TypeDemande t) => switch (t) {
       TypeDemande.reprogrammer => 'Reprogrammer',
@@ -25,6 +31,7 @@ class DemandesResidentsResponsableScreen extends ConsumerStatefulWidget {
 
 class _DemandesResidentsResponsableScreenState
     extends ConsumerState<DemandesResidentsResponsableScreen> {
+  _Onglet _onglet = _Onglet.demandes;
   _StatutFiltre _statutFiltre = _StatutFiltre.tous;
   TypeDemande? _typeFiltre;
 
@@ -85,7 +92,7 @@ class _DemandesResidentsResponsableScreenState
           ],
         ),
         actions: [
-          if (state.isLoading)
+          if (state.isLoading && _onglet == _Onglet.demandes)
             const Padding(
               padding: EdgeInsets.all(14),
               child: SizedBox(
@@ -99,12 +106,22 @@ class _DemandesResidentsResponsableScreenState
             IconButton(
               icon: const Icon(Icons.refresh_rounded, color: Colors.white),
               tooltip: 'Actualiser',
-              onPressed: () =>
-                  ref.read(demandesResponsableProvider.notifier).charger(),
+              onPressed: () => _onglet == _Onglet.messages
+                  ? ref.invalidate(messagesReceptionResponsableProvider)
+                  : ref.read(demandesResponsableProvider.notifier).charger(),
             ),
         ],
       ),
       body: Column(
+        children: [
+          _OngletBar(
+            onglet: _onglet,
+            onChanged: (o) => setState(() => _onglet = o),
+          ),
+          Expanded(
+            child: _onglet == _Onglet.messages
+                ? const MessagesReceptionSection()
+                : Column(
         children: [
           _FiltreBar(
             statutFiltre: _statutFiltre,
@@ -154,6 +171,114 @@ class _DemandesResidentsResponsableScreenState
               ),
             ),
         ],
+      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Onglets : demandes des résidents / messages de la réception ──
+
+class _OngletBar extends ConsumerWidget {
+  final _Onglet onglet;
+  final ValueChanged<_Onglet> onChanged;
+
+  const _OngletBar({required this.onglet, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enAttente = ref.watch(messagesReceptionEnAttenteProvider);
+
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(
+          AppSizes.md, AppSizes.sm, AppSizes.md, 0),
+      child: Row(
+        children: [
+          _OngletTab(
+            label: 'Demandes des résidents',
+            selected: onglet == _Onglet.demandes,
+            onTap: () => onChanged(_Onglet.demandes),
+          ),
+          const SizedBox(width: AppSizes.sm),
+          _OngletTab(
+            label: 'Messages de la réception',
+            compteur: enAttente,
+            selected: onglet == _Onglet.messages,
+            onTap: () => onChanged(_Onglet.messages),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OngletTab extends StatelessWidget {
+  final String label;
+  final int compteur;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _OngletTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.compteur = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Flexible(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? AppColors.rouge : Colors.transparent,
+                width: 2.5,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? AppColors.rouge : AppColors.grisDark,
+                  ),
+                ),
+              ),
+              if (compteur > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.rouge,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$compteur',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
