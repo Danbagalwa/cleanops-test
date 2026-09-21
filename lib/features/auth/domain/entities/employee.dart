@@ -27,6 +27,10 @@ extension RoleTypeExtension on RoleType {
     }
   }
 
+  /// Libellé à AFFICHER. `label` sert aussi de valeur en base (« Reception »,
+  /// sans accent) : on ne le modifie pas, on affiche celui-ci.
+  String get libelleAffiche => this == RoleType.reception ? 'Réception' : label;
+
   /// Profil d'accès du rôle.
   ///
   /// Admin, Direction et SuperviseurMenage restent dans « responsable » : leur

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
+import '../../../../core/widgets/dashboard_account_actions.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../reception_sections.dart';
 
@@ -39,6 +40,15 @@ class ReceptionDashboardScreen extends ConsumerWidget {
             ),
           ],
         ),
+        // Profil et déconnexion, comme pour les autres utilisateurs. Pas de
+        // notifications : la Réception n'a pas accès à cet écran.
+        actions: const [
+          DashboardAccountActions(
+            profilRoute: receptionProfilRoute,
+            avecNotifications: false,
+          ),
+          SizedBox(width: AppSizes.md),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSizes.lg),

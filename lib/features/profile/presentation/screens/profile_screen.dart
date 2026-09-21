@@ -7,6 +7,8 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../reception/presentation/reception_sections.dart'
+    show receptionAccueilRoute;
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -14,6 +16,17 @@ class ProfileScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
+
+/// Accueil vers lequel revenir depuis « Mon profil », selon le profil d'accès.
+/// `switch` exhaustif : un nouveau profil oblige à choisir sa destination, et la
+/// Réception ne retombe jamais sur l'accueil d'un autre profil (elle n'y a pas
+/// accès).
+String _accueilDe(Employee employee) => switch (employee.profil) {
+      ProfilAcces.reception => receptionAccueilRoute,
+      ProfilAcces.responsable => AppRoutes.employerDashboard,
+      ProfilAcces.preposee => AppRoutes.employeeDashboard,
+      ProfilAcces.resident => AppRoutes.residentDashboard,
+    };
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -55,11 +68,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         scrolledUnderElevation: 1,
         leading: IconButton(
           tooltip: 'Retour',
-          onPressed: () => context.backOrHome(
-            employee.isResponsable
-                ? AppRoutes.employerDashboard
-                : AppRoutes.employeeDashboard,
-          ),
+          onPressed: () => context.backOrHome(_accueilDe(employee)),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: const Text(
@@ -142,7 +151,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         const SizedBox(height: 18),
                         _ReadOnlyField(
                           label: 'Rôle',
-                          value: employee.role.label,
+                          value: employee.role.libelleAffiche,
                           icon: Icons.admin_panel_settings_outlined,
                         ),
                         if (employee.numeroPointeuse?.isNotEmpty ?? false) ...[
@@ -331,7 +340,7 @@ class _ProfileHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  employee.role.label,
+                  employee.role.libelleAffiche,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: .75),
                     fontSize: 13,

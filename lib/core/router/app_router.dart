@@ -380,6 +380,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               },
             ),
           GoRoute(
+            path: receptionProfilRoute,
+            builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
             path: receptionFichePattern,
             builder: (context, state) => ReceptionFicheScreen(
               appartementId: state.pathParameters['appartementId'] ?? '',

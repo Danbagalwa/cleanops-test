@@ -8,30 +8,43 @@ import '../constants/app_colors.dart';
 import '../router/app_router.dart';
 
 class DashboardAccountActions extends ConsumerWidget {
-  const DashboardAccountActions({super.key});
+  /// Route de l'écran « Mon profil » de ce profil d'accès.
+  final String profilRoute;
+
+  /// Affiche l'icône des notifications. La Réception n'en a pas : elle n'accède
+  /// pas à cet écran.
+  final bool avecNotifications;
+
+  const DashboardAccountActions({
+    super.key,
+    this.profilRoute = AppRoutes.profil,
+    this.avecNotifications = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          tooltip: 'Notifications',
-          onPressed: () => context.go(AppRoutes.notifications),
-          style: IconButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: Colors.white.withValues(alpha: .14),
-            hoverColor: Colors.white.withValues(alpha: .24),
-            side: BorderSide(
-              color: Colors.white.withValues(alpha: .28),
+        if (avecNotifications) ...[
+          IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.go(AppRoutes.notifications),
+            style: IconButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: Colors.white.withValues(alpha: .14),
+              hoverColor: Colors.white.withValues(alpha: .24),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: .28),
+              ),
             ),
+            icon: const NotificationBadgeIcon(color: Colors.white),
           ),
-          icon: const NotificationBadgeIcon(color: Colors.white),
-        ),
-        const SizedBox(width: 6),
+          const SizedBox(width: 6),
+        ],
         IconButton(
           tooltip: 'Mon profil',
-          onPressed: () => context.go(AppRoutes.profil),
+          onPressed: () => context.go(profilRoute),
           style: IconButton.styleFrom(
             foregroundColor: Colors.white,
             backgroundColor: Colors.white.withValues(alpha: .14),

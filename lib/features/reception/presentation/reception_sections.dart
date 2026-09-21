@@ -92,6 +92,11 @@ const String receptionPinRoute = '/reception/pin';
 /// Route de la section Messages transmis (lecture seule).
 const String receptionMessagesRoute = '/reception/messages';
 
+/// Route de « Mon profil » de la Réception. Sous `/reception/`, donc dans le
+/// périmètre que le routeur lui autorise (`estRouteReception`). Ce n'est PAS une
+/// des 5 sections : elle n'apparaît ni dans le menu ni sur le tableau de bord.
+const String receptionProfilRoute = '/reception/profil';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 
