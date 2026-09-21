@@ -89,6 +89,9 @@ const String receptionAAviserRoute = '/reception/a-aviser';
 /// Route de la section PIN (générer ou réinitialiser le PIN d'un résident).
 const String receptionPinRoute = '/reception/pin';
 
+/// Route de la section Messages transmis (lecture seule).
+const String receptionMessagesRoute = '/reception/messages';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 
