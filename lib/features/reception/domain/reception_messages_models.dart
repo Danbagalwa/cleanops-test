@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'reception_models.dart' show NatureDemande;
 
 /// Statut d'un message transmis à l'administration. Trois valeurs seulement :
 /// aucun statut « Traitée ».
@@ -19,6 +20,15 @@ enum StatutMessage {
         StatutMessage.repondue => 'Répondue',
         StatutMessage.resolue => 'Résolue',
       };
+
+  /// Ce que le statut veut dire pour la Réception : de quoi répondre
+  /// honnêtement à un résident qui rappelle.
+  String get signification => switch (this) {
+        StatutMessage.enAttente => "Personne n'a encore traité cette demande.",
+        StatutMessage.repondue =>
+          "Une réponse a été donnée, mais l'horaire n'a pas changé.",
+        StatutMessage.resolue => "L'horaire a été modifié.",
+      };
 }
 
 /// Un message envoyé par la Réception à l'administration. Lecture seule.
@@ -26,6 +36,9 @@ class MessageTransmis {
   final String id;
   final String appartementId;
   final String numero;
+
+  /// Nature de la demande du résident (annulation, reprogrammation, autre).
+  final NatureDemande nature;
   final String message;
   final String auteurPrenom;
 
@@ -50,6 +63,7 @@ class MessageTransmis {
     required this.auteurPrenom,
     required this.statut,
     required this.dateCreation,
+    this.nature = NatureDemande.autre,
     this.transmisEmploye = false,
     this.employePrenom,
     this.reponse,
@@ -65,6 +79,10 @@ class MessageTransmis {
       id: json['id'] as String,
       appartementId: json['appartement_id'] as String,
       numero: json['numero'] as String,
+      // Les messages d'avant la nature de la demande valent « Autre ».
+      nature: json['nature'] == null
+          ? NatureDemande.autre
+          : NatureDemande.fromCode(json['nature'] as String),
       message: json['message'] as String,
       auteurPrenom: json['auteur_prenom'] as String? ?? '',
       transmisEmploye: json['transmis_employe'] as bool? ?? false,

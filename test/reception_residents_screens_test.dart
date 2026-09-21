@@ -27,7 +27,10 @@ class _EnvoiRecu {
   final String message;
   final bool transmettre;
 
-  _EnvoiRecu(this.appartementId, this.auteurId, this.message, this.transmettre);
+  final NatureDemande nature;
+
+  _EnvoiRecu(this.appartementId, this.auteurId, this.message, this.transmettre,
+      this.nature);
 }
 
 class _DepotSimule implements ReceptionResidentsRepository {
@@ -60,11 +63,13 @@ class _DepotSimule implements ReceptionResidentsRepository {
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,
+    required NatureDemande nature,
     required String message,
     required bool transmettreEmploye,
   }) async {
     if (erreurEnvoi != null) throw erreurEnvoi!;
-    envois.add(_EnvoiRecu(appartementId, auteurId, message, transmettreEmploye));
+    envois.add(
+        _EnvoiRecu(appartementId, auteurId, message, transmettreEmploye, nature));
   }
 }
 
@@ -352,6 +357,7 @@ void main() {
         expect(find.text('Jeanne Tremblay · Apt 101'), findsOneWidget);
         expect(find.text('Message à l\'administration'), findsOneWidget);
 
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Reprogrammation'));
         await tester.enterText(
           find.descendant(
               of: find.byType(Dialog), matching: find.byType(TextField)),
@@ -364,6 +370,7 @@ void main() {
         expect(depot.envois, hasLength(1));
         expect(depot.envois.single.appartementId, 'a1');
         expect(depot.envois.single.auteurId, 'r1');
+        expect(depot.envois.single.nature, NatureDemande.reprogrammation);
         expect(depot.envois.single.message, 'Prévenir avant de passer');
         expect(find.text('Message à l\'administration'), findsNothing);
       });
@@ -439,6 +446,13 @@ void main() {
           matching: find.byType(TextField),
         );
 
+    Future<void> choisirNature(WidgetTester tester, String libelle) async {
+      final chip = find.widgetWithText(ChoiceChip, libelle);
+      await tester.ensureVisible(chip);
+      await tester.tap(chip);
+      await tester.pump();
+    }
+
     testWidgets('« Envoyer » est désactivé tant que le message est vide',
         (tester) async {
       await _afficher(tester, _DepotSimule(ficheRenvoyee: _fiche()),
@@ -447,6 +461,9 @@ void main() {
       FilledButton envoyer() => tester.widget<FilledButton>(
           find.widgetWithText(FilledButton, 'Envoyer'));
       expect(envoyer().onPressed, isNull);
+
+      await choisirNature(tester, 'Annulation');
+      expect(envoyer().onPressed, isNull, reason: 'la nature seule ne suffit pas');
 
       await tester.enterText(champMessage(), '   ');
       await tester.pump();
@@ -457,10 +474,48 @@ void main() {
       expect(envoyer().onPressed, isNotNull);
     });
 
+    testWidgets('la nature de la demande est obligatoire', (tester) async {
+      await _afficher(tester, _DepotSimule(ficheRenvoyee: _fiche()),
+          initiale: receptionFicheRoute('a1'));
+
+      expect(find.text('Nature de la demande'), findsOneWidget);
+      for (final n in ['Annulation', 'Reprogrammation', 'Autre demande']) {
+        expect(find.widgetWithText(ChoiceChip, n), findsOneWidget, reason: n);
+      }
+
+      await tester.enterText(champMessage(), 'Bonjour');
+      await tester.pump();
+
+      final envoyer = tester.widget<FilledButton>(
+          find.widgetWithText(FilledButton, 'Envoyer'));
+      expect(envoyer.onPressed, isNull,
+          reason: 'un message sans nature ne part pas');
+    });
+
+    testWidgets('la nature choisie est envoyée, puis remise à zéro',
+        (tester) async {
+      final depot = _DepotSimule(ficheRenvoyee: _fiche());
+      await _afficher(tester, depot, initiale: receptionFicheRoute('a1'));
+
+      await choisirNature(tester, 'Annulation');
+      await tester.enterText(champMessage(), 'Annuler jeudi');
+      await tester.pump();
+      await tester.ensureVisible(find.text('Envoyer'));
+      await tester.tap(find.text('Envoyer'));
+      await tester.pumpAndSettle();
+
+      expect(depot.envois.single.nature, NatureDemande.annulation);
+
+      final chip = tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Annulation'));
+      expect(chip.selected, isFalse, reason: 'prêt pour la demande suivante');
+    });
+
     testWidgets('envoi simple : la case reste décochée', (tester) async {
       final depot = _DepotSimule(ficheRenvoyee: _fiche());
       await _afficher(tester, depot, initiale: receptionFicheRoute('a1'));
 
+      await choisirNature(tester, 'Autre demande');
       await tester.enterText(champMessage(), '  Fuite dans la salle de bain  ');
       await tester.pump();
       await tester.ensureVisible(find.text('Envoyer'));
@@ -482,6 +537,7 @@ void main() {
 
       expect(find.text('Employé concerné : Essie'), findsOneWidget);
 
+      await choisirNature(tester, 'Reprogrammation');
       await tester.enterText(champMessage(), 'Merci de passer plus tôt');
       await tester.ensureVisible(find.byType(CheckboxListTile));
       await tester.tap(find.byType(CheckboxListTile));
@@ -509,6 +565,7 @@ void main() {
         ..erreurEnvoi = const ReceptionErreur('Auteur invalide ou inactif.');
       await _afficher(tester, depot, initiale: receptionFicheRoute('a1'));
 
+      await choisirNature(tester, 'Autre demande');
       await tester.enterText(champMessage(), 'Bonjour');
       await tester.pump();
       await tester.ensureVisible(find.text('Envoyer'));

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cleanops/features/reception/domain/reception_messages_models.dart';
+import 'package:cleanops/features/reception/domain/reception_models.dart' show NatureDemande;
 import 'package:cleanops/features/reception/domain/reception_messages_repository.dart';
 import 'package:cleanops/features/reception/domain/reception_residents_repository.dart'
     show ReceptionErreur;
@@ -30,6 +31,7 @@ MessageTransmis _msg(
   StatutMessage statut = StatutMessage.enAttente,
   DateTime? creation,
   bool transmis = false,
+  NatureDemande nature = NatureDemande.autre,
   String? employe,
   String? reponse,
   DateTime? dateReponse,
@@ -44,6 +46,7 @@ MessageTransmis _msg(
       statut: statut,
       dateCreation: creation ?? DateTime(2026, 9, 21, 9, 5),
       transmisEmploye: transmis,
+      nature: nature,
       employePrenom: employe,
       reponse: reponse,
       dateReponse: dateReponse,
@@ -52,8 +55,10 @@ MessageTransmis _msg(
 
 List<MessageTransmis> _jeu() => [
       _msg('1', '101', 'Fuite dans la salle de bain',
+          nature: NatureDemande.annulation,
           creation: DateTime(2026, 9, 21, 14, 30)),
       _msg('2', '202', 'Prévenir avant de passer',
+          nature: NatureDemande.reprogrammation,
           statut: StatutMessage.repondue,
           transmis: true,
           employe: 'Essie',
@@ -147,6 +152,40 @@ void main() {
       );
     });
 
+    test('ce que chaque statut signifie pour la Réception', () {
+      expect(StatutMessage.enAttente.signification,
+          "Personne n'a encore traité cette demande.");
+      expect(StatutMessage.repondue.signification,
+          "Une réponse a été donnée, mais l'horaire n'a pas changé.");
+      expect(StatutMessage.resolue.signification, "L'horaire a été modifié.");
+    });
+
+    test('la nature de la demande vient du serveur', () {
+      MessageTransmis avec(Object? nature) => MessageTransmis.fromJson({
+            'id': 'x',
+            'appartement_id': 'a',
+            'numero': '1',
+            'nature': nature,
+            'message': 'm',
+            'statut': 'EnAttente',
+            'date_creation': '2026-09-21T09:05:00',
+          });
+
+      expect(avec('Annulation').nature, NatureDemande.annulation);
+      expect(avec('Reprogrammation').nature, NatureDemande.reprogrammation);
+      expect(avec('Autre').nature, NatureDemande.autre);
+      expect(avec(null).nature, NatureDemande.autre,
+          reason: 'les messages d\'avant la nature valent « Autre »');
+      expect(() => avec('Inconnue'), throwsFormatException);
+    });
+
+    test('valeurs envoyées au serveur pour la nature', () {
+      expect(NatureDemande.annulation.code, 'Annulation');
+      expect(NatureDemande.reprogrammation.code, 'Reprogrammation');
+      expect(NatureDemande.autre.code, 'Autre');
+      expect(NatureDemande.autre.libelle, 'Autre demande');
+    });
+
     test('un statut inconnu (dont « Traitee ») est refusé', () {
       expect(() => StatutMessage.fromCode('Traitee'), throwsFormatException);
     });
@@ -156,13 +195,21 @@ void main() {
     testWidgets('s\'ouvre directement sur le tableau', (tester) async {
       await _afficher(tester, _DepotSimule(_jeu()));
 
-      for (final t in ['APPARTEMENT', 'MESSAGE', 'ENVOYÉ', 'STATUT', 'ACTIONS']) {
+      for (final t in ['APPARTEMENT', 'NATURE', 'MESSAGE', 'ENVOYÉ', 'STATUT', 'ACTIONS']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
       expect(find.text('Messages transmis  (3)'), findsOneWidget);
       expect(find.text('Apt 101'), findsOneWidget);
       expect(find.text('Fuite dans la salle de bain'), findsOneWidget);
       expect(find.text('21/09/2026 14:30'), findsOneWidget);
+    });
+
+    testWidgets('la nature de chaque demande s\'affiche', (tester) async {
+      await _afficher(tester, _DepotSimule(_jeu()));
+
+      expect(find.text('Annulation'), findsOneWidget);
+      expect(find.text('Reprogrammation'), findsOneWidget);
+      expect(find.text('Autre demande'), findsOneWidget);
     });
 
     testWidgets('les trois statuts s\'affichent', (tester) async {
@@ -286,7 +333,7 @@ void main() {
           taille: const Size(420, 900));
 
       expect(find.text('APPARTEMENT'), findsNothing);
-      expect(find.text('Apt 101'), findsOneWidget);
+      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
       expect(find.text('Fuite dans la salle de bain'), findsOneWidget);
       expect(find.byTooltip('Voir le message'), findsNWidgets(3));
     });
@@ -303,9 +350,10 @@ void main() {
       expect(find.text('Envoyé le 21/09/2026 14:30 par Receptioniste'),
           findsOneWidget);
       expect(find.text('Votre message'), findsOneWidget);
-      expect(find.text("En attente d'une réponse de l'administration."),
+      expect(find.text('Nature : Annulation'), findsOneWidget);
+      expect(find.text("Personne n'a encore traité cette demande."),
           findsOneWidget);
-      expect(find.textContaining("Réponse de l'administration"), findsNothing);
+      expect(find.text('Réponse'), findsNothing);
     });
 
     testWidgets('répondue : la réponse et l\'employé destinataire',
@@ -316,8 +364,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text("Transmis aussi à l'employé : Essie."), findsOneWidget);
-      expect(find.text("Réponse de l'administration · 21/09/2026 15:00"),
-          findsOneWidget);
+      expect(find.text('Nature : Reprogrammation'), findsOneWidget);
+      expect(
+        find.text("Une réponse a été donnée, mais l'horaire n'a pas changé."),
+        findsOneWidget,
+      );
+      expect(find.text('Réponse · 21/09/2026 15:00'), findsOneWidget);
       expect(find.text('Bien reçu, nous passons demain.'), findsOneWidget);
       expect(find.textContaining('Résolue le'), findsNothing);
     });
@@ -331,6 +383,8 @@ void main() {
       expect(find.text('Une clé de remplacement a été remise.'),
           findsOneWidget);
       expect(find.text('Résolue le 20/09/2026 16:45.'), findsOneWidget);
+      expect(find.text("L'horaire a été modifié."), findsOneWidget);
+      expect(find.text('Nature : Autre demande'), findsOneWidget);
     });
 
     testWidgets('un message non transmis à l\'employé ne le mentionne pas',

@@ -273,6 +273,7 @@ class _ColumnHeader extends StatelessWidget {
         children: [
           SizedBox(width: 30 + AppSizes.sm),
           Expanded(child: Text('APPARTEMENT', style: labelStyle)),
+          Expanded(flex: 2, child: Text('NATURE', style: labelStyle)),
           Expanded(flex: 4, child: Text('MESSAGE', style: labelStyle)),
           Expanded(flex: 2, child: Text('ENVOYÉ', style: labelStyle)),
           Expanded(flex: 2, child: Text('STATUT', style: labelStyle)),
@@ -498,6 +499,16 @@ class _MessageRow extends StatelessWidget {
                 ),
               ),
               Expanded(
+                flex: 2,
+                child: Text(
+                  message.nature.libelle,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.grisText,
+                  ),
+                ),
+              ),
+              Expanded(
                 flex: 4,
                 child: Text(
                   message.message,
@@ -575,7 +586,7 @@ class _MessageRow extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Apt ${message.numero}',
+                      'Apt ${message.numero} · ${message.nature.libelle}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -760,6 +771,16 @@ class _DetailDialog extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: AppSizes.xs),
+                Text(
+                  m.statut.signification,
+                  style: const TextStyle(fontWeight: FontWeight.w600, height: 1.4),
+                ),
+                const SizedBox(height: AppSizes.xs),
+                Text(
+                  'Nature : ${m.nature.libelle}',
+                  style: const TextStyle(color: AppColors.grisDark),
+                ),
                 const SizedBox(height: AppSizes.md),
                 _Bloc(
                   titre: 'Votre message',
@@ -777,14 +798,9 @@ class _DetailDialog extends StatelessWidget {
                 const SizedBox(height: AppSizes.md),
                 if (m.reponse != null && m.reponse!.trim().isNotEmpty)
                   _Bloc(
-                    titre: "Réponse de l'administration"
+                    titre: 'Réponse'
                         '${m.dateReponse == null ? '' : ' · ${MessageTransmis.formater(m.dateReponse!)}'}',
                     texte: m.reponse!,
-                  )
-                else if (m.statut == StatutMessage.enAttente)
-                  const Text(
-                    "En attente d'une réponse de l'administration.",
-                    style: TextStyle(color: AppColors.grisDark),
                   ),
                 if (m.statut == StatutMessage.resolue &&
                     m.dateResolution != null) ...[

@@ -25,6 +25,7 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
   static const _longueurMax = 2000;
 
   final _ctrl = TextEditingController();
+  NatureDemande? _nature;
   bool _transmettre = false;
   bool _envoi = false;
   String? _erreur;
@@ -35,10 +36,13 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
     super.dispose();
   }
 
-  bool get _peutEnvoyer => _ctrl.text.trim().isNotEmpty && !_envoi;
+  bool get _peutEnvoyer =>
+      _nature != null && _ctrl.text.trim().isNotEmpty && !_envoi;
 
   Future<void> _envoyer() async {
     final auteur = ref.read(employeeCourantProvider);
+    final nature = _nature;
+    if (nature == null) return;
     if (auteur == null) {
       setState(() => _erreur = 'Votre session a expiré. Reconnectez-vous.');
       return;
@@ -53,6 +57,7 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
       await ref.read(receptionResidentsRepositoryProvider).envoyerMessage(
             appartementId: widget.fiche.id,
             auteurId: auteur.id,
+            nature: nature,
             message: _ctrl.text.trim(),
             transmettreEmploye: _transmettre,
           );
@@ -61,6 +66,7 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
       setState(() {
         _envoi = false;
         _transmettre = false;
+        _nature = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Message transmis à l\'administration.')),
@@ -93,6 +99,24 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
             const Text(
               'Message à l\'administration',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: AppSizes.sm),
+            const Text(
+              'Nature de la demande',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: AppSizes.xs),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final n in NatureDemande.values)
+                  ChoiceChip(
+                    label: Text(n.libelle),
+                    selected: _nature == n,
+                    onSelected: _envoi ? null : (_) => setState(() => _nature = n),
+                  ),
+              ],
             ),
             const SizedBox(height: AppSizes.sm),
             TextField(

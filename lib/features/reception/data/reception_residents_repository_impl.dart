@@ -46,6 +46,7 @@ class ReceptionResidentsRepositoryImpl implements ReceptionResidentsRepository {
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,
+    required NatureDemande nature,
     required String message,
     required bool transmettreEmploye,
   }) async {
@@ -57,6 +58,7 @@ class ReceptionResidentsRepositoryImpl implements ReceptionResidentsRepository {
           'p_auteur_id': auteurId,
           'p_message': message,
           'p_transmettre_employe': transmettreEmploye,
+          'p_nature': nature.code,
         },
       );
     } on PostgrestException catch (e) {

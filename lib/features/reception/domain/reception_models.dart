@@ -1,5 +1,33 @@
 import 'package:intl/intl.dart';
 
+/// Nature de la demande qu'un résident fait à la Réception, transmise au
+/// responsable (la Réception ne peut pas modifier le planning elle-même).
+enum NatureDemande {
+  annulation,
+  reprogrammation,
+  autre;
+
+  static NatureDemande fromCode(String code) => switch (code) {
+        'Annulation' => NatureDemande.annulation,
+        'Reprogrammation' => NatureDemande.reprogrammation,
+        'Autre' => NatureDemande.autre,
+        _ => throw FormatException('Nature de demande inconnue : $code'),
+      };
+
+  /// Valeur attendue par le serveur.
+  String get code => switch (this) {
+        NatureDemande.annulation => 'Annulation',
+        NatureDemande.reprogrammation => 'Reprogrammation',
+        NatureDemande.autre => 'Autre',
+      };
+
+  String get libelle => switch (this) {
+        NatureDemande.annulation => 'Annulation',
+        NatureDemande.reprogrammation => 'Reprogrammation',
+        NatureDemande.autre => 'Autre demande',
+      };
+}
+
 /// Une date de ménage à venir pour un appartement.
 class ProchaineDate {
   final DateTime date;

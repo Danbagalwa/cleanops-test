@@ -26,6 +26,7 @@ abstract class ReceptionResidentsRepository {
   Future<void> envoyerMessage({
     required String appartementId,
     required String auteurId,
+    required NatureDemande nature,
     required String message,
     required bool transmettreEmploye,
   });
