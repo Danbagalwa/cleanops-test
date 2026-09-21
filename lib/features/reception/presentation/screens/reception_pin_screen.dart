@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
@@ -9,6 +8,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/reception_pin_models.dart';
 import '../../domain/reception_residents_repository.dart' show ReceptionErreur;
 import '../providers/reception_pin_provider.dart';
+import '../widgets/pin_affichage_dialog.dart';
 
 const _kPageSize = 10;
 
@@ -80,7 +80,11 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _AffichageDialog(resident: resident, pin: pin),
+      builder: (_) => AffichagePinDialog(
+        nomComplet: resident.nomComplet,
+        numero: resident.numero,
+        pin: pin,
+      ),
     );
   }
 
@@ -808,87 +812,6 @@ class _ConfirmationDialogState extends ConsumerState<_ConfirmationDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Text(reinit ? 'Réinitialiser' : 'Générer'),
-        ),
-      ],
-    );
-  }
-}
-
-class _AffichageDialog extends StatelessWidget {
-  final ResidentPin resident;
-  final PinGenere pin;
-
-  const _AffichageDialog({required this.resident, required this.pin});
-
-  Future<void> _copier(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: pin.pin));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('PIN copié.')));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      ),
-      title: Text(pin.reinitialise ? 'PIN réinitialisé' : 'PIN généré'),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${resident.nomComplet} · Apt ${resident.numero}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: AppSizes.md),
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSizes.lg, vertical: AppSizes.md),
-                decoration: BoxDecoration(
-                  color: AppColors.grisLight,
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                ),
-                child: SelectableText(
-                  pin.pin,
-                  style: const TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 12,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSizes.md),
-            Text(
-              pin.reinitialise
-                  ? "L'ancien PIN ne fonctionne plus. Communiquez celui-ci au "
-                      'résident maintenant.'
-                  : 'Communiquez ce PIN au résident maintenant.',
-              style: const TextStyle(height: 1.4),
-            ),
-            const SizedBox(height: AppSizes.xs),
-            const Text(
-              'Il ne pourra plus être affiché après la fermeture de cette '
-              'fenêtre. En cas d\'oubli, il faudra le réinitialiser.',
-              style: TextStyle(height: 1.4, color: AppColors.grisDark),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton.icon(
-          onPressed: () => _copier(context),
-          icon: const Icon(Icons.copy_rounded, size: 18),
-          label: const Text('Copier'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Terminé'),
         ),
       ],
     );
