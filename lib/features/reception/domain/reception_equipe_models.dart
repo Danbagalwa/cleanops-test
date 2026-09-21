@@ -1,117 +1,74 @@
-/// Présence d'un employé pour la journée, telle que renvoyée par le serveur.
+/// Présence d'un employé pour la journée. Trois états seulement.
 enum PresenceJour {
   presente,
   absente,
-  absenteMatin,
-  absenteApresMidi,
-  nonDeclaree;
+  nonConfirmee;
 
   static PresenceJour fromCode(String code) => switch (code) {
         'presente' => PresenceJour.presente,
         'absente' => PresenceJour.absente,
-        'absente_matin' => PresenceJour.absenteMatin,
-        'absente_apres_midi' => PresenceJour.absenteApresMidi,
-        'non_declaree' => PresenceJour.nonDeclaree,
+        'non_confirmee' => PresenceJour.nonConfirmee,
         _ => throw FormatException('Présence inconnue : $code'),
       };
 
   String get libelle => switch (this) {
         PresenceJour.presente => 'Présente',
         PresenceJour.absente => 'Absente',
-        PresenceJour.absenteMatin => 'Absente le matin',
-        PresenceJour.absenteApresMidi => "Absente l'après-midi",
-        PresenceJour.nonDeclaree => 'Non déclarée',
-      };
-
-  /// Toute absence, même partielle.
-  bool get estAbsence =>
-      this == absente || this == absenteMatin || this == absenteApresMidi;
-}
-
-/// État d'un ménage du jour, sans aucune précision sur un non-réalisé : le
-/// motif (Absent, Refus, autre) n'est jamais transmis à la réception.
-enum EtatTacheEquipe {
-  aFaire,
-  realise,
-  nonRealise;
-
-  static EtatTacheEquipe fromCode(String code) => switch (code) {
-        'a_faire' => EtatTacheEquipe.aFaire,
-        'realise' => EtatTacheEquipe.realise,
-        'non_realise' => EtatTacheEquipe.nonRealise,
-        _ => throw FormatException('État de tâche inconnu : $code'),
-      };
-
-  String get libelle => switch (this) {
-        EtatTacheEquipe.aFaire => 'À faire',
-        EtatTacheEquipe.realise => 'Effectué',
-        EtatTacheEquipe.nonRealise => 'Non effectué',
+        PresenceJour.nonConfirmee => 'Non confirmée',
       };
 }
 
-/// Un ménage du jour dans l'horaire d'un employé.
-class TacheEquipe {
-  final String appartementId;
-  final String numero;
+/// Partie de la journée où l'employé travaille.
+enum PartieJournee {
+  complete,
+  matin,
+  apresMidi;
 
-  /// 'AM' ou 'PM'.
-  final String periode;
-  final EtatTacheEquipe etat;
-
-  const TacheEquipe({
-    required this.appartementId,
-    required this.numero,
-    required this.periode,
-    required this.etat,
-  });
-
-  factory TacheEquipe.fromJson(Map<String, dynamic> json) => TacheEquipe(
-        appartementId: json['appartement_id'] as String,
-        numero: json['numero'] as String,
-        periode: json['periode'] as String? ?? '',
-        etat: EtatTacheEquipe.fromCode(json['etat'] as String),
-      );
+  static PartieJournee fromCode(String code) => switch (code) {
+        'complete' => PartieJournee.complete,
+        'matin' => PartieJournee.matin,
+        'apres_midi' => PartieJournee.apresMidi,
+        _ => throw FormatException('Partie de journée inconnue : $code'),
+      };
 }
 
-/// Un ménage libéré, en attente d'attribution à un employé.
-class TacheEnAttente {
-  final String appartementId;
-  final String numero;
-  final String periode;
-
-  const TacheEnAttente({
-    required this.appartementId,
-    required this.numero,
-    required this.periode,
-  });
-
-  factory TacheEnAttente.fromJson(Map<String, dynamic> json) => TacheEnAttente(
-        appartementId: json['appartement_id'] as String,
-        numero: json['numero'] as String,
-        periode: json['periode'] as String? ?? '',
-      );
+/// « 08:00 » -> « 8h00 », « 13:30 » -> « 13h30 ». Toute autre forme est rendue
+/// telle quelle.
+String formaterHeure(String heure) {
+  final m = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(heure);
+  if (m == null) return heure;
+  return '${int.parse(m.group(1)!)}h${m.group(2)}';
 }
 
-/// Une ligne du tableau de l'équipe : un employé, sa présence et son horaire.
+/// Une ligne du tableau de l'équipe : l'employé, sa présence et son horaire du
+/// jour. RIEN D'AUTRE.
+///
+/// Ce modèle ne contient VOLONTAIREMENT aucun champ pour une tâche, un
+/// compteur, une progression, un appartement, le motif d'une absence ou
+/// l'horaire d'un autre jour : la Réception ne doit pas pouvoir observer le
+/// travail de l'équipe. Un JSON qui en contiendrait (par erreur) ne l'atteint
+/// jamais.
 class MembreEquipe {
   final String id;
   final String prenom;
   final String nom;
   final PresenceJour presence;
 
-  /// « HH:mm » (informatif), ou `null`.
+  /// Partie de la journée travaillée (`null` si absente ou non confirmée).
+  final PartieJournee? journee;
+
+  /// Heures précisées par l'employé, « HH:mm » (informatif), ou `null`.
   final String? heureDebut;
   final String? heureFin;
-  final List<TacheEquipe> taches;
 
   const MembreEquipe({
     required this.id,
     required this.prenom,
     required this.nom,
     required this.presence,
+    this.journee,
     this.heureDebut,
     this.heureFin,
-    this.taches = const [],
   });
 
   factory MembreEquipe.fromJson(Map<String, dynamic> json) => MembreEquipe(
@@ -119,12 +76,11 @@ class MembreEquipe {
         prenom: json['prenom'] as String,
         nom: json['nom'] as String,
         presence: PresenceJour.fromCode(json['presence'] as String),
+        journee: json['journee'] == null
+            ? null
+            : PartieJournee.fromCode(json['journee'] as String),
         heureDebut: json['heure_debut'] as String?,
         heureFin: json['heure_fin'] as String?,
-        taches: [
-          for (final t in (json['taches'] as List? ?? const []))
-            TacheEquipe.fromJson(t as Map<String, dynamic>),
-        ],
       );
 
   String get nomComplet => '$prenom $nom';
@@ -134,41 +90,34 @@ class MembreEquipe {
     return '${premiere(prenom)}${premiere(nom)}';
   }
 
-  /// « 08:00 – 16:00 », ou `null` si les heures ne sont pas précisées.
-  String? get horaire => heureDebut != null && heureFin != null
-      ? '$heureDebut – $heureFin'
-      : null;
-
-  int get nbRealises =>
-      taches.where((t) => t.etat == EtatTacheEquipe.realise).length;
-
-  /// « Aucun », ou « 1/3 effectués ».
-  String get resumeMenages => taches.isEmpty
-      ? 'Aucun'
-      : '$nbRealises/${taches.length} effectué${nbRealises > 1 ? 's' : ''}';
+  /// L'horaire du jour : « 8h00 – 13h00 », « Toute la journée », « Matin
+  /// seulement » ou « Après-midi seulement ». `null` si l'employé n'est pas
+  /// présent (absente ou non confirmée).
+  String? get horaire {
+    if (presence != PresenceJour.presente) return null;
+    if (heureDebut != null && heureFin != null) {
+      return '${formaterHeure(heureDebut!)} – ${formaterHeure(heureFin!)}';
+    }
+    return switch (journee) {
+      PartieJournee.matin => 'Matin seulement',
+      PartieJournee.apresMidi => 'Après-midi seulement',
+      _ => 'Toute la journée',
+    };
+  }
 }
 
 /// L'équipe pour la journée du Québec courante.
 class EquipeDuJour {
   final DateTime date;
   final List<MembreEquipe> membres;
-  final List<TacheEnAttente> enAttente;
 
-  const EquipeDuJour({
-    required this.date,
-    required this.membres,
-    this.enAttente = const [],
-  });
+  const EquipeDuJour({required this.date, required this.membres});
 
   factory EquipeDuJour.fromJson(Map<String, dynamic> json) => EquipeDuJour(
         date: DateTime.parse(json['date'] as String),
         membres: [
           for (final m in (json['employes'] as List? ?? const []))
             MembreEquipe.fromJson(m as Map<String, dynamic>),
-        ],
-        enAttente: [
-          for (final t in (json['en_attente'] as List? ?? const []))
-            TacheEnAttente.fromJson(t as Map<String, dynamic>),
         ],
       );
 }

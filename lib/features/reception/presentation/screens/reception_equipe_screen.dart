@@ -8,10 +8,16 @@ import '../../../../core/widgets/skeleton_widget.dart';
 import '../../domain/reception_equipe_models.dart';
 import '../providers/reception_equipe_provider.dart';
 
-enum _Filtre { tous, presents, absents, nonDeclares }
+enum _Filtre { tous, presents, absents, nonConfirmes }
 
-/// Section « Équipe » de la vue Réception : qui est présent aujourd'hui et
-/// l'horaire du jour de chaque employé. Lecture seule.
+/// Section « Équipe » de la vue Réception, VOLONTAIREMENT limitée à trois
+/// informations par employé : son nom, sa présence du jour (Présente · Absente ·
+/// Non confirmée) et son horaire du jour. Rien d'autre.
+///
+/// Jamais affichés : tâches, compteurs, pourcentages, progression, motif d'une
+/// absence, horaire d'un autre jour. La Réception ne confirme rien, ne réassigne
+/// rien ; cet écran lui permet seulement de répondre honnêtement à un résident
+/// qui appelle, pas d'observer le travail de l'équipe.
 class ReceptionEquipeScreen extends ConsumerStatefulWidget {
   const ReceptionEquipeScreen({super.key});
 
@@ -46,8 +52,8 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
       final matchFiltre = switch (_filtre) {
         _Filtre.tous => true,
         _Filtre.presents => m.presence == PresenceJour.presente,
-        _Filtre.absents => m.presence.estAbsence,
-        _Filtre.nonDeclares => m.presence == PresenceJour.nonDeclaree,
+        _Filtre.absents => m.presence == PresenceJour.absente,
+        _Filtre.nonConfirmes => m.presence == PresenceJour.nonConfirmee,
       };
       return matchSearch && matchFiltre;
     }).toList();
@@ -78,6 +84,14 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Actualiser',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => ref.invalidate(receptionEquipeProvider),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Align(
         alignment: Alignment.topCenter,
@@ -124,18 +138,7 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
         if (donnees.membres.isEmpty) return const _EmptyState();
 
         final filtered = _filtered(donnees.membres);
-
-        Widget ligne(int i) {
-          final m = filtered[i];
-          return _MembreRow(
-            key: ValueKey(m.id),
-            membre: m,
-            isAlternate: i.isOdd,
-            onHoraire: () => _ouvrirHoraire(m, donnees.date),
-          );
-        }
-
-        final entete = _JourEtAttente(donnees: donnees);
+        final entete = _JourDuJour(date: donnees.date);
 
         if (filtered.isEmpty) {
           return Column(
@@ -145,6 +148,12 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
             ],
           );
         }
+
+        Widget ligne(int i) => _MembreRow(
+              key: ValueKey(filtered[i].id),
+              membre: filtered[i],
+              isAlternate: i.isOdd,
+            );
 
         if (isDesktop) {
           return Column(
@@ -214,17 +223,10 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
       },
     );
   }
-
-  void _ouvrirHoraire(MembreEquipe membre, DateTime date) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => _HoraireDialog(membre: membre, date: date),
-    );
-  }
 }
 
 // ══════════════════════════════════════════════════════════
-// DATE DU JOUR + MÉNAGES EN ATTENTE D'ATTRIBUTION
+// DATE DU JOUR
 // ══════════════════════════════════════════════════════════
 
 String _dateLongue(DateTime date) {
@@ -232,61 +234,26 @@ String _dateLongue(DateTime date) {
   return texte.isEmpty ? texte : texte[0].toUpperCase() + texte.substring(1);
 }
 
-class _JourEtAttente extends StatelessWidget {
-  final EquipeDuJour donnees;
+class _JourDuJour extends StatelessWidget {
+  final DateTime date;
 
-  const _JourEtAttente({required this.donnees});
+  const _JourDuJour({required this.date});
 
   @override
   Widget build(BuildContext context) {
-    final attente = donnees.enAttente;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-          AppSizes.md, AppSizes.sm, AppSizes.md, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Aujourd\'hui — ${_dateLongue(donnees.date)}',
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.grisDark,
-            ),
+          AppSizes.md, AppSizes.sm, AppSizes.md, AppSizes.xs),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Aujourd\'hui — ${_dateLongue(date)}',
+          style: const TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.grisDark,
           ),
-          if (attente.isNotEmpty) ...[
-            const SizedBox(height: AppSizes.sm),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppSizes.md, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.aVerifier.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-                border: Border.all(
-                    color: AppColors.aVerifier.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.hourglass_top_rounded,
-                      size: 16, color: AppColors.aVerifier),
-                  const SizedBox(width: AppSizes.sm),
-                  Expanded(
-                    child: Text(
-                      "${attente.length} ménage${attente.length > 1 ? 's' : ''} "
-                      "en attente d'attribution : "
-                      '${attente.map((t) => 'Apt ${t.numero} ${t.periode}').join(', ')}',
-                      style: const TextStyle(fontSize: 12.5, height: 1.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSizes.xs),
-        ],
+        ),
       ),
     );
   }
@@ -316,9 +283,7 @@ class _ColumnHeader extends StatelessWidget {
           SizedBox(width: 30 + AppSizes.sm),
           Expanded(flex: 2, child: Text('NOM', style: labelStyle)),
           Expanded(flex: 2, child: Text('PRÉSENCE', style: labelStyle)),
-          Expanded(child: Text('HORAIRE', style: labelStyle)),
-          Expanded(child: Text('MÉNAGES', style: labelStyle)),
-          SizedBox(width: 56, child: Text('ACTIONS', style: labelStyle)),
+          Expanded(flex: 2, child: Text('HORAIRE DU JOUR', style: labelStyle)),
         ],
       ),
     );
@@ -389,7 +354,7 @@ class _SearchFilterBar extends StatelessWidget {
       (_Filtre.tous, 'Tous'),
       (_Filtre.presents, 'Présents'),
       (_Filtre.absents, 'Absents'),
-      (_Filtre.nonDeclares, 'Non déclarés'),
+      (_Filtre.nonConfirmes, 'Non confirmés'),
     ];
 
     return Row(
@@ -491,13 +456,11 @@ class _ChipFiltre extends StatelessWidget {
 class _MembreRow extends StatelessWidget {
   final MembreEquipe membre;
   final bool isAlternate;
-  final VoidCallback onHoraire;
 
   const _MembreRow({
     super.key,
     required this.membre,
     required this.isAlternate,
-    required this.onHoraire,
   });
 
   @override
@@ -506,75 +469,50 @@ class _MembreRow extends StatelessWidget {
     return isDesktop ? _buildRow() : _buildCard();
   }
 
-  Widget _action() => _IconBtn(
-        icon: Icons.event_note_outlined,
-        color: AppColors.rouge,
-        tooltip: "Voir l'horaire du jour",
-        onTap: onHoraire,
-      );
-
   Widget _buildRow() {
     return Material(
       color: isAlternate
           ? AppColors.grisLight.withValues(alpha: 0.4)
           : Colors.white,
-      child: InkWell(
-        onTap: onHoraire,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.md,
-            vertical: 9,
-          ),
-          child: Row(
-            children: [
-              _AvatarCircle(initiales: membre.initiales, size: 30, fontSize: 11),
-              const SizedBox(width: AppSizes.sm),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  membre.nomComplet,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.noir,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSizes.md,
+          vertical: 9,
+        ),
+        child: Row(
+          children: [
+            _AvatarCircle(initiales: membre.initiales, size: 30, fontSize: 11),
+            const SizedBox(width: AppSizes.sm),
+            Expanded(
+              flex: 2,
+              child: Text(
+                membre.nomComplet,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.noir,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _PresenceBadge(presence: membre.presence),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                membre.horaire ?? '—',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.grisText,
                 ),
               ),
-              Expanded(
-                flex: 2,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: _PresenceBadge(presence: membre.presence),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  membre.horaire ?? '—',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.grisText,
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  membre.resumeMenages,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.grisText,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 56,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [_action()],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -597,50 +535,49 @@ class _MembreRow extends StatelessWidget {
           ),
         ],
       ),
-      child: InkWell(
-        onTap: onHoraire,
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.md,
-            vertical: 10,
-          ),
-          child: Row(
-            children: [
-              _AvatarCircle(initiales: membre.initiales, size: 42, fontSize: 14),
-              const SizedBox(width: AppSizes.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      membre.nomComplet,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.noir,
-                      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSizes.md,
+          vertical: 10,
+        ),
+        child: Row(
+          children: [
+            _AvatarCircle(initiales: membre.initiales, size: 42, fontSize: 14),
+            const SizedBox(width: AppSizes.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    membre.nomComplet,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.noir,
                     ),
-                    const SizedBox(height: 4),
-                    _PresenceBadge(presence: membre.presence),
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        if (membre.horaire != null) membre.horaire!,
-                        'Ménages : ${membre.resumeMenages}',
-                      ].join(' · '),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.grisText,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _PresenceBadge(presence: membre.presence),
+                      if (membre.horaire != null)
+                        Text(
+                          membre.horaire!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.grisText,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-              _action(),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -688,10 +625,7 @@ class _PresenceBadge extends StatelessWidget {
   Color get _color => switch (presence) {
         PresenceJour.presente => AppColors.fait,
         PresenceJour.absente => AppColors.refus,
-        PresenceJour.absenteMatin ||
-        PresenceJour.absenteApresMidi =>
-          AppColors.aVerifier,
-        PresenceJour.nonDeclaree => AppColors.grisDark,
+        PresenceJour.nonConfirmee => AppColors.grisDark,
       };
 
   @override
@@ -709,148 +643,6 @@ class _PresenceBadge extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w600,
           color: _color,
-        ),
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _IconBtn({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 18, color: color),
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// HORAIRE DU JOUR D'UN EMPLOYÉ
-// ══════════════════════════════════════════════════════════
-
-class _HoraireDialog extends StatelessWidget {
-  final MembreEquipe membre;
-  final DateTime date;
-
-  const _HoraireDialog({required this.membre, required this.date});
-
-  Color _couleur(EtatTacheEquipe etat) => switch (etat) {
-        EtatTacheEquipe.aFaire => AppColors.grisDark,
-        EtatTacheEquipe.realise => AppColors.fait,
-        EtatTacheEquipe.nonRealise => AppColors.refus,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.all(AppSizes.md),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-      ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSizes.md),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        membre.nomComplet,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Fermer',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-                Text(
-                  _dateLongue(date),
-                  style: const TextStyle(color: AppColors.grisDark),
-                ),
-                const SizedBox(height: AppSizes.sm),
-                _PresenceBadge(presence: membre.presence),
-                if (membre.horaire != null) ...[
-                  const SizedBox(height: AppSizes.xs),
-                  Text('Horaire : ${membre.horaire}',
-                      style: const TextStyle(color: AppColors.grisDark)),
-                ],
-                const SizedBox(height: AppSizes.md),
-                const Text(
-                  'Horaire du jour',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: AppSizes.xs),
-                if (membre.taches.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppSizes.sm),
-                    child: Text(
-                      'Aucun ménage prévu aujourd\'hui.',
-                      style: TextStyle(color: AppColors.grisDark),
-                    ),
-                  )
-                else
-                  for (final t in membre.taches)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 40,
-                            child: Text(
-                              t.periode,
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          Expanded(
-                            child: Text('Apt ${t.numero}',
-                                style: const TextStyle(fontSize: 13)),
-                          ),
-                          Text(
-                            t.etat.libelle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _couleur(t.etat),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-              ],
-            ),
-          ),
         ),
       ),
     );

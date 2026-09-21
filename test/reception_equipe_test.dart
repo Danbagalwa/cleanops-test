@@ -28,51 +28,40 @@ MembreEquipe _membre(
   String prenom,
   String nom,
   PresenceJour presence, {
+  PartieJournee? journee,
   String? debut,
   String? fin,
-  List<TacheEquipe> taches = const [],
 }) =>
     MembreEquipe(
       id: 'id-$prenom',
       prenom: prenom,
       nom: nom,
       presence: presence,
+      journee: journee,
       heureDebut: debut,
       heureFin: fin,
-      taches: taches,
     );
 
-TacheEquipe _tache(String numero, String periode, EtatTacheEquipe etat) =>
-    TacheEquipe(
-      appartementId: 'a$numero',
-      numero: numero,
-      periode: periode,
-      etat: etat,
-    );
-
-EquipeDuJour _equipe({List<TacheEnAttente> attente = const []}) => EquipeDuJour(
+EquipeDuJour _equipe() => EquipeDuJour(
       date: DateTime(2026, 9, 21),
-      enAttente: attente,
       membres: [
         _membre('Essie', 'France', PresenceJour.presente,
-            debut: '08:00',
-            fin: '16:00',
-            taches: [
-              _tache('101', 'AM', EtatTacheEquipe.realise),
-              _tache('103', 'PM', EtatTacheEquipe.aFaire),
-            ]),
-        _membre('Annise', 'Sylvestre', PresenceJour.absente,
-            taches: [_tache('202', 'AM', EtatTacheEquipe.aFaire)]),
-        _membre('Marta', 'Louis', PresenceJour.absenteMatin),
-        _membre('Naomie', 'Bagalwa', PresenceJour.nonDeclaree,
-            taches: [_tache('303', 'PM', EtatTacheEquipe.nonRealise)]),
+            journee: PartieJournee.complete, debut: '08:00', fin: '13:00'),
+        _membre('Annise', 'Sylvestre', PresenceJour.presente,
+            journee: PartieJournee.complete),
+        _membre('Marta', 'Louis', PresenceJour.absente),
+        _membre('Naomie', 'Bagalwa', PresenceJour.nonConfirmee),
+        _membre('Liliane', 'Sylvestre', PresenceJour.presente,
+            journee: PartieJournee.apresMidi),
+        _membre('Martine', 'Jean', PresenceJour.presente,
+            journee: PartieJournee.matin),
       ],
     );
 
 Future<void> _afficher(
   WidgetTester tester,
   _DepotSimule depot, {
-  Size taille = const Size(1000, 1400),
+  Size taille = const Size(1200, 1400),
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = taille;
@@ -85,6 +74,31 @@ Future<void> _afficher(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Rien de ce qui décrit le travail de l'équipe ne doit apparaître : ni tâche,
+/// ni compteur, ni progression, ni appartement, ni motif, ni action.
+void _verifierAucuneInfoDeTravail() {
+  for (final mot in [
+    'effectué',
+    'Effectué',
+    'À faire',
+    'Non effectué',
+    'ménage',
+    'Ménage',
+    'Apt',
+    'tâche',
+    'Tâche',
+    '%',
+    'motif',
+    'Motif',
+    'attribution',
+  ]) {
+    expect(find.textContaining(mot), findsNothing, reason: mot);
+  }
+  expect(find.byType(FilledButton), findsNothing);
+  expect(find.byType(OutlinedButton), findsNothing);
+  expect(find.byTooltip("Voir l'horaire du jour"), findsNothing);
 }
 
 void main() {
@@ -102,122 +116,162 @@ void main() {
             'prenom': 'Essie',
             'nom': 'France',
             'presence': 'presente',
+            'journee': 'complete',
             'heure_debut': '08:00',
-            'heure_fin': '16:00',
-            'taches': [
-              {
-                'appartement_id': 'a1',
-                'numero': '101',
-                'periode': 'AM',
-                'etat': 'realise',
-              },
-            ],
+            'heure_fin': '13:00',
           },
           {
             'id': 'e2',
             'prenom': 'Marta',
             'nom': 'Louis',
-            'presence': 'non_declaree',
+            'presence': 'non_confirmee',
+            'journee': null,
             'heure_debut': null,
             'heure_fin': null,
-            'taches': [],
           },
-        ],
-        'en_attente': [
-          {'appartement_id': 'a9', 'numero': '909', 'periode': 'PM'},
         ],
       });
 
       expect(e.date, DateTime(2026, 9, 21));
       expect(e.membres, hasLength(2));
-      expect(e.membres.first.horaire, '08:00 – 16:00');
-      expect(e.membres.first.taches.single.etat, EtatTacheEquipe.realise);
+      expect(e.membres.first.horaire, '8h00 – 13h00');
+      expect(e.membres.last.presence, PresenceJour.nonConfirmee);
       expect(e.membres.last.horaire, isNull);
-      expect(e.membres.last.presence, PresenceJour.nonDeclaree);
-      expect(e.enAttente.single.numero, '909');
     });
 
-    test('les 5 présences ont leur libellé', () {
+    test('exactement trois présences : Présente · Absente · Non confirmée', () {
+      expect(PresenceJour.values, hasLength(3));
       expect(PresenceJour.fromCode('presente').libelle, 'Présente');
       expect(PresenceJour.fromCode('absente').libelle, 'Absente');
-      expect(PresenceJour.fromCode('absente_matin').libelle,
-          'Absente le matin');
-      expect(PresenceJour.fromCode('absente_apres_midi').libelle,
-          "Absente l'après-midi");
-      expect(PresenceJour.fromCode('non_declaree').libelle, 'Non déclarée');
+      expect(PresenceJour.fromCode('non_confirmee').libelle, 'Non confirmée');
     });
 
-    test('une valeur inconnue est refusée plutôt qu\'affichée de travers', () {
-      expect(() => PresenceJour.fromCode('n_importe_quoi'),
-          throwsFormatException);
-      expect(() => EtatTacheEquipe.fromCode('motif_refus'),
-          throwsFormatException);
+    test('un code inconnu (dont l\'ancien « non_declaree ») est refusé', () {
+      expect(() => PresenceJour.fromCode('non_declaree'), throwsFormatException);
+      expect(() => PresenceJour.fromCode('absente_matin'), throwsFormatException);
+      expect(() => PartieJournee.fromCode('semaine'), throwsFormatException);
     });
 
-    test('l\'horaire exige une heure de début ET de fin', () {
-      expect(
-        _membre('A', 'B', PresenceJour.presente, debut: '08:00').horaire,
-        isNull,
-      );
-      expect(
-        _membre('A', 'B', PresenceJour.presente, fin: '16:00').horaire,
-        isNull,
-      );
-      expect(
-        _membre('A', 'B', PresenceJour.presente, debut: '08:00', fin: '16:00')
-            .horaire,
-        '08:00 – 16:00',
-      );
+    test('formatage des heures : 8h00 – 13h00', () {
+      expect(formaterHeure('08:00'), '8h00');
+      expect(formaterHeure('13:00'), '13h00');
+      expect(formaterHeure('07:30'), '7h30');
+      expect(formaterHeure('16:45:00'), '16h45');
+      expect(formaterHeure('bientôt'), 'bientôt');
     });
 
-    test('le résumé des ménages', () {
-      expect(_membre('A', 'B', PresenceJour.presente).resumeMenages, 'Aucun');
-      expect(
-        _membre('A', 'B', PresenceJour.presente, taches: [
-          _tache('1', 'AM', EtatTacheEquipe.aFaire),
-          _tache('2', 'PM', EtatTacheEquipe.aFaire),
-        ]).resumeMenages,
-        '0/2 effectué',
-      );
-      expect(
-        _membre('A', 'B', PresenceJour.presente, taches: [
-          _tache('1', 'AM', EtatTacheEquipe.realise),
-          _tache('2', 'PM', EtatTacheEquipe.realise),
-        ]).resumeMenages,
-        '2/2 effectués',
-      );
-    });
-
-    test('un non-réalisé ne porte aucun motif', () {
-      // Le modèle n'a aucun champ pour un motif : un JSON qui en contiendrait
-      // un (par erreur du serveur) ne l'atteint jamais.
-      final t = TacheEquipe.fromJson({
-        'appartement_id': 'a1',
-        'numero': '101',
-        'periode': 'AM',
-        'etat': 'non_realise',
-        'motif': 'MOTIF-SECRET',
-        'motif_absent': 'MOTIF-SECRET',
+    group('horaire du jour', () {
+      test('heures précisées', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente,
+                  journee: PartieJournee.complete, debut: '08:00', fin: '13:00')
+              .horaire,
+          '8h00 – 13h00',
+        );
       });
-      expect(t.etat.libelle, 'Non effectué');
-      expect(t.toString(), isNot(contains('MOTIF-SECRET')));
+
+      test('sans heures : toute la journée', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente,
+                  journee: PartieJournee.complete)
+              .horaire,
+          'Toute la journée',
+        );
+      });
+
+      test('absente le matin : elle travaille l\'après-midi seulement', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente,
+                  journee: PartieJournee.apresMidi)
+              .horaire,
+          'Après-midi seulement',
+        );
+      });
+
+      test('absente l\'après-midi : elle travaille le matin seulement', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente, journee: PartieJournee.matin)
+              .horaire,
+          'Matin seulement',
+        );
+      });
+
+      test('les heures priment sur la partie de journée', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente,
+                  journee: PartieJournee.apresMidi, debut: '13:00', fin: '17:00')
+              .horaire,
+          '13h00 – 17h00',
+        );
+      });
+
+      test('une seule heure ne suffit pas', () {
+        expect(
+          _membre('A', 'B', PresenceJour.presente,
+                  journee: PartieJournee.complete, debut: '08:00')
+              .horaire,
+          'Toute la journée',
+        );
+      });
+
+      test('absente ou non confirmée : aucun horaire', () {
+        expect(_membre('A', 'B', PresenceJour.absente).horaire, isNull);
+        expect(_membre('A', 'B', PresenceJour.nonConfirmee).horaire, isNull);
+        expect(
+          _membre('A', 'B', PresenceJour.absente, debut: '08:00', fin: '13:00')
+              .horaire,
+          isNull,
+          reason: 'des heures résiduelles ne doivent pas s\'afficher',
+        );
+      });
+    });
+
+    test('rien d\'autre : tâches, compteurs et motifs n\'atteignent jamais '
+        'le modèle', () {
+      final m = MembreEquipe.fromJson({
+        'id': 'e1',
+        'prenom': 'Essie',
+        'nom': 'France',
+        'presence': 'absente',
+        'journee': null,
+        'heure_debut': null,
+        'heure_fin': null,
+        // Ce que l'ancienne version renvoyait, ou un motif par erreur :
+        'taches': [
+          {
+            'appartement_id': 'a1',
+            'numero': '101',
+            'periode': 'AM',
+            'etat': 'a_faire',
+          },
+        ],
+        'en_attente': [
+          {'numero': '909'},
+        ],
+        'motif': 'MOTIF-SECRET raison personnelle',
+        'motif_absent': 'MOTIF-SECRET',
+        'pourcentage': 80,
+      });
+
+      expect(m.toString(), isNot(contains('MOTIF-SECRET')));
+      expect(m.toString(), isNot(contains('101')));
+      expect(m.nomComplet, 'Essie France');
     });
   });
 
   group('Tableau de l\'équipe', () {
-    testWidgets('s\'ouvre directement sur le tableau', (tester) async {
-      final depot = _DepotSimule(_equipe());
-      await _afficher(tester, depot);
+    testWidgets('trois colonnes seulement : nom, présence, horaire du jour',
+        (tester) async {
+      await _afficher(tester, _DepotSimule(_equipe()));
 
-      expect(depot.chargements, 1);
-      for (final t in ['NOM', 'PRÉSENCE', 'HORAIRE', 'MÉNAGES', 'ACTIONS']) {
+      for (final t in ['NOM', 'PRÉSENCE', 'HORAIRE DU JOUR']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
-      expect(find.text('Équipe  (4)'), findsOneWidget);
+      for (final t in ['MÉNAGES', 'ACTIONS', 'ÉTAGE', 'APPARTEMENT']) {
+        expect(find.text(t), findsNothing, reason: t);
+      }
+      expect(find.text('Équipe  (6)'), findsOneWidget);
       expect(find.text('Essie France'), findsOneWidget);
-      expect(find.text('Annise Sylvestre'), findsOneWidget);
-      expect(find.text('Marta Louis'), findsOneWidget);
-      expect(find.text('Naomie Bagalwa'), findsOneWidget);
     });
 
     testWidgets('affiche la date du Québec renvoyée par le serveur',
@@ -227,17 +281,43 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('présence, horaire et ménages de chaque employé',
+    testWidgets('présences : Présente · Absente · Non confirmée',
         (tester) async {
       await _afficher(tester, _DepotSimule(_equipe()));
 
-      expect(find.text('Présente'), findsOneWidget);
+      expect(find.text('Présente'), findsNWidgets(4));
       expect(find.text('Absente'), findsOneWidget);
-      expect(find.text('Absente le matin'), findsOneWidget);
-      expect(find.text('Non déclarée'), findsOneWidget);
-      expect(find.text('08:00 – 16:00'), findsOneWidget);
-      expect(find.text('1/2 effectué'), findsOneWidget);
-      expect(find.text('Aucun'), findsOneWidget);
+      expect(find.text('Non confirmée'), findsOneWidget);
+    });
+
+    testWidgets('l\'horaire du jour de chaque employé', (tester) async {
+      await _afficher(tester, _DepotSimule(_equipe()));
+
+      expect(find.text('8h00 – 13h00'), findsOneWidget);
+      expect(find.text('Toute la journée'), findsOneWidget);
+      expect(find.text('Après-midi seulement'), findsOneWidget);
+      expect(find.text('Matin seulement'), findsOneWidget);
+      // Absente et non confirmée : « — », pas d'horaire inventé.
+      expect(find.text('—'), findsNWidgets(2));
+    });
+
+    testWidgets('AUCUNE information sur le travail de l\'équipe',
+        (tester) async {
+      await _afficher(tester, _DepotSimule(_equipe()));
+
+      _verifierAucuneInfoDeTravail();
+      expect(find.byType(IconButton).evaluate().length, lessThanOrEqualTo(1),
+          reason: 'seul « Actualiser » est cliquable');
+    });
+
+    testWidgets('toucher une ligne n\'ouvre rien', (tester) async {
+      await _afficher(tester, _DepotSimule(_equipe()));
+
+      await tester.tap(find.text('Essie France'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.text('Horaire du jour'), findsNothing);
     });
 
     testWidgets('filtre Présents', (tester) async {
@@ -247,32 +327,31 @@ void main() {
       await tester.pump();
 
       expect(find.text('Essie France'), findsOneWidget);
-      expect(find.text('Annise Sylvestre'), findsNothing);
+      expect(find.text('Martine Jean'), findsOneWidget);
       expect(find.text('Marta Louis'), findsNothing);
       expect(find.text('Naomie Bagalwa'), findsNothing);
     });
 
-    testWidgets('filtre Absents : toute absence, même partielle',
-        (tester) async {
+    testWidgets('filtre Absents', (tester) async {
       await _afficher(tester, _DepotSimule(_equipe()));
 
       await tester.tap(find.text('Absents'));
       await tester.pump();
 
-      expect(find.text('Annise Sylvestre'), findsOneWidget);
       expect(find.text('Marta Louis'), findsOneWidget);
       expect(find.text('Essie France'), findsNothing);
       expect(find.text('Naomie Bagalwa'), findsNothing);
     });
 
-    testWidgets('filtre Non déclarés', (tester) async {
+    testWidgets('filtre Non confirmés', (tester) async {
       await _afficher(tester, _DepotSimule(_equipe()));
 
-      await tester.tap(find.text('Non déclarés'));
+      await tester.tap(find.text('Non confirmés'));
       await tester.pump();
 
       expect(find.text('Naomie Bagalwa'), findsOneWidget);
       expect(find.text('Essie France'), findsNothing);
+      expect(find.text('Marta Louis'), findsNothing);
     });
 
     testWidgets('recherche par nom, puis aucun résultat', (tester) async {
@@ -281,6 +360,7 @@ void main() {
       await tester.enterText(find.byType(TextField), 'sylvest');
       await tester.pump();
       expect(find.text('Annise Sylvestre'), findsOneWidget);
+      expect(find.text('Liliane Sylvestre'), findsOneWidget);
       expect(find.text('Essie France'), findsNothing);
 
       await tester.enterText(find.byType(TextField), 'zzz');
@@ -290,27 +370,6 @@ void main() {
       await tester.tap(find.text('Effacer les filtres'));
       await tester.pump();
       expect(find.text('Essie France'), findsOneWidget);
-    });
-
-    testWidgets('ménages en attente d\'attribution', (tester) async {
-      await _afficher(
-        tester,
-        _DepotSimule(_equipe(attente: const [
-          TacheEnAttente(appartementId: 'a9', numero: '909', periode: 'PM'),
-          TacheEnAttente(appartementId: 'a8', numero: '808', periode: 'AM'),
-        ])),
-      );
-
-      expect(
-        find.text("2 ménages en attente d'attribution : "
-            'Apt 909 PM, Apt 808 AM'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('aucun bandeau quand rien n\'attend', (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-      expect(find.textContaining("en attente d'attribution"), findsNothing);
     });
 
     testWidgets('aucun employé actif', (tester) async {
@@ -337,76 +396,26 @@ void main() {
       expect(find.text('Essie France'), findsOneWidget);
     });
 
-    testWidgets('sur mobile : cartes avec présence, horaire et ménages',
+    testWidgets('« Actualiser » recharge la liste', (tester) async {
+      final depot = _DepotSimule(_equipe());
+      await _afficher(tester, depot);
+
+      await tester.tap(find.byTooltip('Actualiser'));
+      await tester.pumpAndSettle();
+
+      expect(depot.chargements, 2);
+    });
+
+    testWidgets('sur mobile : cartes avec présence et horaire',
         (tester) async {
       await _afficher(tester, _DepotSimule(_equipe()),
           taille: const Size(420, 900));
 
       expect(find.text('NOM'), findsNothing);
       expect(find.text('Essie France'), findsOneWidget);
-      expect(find.text('08:00 – 16:00 · Ménages : 1/2 effectué'),
-          findsOneWidget);
-      expect(find.byTooltip("Voir l'horaire du jour"), findsNWidgets(4));
-    });
-  });
-
-  group('Horaire du jour d\'un employé', () {
-    testWidgets('liste les appartements, la période et l\'état',
-        (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-
-      await tester.tap(find.byTooltip("Voir l'horaire du jour").first);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Horaire du jour'), findsOneWidget);
-      expect(find.text('Apt 101'), findsOneWidget);
-      expect(find.text('Effectué'), findsOneWidget);
-      expect(find.text('Apt 103'), findsOneWidget);
-      expect(find.text('À faire'), findsOneWidget);
-      expect(find.text('Horaire : 08:00 – 16:00'), findsOneWidget);
-    });
-
-    testWidgets('un non-réalisé s\'affiche « Non effectué », sans motif',
-        (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-
-      // Naomie Bagalwa : quatrième ligne.
-      await tester.tap(find.byTooltip("Voir l'horaire du jour").at(3));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Non effectué'), findsOneWidget);
-      for (final mot in ['Absent ', 'Refus', 'vacant', 'motif', 'Motif']) {
-        expect(find.textContaining(mot), findsNothing, reason: mot);
-      }
-    });
-
-    testWidgets('employé sans ménage', (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-
-      await tester.tap(find.byTooltip("Voir l'horaire du jour").at(2));
-      await tester.pumpAndSettle();
-
-      expect(find.text("Aucun ménage prévu aujourd'hui."), findsOneWidget);
-    });
-
-    testWidgets('toucher la ligne ouvre aussi l\'horaire', (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-
-      await tester.tap(find.text('Essie France'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Horaire du jour'), findsOneWidget);
-    });
-
-    testWidgets('se ferme', (tester) async {
-      await _afficher(tester, _DepotSimule(_equipe()));
-
-      await tester.tap(find.byTooltip("Voir l'horaire du jour").first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Fermer'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Horaire du jour'), findsNothing);
+      expect(find.text('8h00 – 13h00'), findsOneWidget);
+      expect(find.text('Non confirmée'), findsOneWidget);
+      _verifierAucuneInfoDeTravail();
     });
   });
 }
