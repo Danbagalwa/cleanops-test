@@ -289,6 +289,82 @@ void main() {
     });
   });
 
+  group("« Horaire modifié » seulement pour les demandes d'horaire", () {
+    testWidgets('annulation et reprogrammation : le bouton est proposé',
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
+        _msg('2', '202', 'Repousser', nature: NatureDemande.reprogrammation),
+      ]));
+
+      expect(find.text('Horaire modifié'), findsNWidgets(2));
+    });
+
+    testWidgets('« Autre demande » : pas de bouton, seulement Répondre',
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
+      ]));
+
+      expect(find.text('Répondre'), findsOneWidget);
+      expect(find.text('Horaire modifié'), findsNothing);
+    });
+
+    testWidgets("un message « Autre » déjà répondu : seulement modifier la réponse",
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Clé perdue',
+            nature: NatureDemande.autre,
+            statut: StatutMessage.repondue,
+            reponse: 'Nous cherchons.'),
+      ]));
+
+      expect(find.text('Modifier la réponse'), findsOneWidget);
+      expect(find.text('Horaire modifié'), findsNothing);
+    });
+
+    testWidgets("le bouton n'apparaît que sur les cartes concernées",
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
+        _msg('2', '202', 'Clé perdue', nature: NatureDemande.autre),
+        _msg('3', '303', 'Question', nature: NatureDemande.autre),
+      ]));
+
+      expect(find.text('Répondre'), findsNWidgets(3));
+      expect(find.text('Horaire modifié'), findsOneWidget,
+          reason: "une seule demande sur trois concerne l'horaire");
+    });
+
+    testWidgets("la fenêtre de réponse ne parle pas d'horaire pour « Autre »",
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
+      ]));
+
+      await tester.tap(find.text('Répondre'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('La Réception verra cette réponse'),
+          findsOneWidget);
+      expect(find.textContaining('Horaire modifié'), findsNothing);
+      expect(find.textContaining("l'horaire n'a pas changé"), findsNothing);
+    });
+
+    testWidgets("la fenêtre de réponse d'une annulation explique la suite",
+        (tester) async {
+      await _afficherSection(tester, _DepotMessages([
+        _msg('1', '101', 'Annuler', nature: NatureDemande.annulation),
+      ]));
+
+      await tester.tap(find.text('Répondre'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("l'horaire n'a pas changé"), findsOneWidget);
+      expect(find.textContaining('Horaire modifié'), findsWidgets);
+    });
+  });
+
   group('Répondre', () {
     testWidgets('« Envoyer la réponse » exige un texte', (tester) async {
       await _afficherSection(tester, _DepotMessages(_jeu()));

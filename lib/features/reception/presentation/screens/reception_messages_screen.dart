@@ -773,7 +773,7 @@ class _DetailDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSizes.xs),
                 Text(
-                  m.statut.signification,
+                  m.signification,
                   style: const TextStyle(fontWeight: FontWeight.w600, height: 1.4),
                 ),
                 const SizedBox(height: AppSizes.xs),

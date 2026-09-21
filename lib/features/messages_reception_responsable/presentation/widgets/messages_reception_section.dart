@@ -402,17 +402,20 @@ class MessageReceptionCard extends ConsumerWidget {
                     side: const BorderSide(color: AppColors.rouge),
                   ),
                 ),
-                FilledButton.icon(
-                  onPressed: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => _ResoudreDialog(message: m),
+                // « Horaire modifié » n'existe que pour une annulation ou une
+                // reprogrammation : une « Autre demande » n'a pas d'horaire.
+                if (m.concerneHoraire)
+                  FilledButton.icon(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _ResoudreDialog(message: m),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                    label: const Text('Horaire modifié'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.fait,
+                    ),
                   ),
-                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                  label: const Text('Horaire modifié'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.fait,
-                  ),
-                ),
               ],
             ),
           ],
@@ -547,11 +550,14 @@ class _RepondreDialogState extends ConsumerState<_RepondreDialog> {
                   ),
                 ),
               ),
-              const Text(
-                "La Réception verra cette réponse. Le message passe à « Répondue » "
-                "(l'horaire n'a pas changé). Utilisez « Horaire modifié » une fois "
-                'le planning changé.',
-                style: TextStyle(
+              Text(
+                m.concerneHoraire
+                    ? "La Réception verra cette réponse. Le message passe à « Répondue » "
+                        "(l'horaire n'a pas changé). Utilisez « Horaire modifié » une "
+                        'fois le planning changé.'
+                    : 'La Réception verra cette réponse. Le message passe à '
+                        '« Répondue ».',
+                style: const TextStyle(
                     fontSize: 12, color: AppColors.grisDark, height: 1.4),
               ),
               if (_erreur != null) ...[

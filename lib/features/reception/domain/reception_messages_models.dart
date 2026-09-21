@@ -98,4 +98,16 @@ class MessageTransmis {
   static String formater(DateTime d) => DateFormat('dd/MM/yyyy HH:mm').format(d);
 
   String get envoyeLe => formater(dateCreation);
+
+  /// Vrai pour une annulation ou une reprogrammation : seules ces demandes
+  /// peuvent aboutir à un horaire modifié (statut « Résolue »). Une « Autre
+  /// demande » (clé perdue, information…) n'a pas d'horaire à modifier.
+  bool get concerneHoraire => nature != NatureDemande.autre;
+
+  /// Ce que le statut de CE message veut dire pour la Réception. Pour une demande
+  /// qui ne concerne pas l'horaire, « répondue » suffit : on ne parle pas d'horaire.
+  String get signification =>
+      !concerneHoraire && statut == StatutMessage.repondue
+          ? 'Une réponse a été donnée.'
+          : statut.signification;
 }

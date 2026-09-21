@@ -186,6 +186,52 @@ void main() {
       expect(NatureDemande.autre.libelle, 'Autre demande');
     });
 
+    group('nature et horaire', () {
+      MessageTransmis avec(NatureDemande nature, StatutMessage statut) =>
+          _msg('x', '1', 'm', nature: nature, statut: statut);
+
+      test("seules l'annulation et la reprogrammation concernent l'horaire",
+          () {
+        expect(
+            avec(NatureDemande.annulation, StatutMessage.enAttente)
+                .concerneHoraire,
+            isTrue);
+        expect(
+            avec(NatureDemande.reprogrammation, StatutMessage.enAttente)
+                .concerneHoraire,
+            isTrue);
+        expect(
+            avec(NatureDemande.autre, StatutMessage.enAttente).concerneHoraire,
+            isFalse);
+      });
+
+      test("répondue : pour une demande d'horaire, l'horaire n'a pas changé",
+          () {
+        expect(
+          avec(NatureDemande.annulation, StatutMessage.repondue).signification,
+          "Une réponse a été donnée, mais l'horaire n'a pas changé.",
+        );
+      });
+
+      test("répondue : pour « Autre », on ne parle pas d'horaire", () {
+        expect(
+          avec(NatureDemande.autre, StatutMessage.repondue).signification,
+          'Une réponse a été donnée.',
+        );
+      });
+
+      test('en attente et résolue : inchangés', () {
+        expect(
+          avec(NatureDemande.autre, StatutMessage.enAttente).signification,
+          "Personne n'a encore traité cette demande.",
+        );
+        expect(
+          avec(NatureDemande.annulation, StatutMessage.resolue).signification,
+          "L'horaire a été modifié.",
+        );
+      });
+    });
+
     test('un statut inconnu (dont « Traitee ») est refusé', () {
       expect(() => StatutMessage.fromCode('Traitee'), throwsFormatException);
     });
@@ -385,6 +431,26 @@ void main() {
       expect(find.text('Résolue le 20/09/2026 16:45.'), findsOneWidget);
       expect(find.text("L'horaire a été modifié."), findsOneWidget);
       expect(find.text('Nature : Autre demande'), findsOneWidget);
+    });
+
+    testWidgets("« Autre demande » répondue : aucun mot sur l'horaire",
+        (tester) async {
+      await _afficher(
+        tester,
+        _DepotSimule([
+          _msg('9', '909', 'Clé perdue',
+              nature: NatureDemande.autre,
+              statut: StatutMessage.repondue,
+              reponse: 'Nous cherchons.',
+              dateReponse: DateTime(2026, 9, 21, 15, 0)),
+        ]),
+      );
+
+      await tester.tap(find.byTooltip('Voir le message'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Une réponse a été donnée.'), findsOneWidget);
+      expect(find.textContaining("l'horaire n'a pas changé"), findsNothing);
     });
 
     testWidgets('un message non transmis à l\'employé ne le mentionne pas',
