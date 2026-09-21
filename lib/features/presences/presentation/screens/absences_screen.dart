@@ -65,6 +65,21 @@ Future<void> _notifierResidents({
   required String type,
   required String message,
 }) async {
+  // Les résidents SANS application ne voient jamais ces notifications : un avis
+  // est créé pour que la Réception (ou le responsable) les prévienne. Cet appel
+  // ne doit jamais bloquer l'action d'origine.
+  try {
+    await SupabaseService.client.rpc(
+      'app_creer_avis_residents_sans_app',
+      params: {
+        'p_appartement_id': appartementId,
+        'p_tache_id': tacheJourId,
+        'p_type': type,
+        'p_message': message,
+      },
+    );
+  } catch (_) {}
+
   try {
     final residents = await SupabaseService.table(SupabaseService.residents)
         .select('id')
