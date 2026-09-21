@@ -3,6 +3,7 @@ import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../domain/entities/demande_resident.dart';
+import '../../domain/menages_depuis_arrivee.dart';
 import '../models/demande_resident_model.dart';
 import '../models/notification_resident_model.dart';
 import '../models/tache_resident_model.dart';
@@ -127,10 +128,12 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
     try {
       final residentRow = await SupabaseService.client
           .from(SupabaseService.residents)
-          .select('appartement_id')
+          .select('appartement_id, date_arrivee')
           .eq('id', residentId)
           .single();
       final appartementId = residentRow['appartement_id'] as String;
+      // Un nouveau résident ne voit jamais les ménages d'avant son arrivée.
+      final dateArrivee = residentRow['date_arrivee'] as String?;
 
       final maintenant = DateTime.now();
       final aujourdhui =
@@ -204,10 +207,11 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
 
       final menagesAVenir = [...menagesReels, ...projections]
         ..sort((a, b) => a.dateReelle.compareTo(b.dateReelle));
-      final data = (dernierEffectue as List)
-          .map((j) => TacheResidentModel.fromJson(
-                j as Map<String, dynamic>,
-              ))
+      final data = menagesDepuisArrivee(
+        List<Map<String, dynamic>>.from(dernierEffectue as List),
+        dateArrivee,
+      )
+          .map(TacheResidentModel.fromJson)
           .toList()
         ..addAll(menagesAVenir);
 
