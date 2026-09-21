@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -343,6 +344,109 @@ void main() {
         expect(r.taille, lessThan(original.length ~/ 8),
             reason: 'beaucoup plus petite que l\'original');
       });
+    });
+
+    testWidgets('un panorama (très allongé) donne quand même un carré de '
+        '320 px', (tester) async {
+      // 3000 × 500 : décodé à 640 px de large, il ne ferait que 107 px de haut.
+      // Un second décodage, par la hauteur, évite une photo minuscule.
+      final image = img.Image(width: 3000, height: 500);
+      img.fill(image, color: img.ColorRgb8(90, 140, 210));
+      final jpg = img.encodeJpg(image, quality: 90);
+      await tester.runAsync(() async {
+        final r = await CompresseurPhoto.compresser(jpg);
+        expect(r.largeur, 320);
+        expect(r.hauteur, 320);
+      });
+    });
+
+    testWidgets('un portrait très haut donne un carré de 320 px',
+        (tester) async {
+      final image = img.Image(width: 600, height: 3000);
+      img.fill(image, color: img.ColorRgb8(90, 140, 210));
+      final jpg = img.encodeJpg(image, quality: 90);
+      await tester.runAsync(() async {
+        final r = await CompresseurPhoto.compresser(jpg);
+        expect(r.largeur, 320);
+      });
+    });
+
+    testWidgets('les COULEURS sont respectées (pas de canaux inversés)',
+        (tester) async {
+      final image = img.Image(width: 800, height: 800);
+      img.fill(image, color: img.ColorRgb8(210, 40, 40)); // rouge franc
+      final png = img.encodePng(image);
+      await tester.runAsync(() async {
+        final r = await CompresseurPhoto.compresser(png);
+        final p = img.decodeJpg(r.octets)!.getPixel(160, 160);
+        expect(p.r, greaterThan(180));
+        expect(p.g, lessThan(80));
+        expect(p.b, lessThan(80));
+      });
+    });
+
+    testWidgets('un JPEG progressif de téléphone est accepté', (tester) async {
+      // Le format de la photo qui a révélé le défaut du navigateur.
+      final image = img.Image(width: 1100, height: 1280);
+      img.fill(image, color: img.ColorRgb8(150, 120, 90));
+      final jpg = img.JpegEncoder(quality: 90).encode(image);
+      await tester.runAsync(() async {
+        final r = await CompresseurPhoto.compresser(jpg);
+        expect(r.largeur, 320);
+        expect(r.taille, lessThanOrEqualTo(40 * 1024));
+      });
+    });
+  });
+
+  group('Compatibilité navigateur', () {
+    // Ces tests tournent sur le moteur « bureau », où ImageDescriptor.width
+    // fonctionne. Sur le WEB, il lève « ImageDescriptor.width is not supported on
+    // web » et toute image échouait. Le défaut ne peut donc pas être vu ici : on
+    // interdit l'API fautive dans la source, et le décodage a été vérifié à la
+    // main dans un vrai navigateur (voir le rapport).
+    test('le décodeur n\'utilise aucune API d\'ImageDescriptor', () {
+      final source = File('lib/core/services/compression_photo.dart')
+          .readAsStringSync();
+      final code = source
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n');
+
+      expect(code, isNot(contains('ImageDescriptor')));
+      expect(code, isNot(contains('ImmutableBuffer')));
+      expect(code, contains('instantiateImageCodec'));
+    });
+
+    test('la source n\'utilise pas dart:io (absent du web)', () {
+      final source = File('lib/core/services/compression_photo.dart')
+          .readAsStringSync();
+      expect(source, isNot(contains("import 'dart:io'")));
+    });
+  });
+
+  group('Erreurs du décodage', () {
+    test('une plateforme qui ne sait pas décoder n\'est pas déguisée en '
+        '« image illisible »', () {
+      expect(
+        () => CompresseurPhoto.compresser(
+          Uint8List.fromList([1, 2, 3]),
+          decodeur: (_, __, ___) async =>
+              throw UnsupportedError('pas sur le web'),
+        ),
+        throwsA(isA<ErreurPhoto>().having((e) => e.message, 'message',
+            contains("pas disponible sur cet appareil"))),
+      );
+    });
+
+    test('un autre échec de décodage reste « image illisible »', () {
+      expect(
+        () => CompresseurPhoto.compresser(
+          Uint8List.fromList([1, 2, 3]),
+          decodeur: (_, __, ___) async => throw const FormatException('x'),
+        ),
+        throwsA(isA<ErreurPhoto>().having(
+            (e) => e.message, 'message', contains("pas une image lisible"))),
+      );
     });
   });
 }

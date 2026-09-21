@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:image/image.dart' as img;
 
 /// Réglages de la réduction d'une photo de profil.
@@ -147,7 +148,16 @@ abstract final class CompresseurPhoto {
       raster = await decodeur(entree, parametres.coteMax, parametres);
     } on ErreurPhoto {
       rethrow;
-    } catch (_) {
+    } on UnsupportedError catch (e) {
+      // Ce n'est pas la faute du fichier : la plateforme ne sait pas faire. On ne
+      // le déguise pas en « image illisible ».
+      debugPrint('CompresseurPhoto : plateforme non supportée : $e');
+      throw const ErreurPhoto(
+        "Le traitement des images n'est pas disponible sur cet appareil.",
+      );
+    } catch (e) {
+      // Garde la vraie cause dans la console (elle était auparavant perdue).
+      debugPrint('CompresseurPhoto : décodage impossible : $e');
       throw const ErreurPhoto("Ce fichier n'est pas une image lisible.");
     }
 
@@ -242,37 +252,52 @@ abstract final class CompresseurPhoto {
     return img.compositeImage(fond, recadre);
   }
 
-  /// Décodage par le moteur graphique de Flutter : il lit l'entête, puis décode
-  /// DIRECTEMENT à taille réduite (une photo de 12 mégapixels ne devient jamais
-  /// une image de 48 Mo en mémoire, et ce n'est pas du Dart qui fait le travail,
-  /// donc l'écran ne se fige pas).
+  /// Décodage par le moteur graphique de Flutter, DIRECTEMENT à taille réduite :
+  /// une photo de 12 mégapixels ne devient jamais une image de 48 Mo en mémoire,
+  /// et ce n'est pas du Dart qui fait le travail, donc l'écran ne se fige pas.
+  ///
+  /// Fonctionne sur TOUTES les plateformes, navigateur compris. (Une première
+  /// version lisait les dimensions par `ImageDescriptor`, dont `width` et
+  /// `height` n'existent PAS sur le web : toute image échouait dans le navigateur.)
+  ///
+  /// On ne connaît pas les dimensions avant de décoder, donc :
+  ///  1. décodage avec la LARGEUR ramenée à 2 × `coteMax` (les proportions sont
+  ///     conservées, jamais d'agrandissement) : au plus deux fois le côté final ;
+  ///  2. cas d'un panorama (paysage très allongé) dont le petit côté deviendrait
+  ///     trop petit : second décodage, cette fois avec la HAUTEUR ramenée à
+  ///     `coteMax`.
   static Future<PhotoRaster> decoderAvecMoteur(
     Uint8List octets,
     int coteMax,
     ParametresPhoto parametres,
   ) async {
-    final tampon = await ui.ImmutableBuffer.fromUint8List(octets);
-    ui.ImageDescriptor? descripteur;
+    final largeurCible = coteMax * 2;
+    var raster = await _decoderReduit(octets, largeur: largeurCible);
+
+    final panoramaReduit = raster.largeur > raster.hauteur &&
+        raster.largeur >= largeurCible &&
+        raster.hauteur < coteMax;
+    if (panoramaReduit) {
+      raster = await _decoderReduit(octets, hauteur: coteMax);
+    }
+    return raster;
+  }
+
+  /// Décode l'image en imposant UNE dimension (l'autre suit les proportions),
+  /// sans jamais agrandir.
+  static Future<PhotoRaster> _decoderReduit(
+    Uint8List octets, {
+    int? largeur,
+    int? hauteur,
+  }) async {
     ui.Codec? codec;
     ui.Image? image;
     try {
-      descripteur = await ui.ImageDescriptor.encoded(tampon);
-      final largeur = descripteur.width;
-      final hauteur = descripteur.height;
-      final courtCote = math.min(largeur, hauteur);
-      if (courtCote < parametres.coteMinEntree) {
-        throw ErreurPhoto(
-          'Cette image est trop petite '
-          '(${parametres.coteMinEntree} pixels au minimum).',
-        );
-      }
-
-      // Petit côté ramené à `coteMax` (jamais d'agrandissement).
-      final cote = math.min(coteMax, courtCote);
-      final echelle = cote / courtCote;
-      codec = await descripteur.instantiateCodec(
-        targetWidth: math.max(1, (largeur * echelle).round()),
-        targetHeight: math.max(1, (hauteur * echelle).round()),
+      codec = await ui.instantiateImageCodec(
+        octets,
+        targetWidth: largeur,
+        targetHeight: hauteur,
+        allowUpscaling: false,
       );
       image = (await codec.getNextFrame()).image;
       final donnees = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
@@ -282,13 +307,14 @@ abstract final class CompresseurPhoto {
       return PhotoRaster(
         largeur: image.width,
         hauteur: image.height,
-        rgba: donnees.buffer.asUint8List(),
+        // Vue exacte des pixels (et non le tampon entier, qui peut être plus
+        // grand ou décalé selon la plateforme).
+        rgba: Uint8List.fromList(donnees.buffer
+            .asUint8List(donnees.offsetInBytes, donnees.lengthInBytes)),
       );
     } finally {
       image?.dispose();
       codec?.dispose();
-      descripteur?.dispose();
-      tampon.dispose();
     }
   }
 }
