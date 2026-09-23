@@ -111,8 +111,11 @@ class _TeamView extends ConsumerWidget {
     final employesState = ref.watch(employesNotifierProvider);
     final semaineCourante = SemaineHelper.semaineCourante;
     final semaine = planningState.semaineVue;
-    final employes =
-        employesState.employes.where((e) => e.isActif).toList();
+    // Le planning ne concerne que les préposées : les autres rôles
+    // (admin, réception...) n'y apparaissent pas.
+    final employes = employesState.employes
+        .where((e) => e.isActif && e.role == RoleType.employe)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.grisLight,
