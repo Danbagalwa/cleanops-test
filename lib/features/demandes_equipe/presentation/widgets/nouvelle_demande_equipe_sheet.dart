@@ -23,6 +23,26 @@ String? typeMimeDocumentDemande(String? extension) =>
       _ => null,
     };
 
+/// Storage n'impose que le type MIME DÉCLARÉ à l'envoi (pas le contenu réel) :
+/// ce contrôle, fait ici côté app, est un garde-fou contre un fichier mal
+/// étiqueté, pas une preuve (voir la migration 202609230033).
+bool signatureDocumentValide(Uint8List octets, String typeMime) {
+  bool commencePar(List<int> signature) {
+    if (octets.length < signature.length) return false;
+    for (var i = 0; i < signature.length; i++) {
+      if (octets[i] != signature[i]) return false;
+    }
+    return true;
+  }
+
+  return switch (typeMime) {
+    'application/pdf' => commencePar([0x25, 0x50, 0x44, 0x46]), // %PDF
+    'image/jpeg' => commencePar([0xFF, 0xD8, 0xFF]),
+    'image/png' => commencePar([0x89, 0x50, 0x4E, 0x47]),
+    _ => false,
+  };
+}
+
 const double _kDesktop = 900;
 
 /// Affiche un Dialog sur desktop, un BottomSheet sur mobile.
@@ -131,6 +151,11 @@ class _NouvelleDemandeEquipeSheetState
     final typeMime = typeMimeDocumentDemande(fichier.extension);
     if (typeMime == null) {
       setState(() => _erreurDocument = 'Formats acceptés : PDF, JPEG ou PNG.');
+      return;
+    }
+    if (!signatureDocumentValide(octets, typeMime)) {
+      setState(() => _erreurDocument =
+          'Ce fichier ne semble pas être un ${fichier!.extension} valide.');
       return;
     }
 

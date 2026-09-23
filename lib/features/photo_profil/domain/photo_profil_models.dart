@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import '../../auth/domain/entities/employee.dart';
 
 /// Type d'utilisateur qui possède une photo de profil. Les employés (de tout
@@ -40,14 +37,4 @@ class ProprietairePhoto {
 
   @override
   int get hashCode => Object.hash(type, id);
-}
-
-/// Décode la photo renvoyée par le serveur : du base64, éventuellement coupé en
-/// lignes. `null` s'il n'y a rien (pas de photo). Lève une [FormatException] si
-/// le contenu n'est pas du base64 valide.
-Uint8List? octetsDepuisBase64(String? base64) {
-  if (base64 == null) return null;
-  final propre = base64.replaceAll(RegExp(r'\s'), '');
-  if (propre.isEmpty) return null;
-  return base64Decode(propre);
 }

@@ -403,6 +403,45 @@ void main() {
       expect(find.text('billet.pdf'), findsNothing);
     });
 
+    test('signatureDocumentValide : détecte un fichier mal étiqueté', () {
+      final pdf = _pdf(); // %PDF...
+      final jpeg = Uint8List.fromList([0xFF, 0xD8, 0xFF, 1, 2, 3]);
+      final png =
+          Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2, 3, 4, 5]);
+      final texte = Uint8List.fromList('coucou, pas un document'.codeUnits);
+
+      expect(signatureDocumentValide(pdf, 'application/pdf'), isTrue);
+      expect(signatureDocumentValide(jpeg, 'image/jpeg'), isTrue);
+      expect(signatureDocumentValide(png, 'image/png'), isTrue);
+
+      // Renommé en .pdf mais c'est en fait un JPEG (ou l'inverse) : refusé.
+      expect(signatureDocumentValide(jpeg, 'application/pdf'), isFalse);
+      expect(signatureDocumentValide(pdf, 'image/jpeg'), isFalse);
+      expect(signatureDocumentValide(texte, 'application/pdf'), isFalse);
+      expect(signatureDocumentValide(Uint8List(0), 'application/pdf'), isFalse,
+          reason: 'trop court pour contenir la signature');
+    });
+
+    testWidgets(
+        'un fichier renommé (mauvaise signature) est refusé avec un message '
+        'clair', (tester) async {
+      final selecteur = _FakeSelecteur()
+        ..retour = FichierChoisi(
+          nom: 'photo.pdf',
+          extension: 'pdf',
+          // Un vrai JPEG, mais renommé en .pdf.
+          octets: Uint8List.fromList([0xFF, 0xD8, 0xFF, 1, 2, 3]),
+        );
+      await pump(tester, selecteur: selecteur, repo: _FakeRepo());
+
+      await tester.tap(find.text('Joindre un document (PDF ou image)'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('ne semble pas être un pdf valide'),
+          findsOneWidget);
+      expect(find.text('photo.pdf'), findsNothing);
+    });
+
     test('typeMimeDocumentDemande : extensions reconnues', () {
       expect(typeMimeDocumentDemande('pdf'), 'application/pdf');
       expect(typeMimeDocumentDemande('PDF'), 'application/pdf');

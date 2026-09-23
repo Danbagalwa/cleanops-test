@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -170,6 +169,11 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
     }
   }
 
+  /// Bucket Storage des documents joints (voir migration 202609230033) : les
+  /// octets y sont envoyés directement, seules les métadonnées passent par la
+  /// table `demandes_equipe_documents`.
+  static const _bucketDocuments = 'documents-demandes-equipe';
+
   @override
   Future<void> joindreDocument({
     required String demandeId,
@@ -178,48 +182,79 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
     required String typeMime,
     required Uint8List octets,
   }) async {
+    try {
+      await SupabaseService.client.storage.from(_bucketDocuments).uploadBinary(
+            demandeId,
+            octets,
+            fileOptions: FileOptions(contentType: typeMime, upsert: true),
+          );
+    } on StorageException catch (e) {
+      throw ServerException(
+        e.message.isNotEmpty ? e.message : "Le document n'a pas pu être envoyé.",
+      );
+    } catch (_) {
+      throw const ServerException("Le document n'a pas pu être envoyé.");
+    }
+
     const erreur = "Le document n'a pas pu être joint.";
     try {
       await SupabaseService.client.rpc(
-        'joindre_document_demande',
+        'enregistrer_document_demande',
         params: {
           'p_demande_id': demandeId,
           'p_employee_id': employeeId,
+          'p_chemin': demandeId,
           'p_nom': nom,
-          'p_type_mime': typeMime,
-          'p_document_base64': base64Encode(octets),
         },
       );
     } on PostgrestException catch (e) {
+      await _retirerDuBucket(demandeId);
       throw ServerException(_message(e, erreur));
     } catch (_) {
+      await _retirerDuBucket(demandeId);
       throw const ServerException(erreur);
+    }
+  }
+
+  /// Nettoyage best-effort d'un envoi Storage dont l'enregistrement des
+  /// métadonnées a échoué (sinon le fichier reste orphelin, sans conséquence
+  /// mais inutile).
+  Future<void> _retirerDuBucket(String chemin) async {
+    try {
+      await SupabaseService.client.storage
+          .from(_bucketDocuments)
+          .remove([chemin]);
+    } catch (_) {
+      // Sans conséquence : voir la migration 202609230033.
     }
   }
 
   @override
   Future<DocumentDemande> lireDocument(String demandeId) async {
-    const erreur = "Impossible de charger le document.";
+    const erreur = 'Impossible de charger le document.';
+    Map<String, dynamic>? meta;
     try {
-      final data = await SupabaseService.client.rpc(
-        'document_demande_contenu',
-        params: {'p_demande_id': demandeId},
-      );
-      if (data == null) {
-        throw const ServerException('Ce document est introuvable.');
-      }
-      final json = data as Map<String, dynamic>;
-      final base64 =
-          (json['contenu_base64'] as String).replaceAll(RegExp(r'\s'), '');
+      meta = await SupabaseService.client
+          .from('demandes_equipe_documents')
+          .select('nom, type_mime')
+          .eq('demande_id', demandeId)
+          .maybeSingle();
+    } catch (_) {
+      throw const ServerException(erreur);
+    }
+    if (meta == null) {
+      throw const ServerException('Ce document est introuvable.');
+    }
+
+    try {
+      final octets = await SupabaseService.client.storage
+          .from(_bucketDocuments)
+          .download(demandeId);
       return DocumentDemande(
-        nom: json['nom'] as String,
-        typeMime: json['type_mime'] as String,
-        octets: base64Decode(base64),
+        nom: meta['nom'] as String,
+        typeMime: meta['type_mime'] as String,
+        octets: octets,
       );
-    } on ServerException {
-      rethrow;
-    } on PostgrestException catch (e) {
-      throw ServerException(_message(e, erreur));
     } catch (_) {
       throw const ServerException(erreur);
     }

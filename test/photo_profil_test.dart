@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:cleanops/core/services/compression_photo.dart';
 import 'package:cleanops/features/auth/domain/entities/employee.dart';
@@ -209,32 +208,6 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(a == c, isFalse, reason: 'même id, autre type');
       expect(a == d, isFalse);
-    });
-  });
-
-  group('Décodage de la réponse du serveur', () {
-    test('rien : pas de photo', () {
-      expect(octetsDepuisBase64(null), isNull);
-      expect(octetsDepuisBase64(''), isNull);
-      expect(octetsDepuisBase64('  \n '), isNull);
-    });
-
-    test('base64 simple', () {
-      final octets = Uint8List.fromList([0xFF, 0xD8, 0xFF, 1, 2, 3, 4, 5]);
-      expect(octetsDepuisBase64(base64Encode(octets)), octets);
-    });
-
-    test('base64 coupé en lignes (comme le fait encode() de Postgres)', () {
-      final octets = Uint8List.fromList(List.generate(300, (i) => i % 256));
-      final brut = base64Encode(octets);
-      final coupe = RegExp('.{1,76}').allMatches(brut).map((m) => m[0]).join('\n');
-      expect(coupe, contains('\n'));
-      expect(octetsDepuisBase64(coupe), octets);
-    });
-
-    test('contenu invalide : erreur, pas de photo inventée', () {
-      expect(() => octetsDepuisBase64('%%% pas du base64 %%%'),
-          throwsFormatException);
     });
   });
 
