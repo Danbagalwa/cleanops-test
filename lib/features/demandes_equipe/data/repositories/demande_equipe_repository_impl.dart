@@ -1,7 +1,10 @@
+import 'dart:typed_data';
+
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/demande_equipe.dart';
+import '../../domain/entities/document_demande.dart';
 import '../../domain/repositories/demande_equipe_repository.dart';
 import '../datasources/demande_equipe_datasource.dart';
 
@@ -67,6 +70,38 @@ class DemandeEquipeRepositoryImpl implements DemandeEquipeRepository {
         approuve: approuve,
         note: note,
       ));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> joindreDocument({
+    required String demandeId,
+    required String employeeId,
+    required String nom,
+    required String typeMime,
+    required Uint8List octets,
+  }) async {
+    try {
+      await _ds.joindreDocument(
+        demandeId: demandeId,
+        employeeId: employeeId,
+        nom: nom,
+        typeMime: typeMime,
+        octets: octets,
+      );
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, DocumentDemande>> lireDocument(
+      String demandeId) async {
+    try {
+      return Right(await _ds.lireDocument(demandeId));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }

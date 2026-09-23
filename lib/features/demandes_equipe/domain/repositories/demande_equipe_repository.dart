@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
 import '../entities/demande_equipe.dart';
+import '../entities/document_demande.dart';
 
 abstract class DemandeEquipeRepository {
   Future<Either<Failure, List<DemandeEquipe>>> getMesDemandes(
@@ -24,4 +27,14 @@ abstract class DemandeEquipeRepository {
     required bool approuve,
     String? note,
   });
+
+  Future<Either<Failure, void>> joindreDocument({
+    required String demandeId,
+    required String employeeId,
+    required String nom,
+    required String typeMime,
+    required Uint8List octets,
+  });
+
+  Future<Either<Failure, DocumentDemande>> lireDocument(String demandeId);
 }

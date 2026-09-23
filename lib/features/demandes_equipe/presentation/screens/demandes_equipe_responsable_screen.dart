@@ -8,6 +8,7 @@ import '../../../photo_profil/domain/photo_profil_models.dart';
 import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/demande_equipe.dart';
 import '../providers/demande_equipe_provider.dart';
+import '../widgets/piece_jointe_demande.dart';
 
 class DemandesEquipeResponsableScreen extends ConsumerWidget {
   const DemandesEquipeResponsableScreen({super.key});
@@ -208,6 +209,10 @@ class _DemandeCard extends ConsumerWidget {
           Text(demande.motif,
               style:
                   const TextStyle(fontSize: 13, color: AppColors.grisDark)),
+          if (demande.aDocument) ...[
+            const SizedBox(height: AppSizes.sm),
+            PieceJointeDemande(demande: demande),
+          ],
           if (demande.resolue && demande.noteResponsable != null) ...[
             const SizedBox(height: AppSizes.sm),
             Container(

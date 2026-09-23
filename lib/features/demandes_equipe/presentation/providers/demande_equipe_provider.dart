@@ -1,9 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/demande_equipe_datasource.dart';
 import '../../data/repositories/demande_equipe_repository_impl.dart';
+import '../../data/selecteur_document_file_picker.dart';
 import '../../domain/entities/demande_equipe.dart';
+import '../../domain/entities/document_demande.dart';
 import '../../domain/repositories/demande_equipe_repository.dart';
+import '../../domain/selecteur_document.dart';
 
 // ── Infrastructure ────────────────────────────────────────
 
@@ -16,6 +21,10 @@ final demandeEquipeRepositoryProvider = Provider<DemandeEquipeRepository>(
       DemandeEquipeRepositoryImpl(ref.watch(demandeEquipeDatasourceProvider)),
 );
 
+final selecteurDocumentProvider = Provider<SelecteurDocument>(
+  (_) => SelecteurDocumentFilePicker(),
+);
+
 // ── Côté employé — mes demandes ────────────────────────────
 
 class MesDemandesEquipeState {
@@ -24,11 +33,16 @@ class MesDemandesEquipeState {
   final bool isSending;
   final String? error;
 
+  /// Un avertissement post-envoi (la demande a été créée, mais le document
+  /// joint n'a pas pu l'être) : distinct de [error], qui bloque l'envoi.
+  final String? avertissement;
+
   const MesDemandesEquipeState({
     this.demandes = const [],
     this.isLoading = false,
     this.isSending = false,
     this.error,
+    this.avertissement,
   });
 
   MesDemandesEquipeState copyWith({
@@ -37,12 +51,16 @@ class MesDemandesEquipeState {
     bool? isSending,
     String? error,
     bool clearError = false,
+    String? avertissement,
+    bool clearAvertissement = false,
   }) =>
       MesDemandesEquipeState(
         demandes: demandes ?? this.demandes,
         isLoading: isLoading ?? this.isLoading,
         isSending: isSending ?? this.isSending,
         error: clearError ? null : error ?? this.error,
+        avertissement:
+            clearAvertissement ? null : avertissement ?? this.avertissement,
       );
 }
 
@@ -79,8 +97,12 @@ class MesDemandesEquipeNotifier extends StateNotifier<MesDemandesEquipeState> {
     required DateTime dateDebut,
     DateTime? dateFin,
     required String motif,
+    Uint8List? documentOctets,
+    String? documentNom,
+    String? documentTypeMime,
   }) async {
-    state = state.copyWith(isSending: true, clearError: true);
+    state = state.copyWith(
+        isSending: true, clearError: true, clearAvertissement: true);
     final result = await _repo.creerDemande(
       employeeId: _employeeId,
       employeePrenom: _employeePrenom,
@@ -95,14 +117,60 @@ class MesDemandesEquipeNotifier extends StateNotifier<MesDemandesEquipeState> {
         state = state.copyWith(isSending: false, error: f.message);
         return false;
       },
-      (demande) {
+      (demande) async {
         state = state.copyWith(
           isSending: false,
           demandes: [demande, ...state.demandes],
         );
+        // La demande est créée : le document, s'il y en a un, est un
+        // ajout optionnel — son échec ne remet pas en cause l'envoi.
+        if (documentOctets != null) {
+          await _joindreDocument(
+            demande,
+            octets: documentOctets,
+            nom: documentNom!,
+            typeMime: documentTypeMime!,
+          );
+        }
         return true;
       },
     );
+  }
+
+  Future<void> _joindreDocument(
+    DemandeEquipe demande, {
+    required Uint8List octets,
+    required String nom,
+    required String typeMime,
+  }) async {
+    final result = await _repo.joindreDocument(
+      demandeId: demande.id,
+      employeeId: _employeeId,
+      nom: nom,
+      typeMime: typeMime,
+      octets: octets,
+    );
+    result.fold(
+      (f) => state = state.copyWith(
+        avertissement:
+            "La demande a été envoyée, mais le document n'a pas pu être "
+            'joint : ${f.message}',
+      ),
+      (_) => state = state.copyWith(
+        demandes: state.demandes
+            .map((d) => d.id == demande.id
+                ? d.avecDocument(
+                    nom: nom, typeMime: typeMime, taille: octets.length)
+                : d)
+            .toList(),
+      ),
+    );
+  }
+
+  void viderAvertissement() {
+    if (state.avertissement != null) {
+      state = state.copyWith(clearAvertissement: true);
+    }
   }
 }
 
@@ -210,4 +278,13 @@ final demandesEquipeResponsableProvider = StateNotifierProvider.autoDispose<
     ref.watch(demandeEquipeRepositoryProvider),
     employee?.id ?? '',
   );
+});
+
+// ── Document joint — lu à la demande (bouton « voir ») ─────
+
+final documentDemandeProvider = FutureProvider.autoDispose
+    .family<DocumentDemande, String>((ref, demandeId) async {
+  final result =
+      await ref.watch(demandeEquipeRepositoryProvider).lireDocument(demandeId);
+  return result.fold((f) => throw Exception(f.message), (doc) => doc);
 });

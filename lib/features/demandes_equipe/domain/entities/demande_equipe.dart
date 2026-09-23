@@ -57,6 +57,12 @@ class DemandeEquipe extends Equatable {
   final Employee? employee;
   final Employee? traitePar;
 
+  // Document joint (métadonnées seulement — le contenu se lit à part, sur
+  // demande : voir DemandeEquipeRepository.lireDocument).
+  final String? documentNom;
+  final String? documentTypeMime;
+  final int? documentTaille;
+
   const DemandeEquipe({
     required this.id,
     required this.employeeId,
@@ -72,13 +78,44 @@ class DemandeEquipe extends Equatable {
     this.dateTraitement,
     this.employee,
     this.traitePar,
+    this.documentNom,
+    this.documentTypeMime,
+    this.documentTaille,
   });
 
   bool get enAttente => statut == StatutDemandeEquipe.enAttente;
   bool get resolue => statut == StatutDemandeEquipe.resolue;
   bool get estApprouvee => resolue && approuve == true;
   bool get estRefusee => resolue && approuve == false;
+  bool get aDocument => documentNom != null;
+
+  /// Copie portant les métadonnées d'un document tout juste joint (mise à jour
+  /// locale après un envoi réussi, sans recharger toute la demande).
+  DemandeEquipe avecDocument({
+    required String nom,
+    required String typeMime,
+    required int taille,
+  }) =>
+      DemandeEquipe(
+        id: id,
+        employeeId: employeeId,
+        type: type,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+        motif: motif,
+        statut: statut,
+        approuve: approuve,
+        traiteParId: traiteParId,
+        noteResponsable: noteResponsable,
+        createdAt: createdAt,
+        dateTraitement: dateTraitement,
+        employee: employee,
+        traitePar: traitePar,
+        documentNom: nom,
+        documentTypeMime: typeMime,
+        documentTaille: taille,
+      );
 
   @override
-  List<Object?> get props => [id, statut, approuve, noteResponsable];
+  List<Object?> get props => [id, statut, approuve, noteResponsable, documentNom];
 }

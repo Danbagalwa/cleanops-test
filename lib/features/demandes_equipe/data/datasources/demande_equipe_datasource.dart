@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../domain/entities/demande_equipe.dart';
+import '../../domain/entities/document_demande.dart';
 import '../models/demande_equipe_model.dart';
 
 abstract class DemandeEquipeDatasource {
@@ -25,12 +31,30 @@ abstract class DemandeEquipeDatasource {
     required bool approuve,
     String? note,
   });
+
+  /// Joint (ou remplace, avant traitement) le document d'une demande.
+  Future<void> joindreDocument({
+    required String demandeId,
+    required String employeeId,
+    required String nom,
+    required String typeMime,
+    required Uint8List octets,
+  });
+
+  /// Lit le contenu du document d'une demande.
+  Future<DocumentDemande> lireDocument(String demandeId);
 }
 
 class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
   static const _join = '*, '
       'employees!demandes_equipe_employee_id_fkey(id, nom, prenom, slug, role, is_actif), '
-      'traite_par_employee:employees!demandes_equipe_traite_par_fkey(id, nom, prenom, slug, role, is_actif)';
+      'traite_par_employee:employees!demandes_equipe_traite_par_fkey(id, nom, prenom, slug, role, is_actif), '
+      'demandes_equipe_documents(nom, type_mime, taille)';
+
+  /// Les refus métier du serveur (code P0001) sont déjà rédigés pour
+  /// l'utilisateur ; toute autre erreur reçoit un message générique.
+  String _message(PostgrestException e, String parDefaut) =>
+      e.code == 'P0001' && e.message.isNotEmpty ? e.message : parDefaut;
 
   static String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -143,6 +167,61 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
       return demande;
     } catch (e) {
       throw ServerException('Erreur traitement demande : $e');
+    }
+  }
+
+  @override
+  Future<void> joindreDocument({
+    required String demandeId,
+    required String employeeId,
+    required String nom,
+    required String typeMime,
+    required Uint8List octets,
+  }) async {
+    const erreur = "Le document n'a pas pu être joint.";
+    try {
+      await SupabaseService.client.rpc(
+        'joindre_document_demande',
+        params: {
+          'p_demande_id': demandeId,
+          'p_employee_id': employeeId,
+          'p_nom': nom,
+          'p_type_mime': typeMime,
+          'p_document_base64': base64Encode(octets),
+        },
+      );
+    } on PostgrestException catch (e) {
+      throw ServerException(_message(e, erreur));
+    } catch (_) {
+      throw const ServerException(erreur);
+    }
+  }
+
+  @override
+  Future<DocumentDemande> lireDocument(String demandeId) async {
+    const erreur = "Impossible de charger le document.";
+    try {
+      final data = await SupabaseService.client.rpc(
+        'document_demande_contenu',
+        params: {'p_demande_id': demandeId},
+      );
+      if (data == null) {
+        throw const ServerException('Ce document est introuvable.');
+      }
+      final json = data as Map<String, dynamic>;
+      final base64 =
+          (json['contenu_base64'] as String).replaceAll(RegExp(r'\s'), '');
+      return DocumentDemande(
+        nom: json['nom'] as String,
+        typeMime: json['type_mime'] as String,
+        octets: base64Decode(base64),
+      );
+    } on ServerException {
+      rethrow;
+    } on PostgrestException catch (e) {
+      throw ServerException(_message(e, erreur));
+    } catch (_) {
+      throw const ServerException(erreur);
     }
   }
 

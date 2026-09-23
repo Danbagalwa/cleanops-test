@@ -8,6 +8,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/demande_equipe.dart';
 import '../providers/demande_equipe_provider.dart';
 import '../widgets/nouvelle_demande_equipe_sheet.dart';
+import '../widgets/piece_jointe_demande.dart';
 
 enum _StatutFiltre { tous, enAttente, resolues }
 
@@ -39,6 +40,15 @@ class _MesDemandesEquipeScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(mesDemandesEquipeNotifierProvider, (previous, next) {
+      final avertissement = next.avertissement;
+      if (avertissement != null && avertissement != previous?.avertissement) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(avertissement)));
+        ref.read(mesDemandesEquipeNotifierProvider.notifier).viderAvertissement();
+      }
+    });
     final state = ref.watch(mesDemandesEquipeNotifierProvider);
     final employee = ref.watch(employeeCourantProvider);
     final filtrees = _filtrer(state.demandes);
@@ -221,6 +231,10 @@ class _DemandeCard extends StatelessWidget {
           Text(demande.motif,
               style:
                   const TextStyle(fontSize: 13, color: AppColors.grisDark)),
+          if (demande.aDocument) ...[
+            const SizedBox(height: AppSizes.sm),
+            PieceJointeDemande(demande: demande),
+          ],
           if (demande.resolue && demande.noteResponsable != null) ...[
             const SizedBox(height: AppSizes.sm),
             Container(

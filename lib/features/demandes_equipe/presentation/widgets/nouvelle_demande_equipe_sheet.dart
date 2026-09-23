@@ -1,9 +1,27 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/services/compression_photo.dart' show formaterTaille;
 import '../../domain/entities/demande_equipe.dart';
+import '../../domain/entities/fichier_choisi.dart';
 import '../providers/demande_equipe_provider.dart';
+
+/// Taille maximale d'un document joint (avant encodage base64).
+const tailleMaxDocumentDemande = 5 * 1024 * 1024;
+
+const _extensionsDocumentDemande = ['pdf', 'jpg', 'jpeg', 'png'];
+
+/// `null` si l'extension n'est pas acceptée.
+String? typeMimeDocumentDemande(String? extension) =>
+    switch (extension?.toLowerCase()) {
+      'pdf' => 'application/pdf',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      _ => null,
+    };
 
 const double _kDesktop = 900;
 
@@ -56,6 +74,11 @@ class _NouvelleDemandeEquipeSheetState
   final _motifController = TextEditingController();
   String? _error;
 
+  Uint8List? _documentOctets;
+  String? _documentNom;
+  String? _documentTypeMime;
+  String? _erreurDocument;
+
   @override
   void dispose() {
     _motifController.dispose();
@@ -85,6 +108,49 @@ class _NouvelleDemandeEquipeSheetState
     });
   }
 
+  Future<void> _choisirDocument() async {
+    setState(() => _erreurDocument = null);
+    FichierChoisi? fichier;
+    try {
+      fichier = await ref
+          .read(selecteurDocumentProvider)
+          .choisir(extensions: _extensionsDocumentDemande);
+    } catch (_) {
+      setState(() =>
+          _erreurDocument = "Impossible d'ouvrir le sélecteur de fichier.");
+      return;
+    }
+    if (!mounted || fichier == null) return;
+
+    final octets = fichier.octets;
+    if (octets.length > tailleMaxDocumentDemande) {
+      setState(() => _erreurDocument =
+          'Ce document est trop volumineux (${formaterTaille(tailleMaxDocumentDemande)} maximum).');
+      return;
+    }
+    final typeMime = typeMimeDocumentDemande(fichier.extension);
+    if (typeMime == null) {
+      setState(() => _erreurDocument = 'Formats acceptés : PDF, JPEG ou PNG.');
+      return;
+    }
+
+    setState(() {
+      _documentOctets = octets;
+      _documentNom = fichier!.nom;
+      _documentTypeMime = typeMime;
+      _erreurDocument = null;
+    });
+  }
+
+  void _retirerDocument() {
+    setState(() {
+      _documentOctets = null;
+      _documentNom = null;
+      _documentTypeMime = null;
+      _erreurDocument = null;
+    });
+  }
+
   Future<void> _soumettre() async {
     if (_dateDebut == null) {
       setState(() => _error = 'Veuillez choisir une date de début');
@@ -104,6 +170,9 @@ class _NouvelleDemandeEquipeSheetState
           dateDebut: _dateDebut!,
           dateFin: _plusieursJours ? _dateFin : null,
           motif: motif,
+          documentOctets: _documentOctets,
+          documentNom: _documentNom,
+          documentTypeMime: _documentTypeMime,
         );
 
     if (!mounted) return;
@@ -316,6 +385,89 @@ class _NouvelleDemandeEquipeSheetState
                     contentPadding: const EdgeInsets.all(AppSizes.md),
                   ),
                 ),
+                const SizedBox(height: AppSizes.lg),
+
+                const Text('Document (optionnel)',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.grisDark)),
+                const SizedBox(height: AppSizes.sm),
+                if (_erreurDocument != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(AppSizes.sm),
+                    margin: const EdgeInsets.only(bottom: AppSizes.sm),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline_rounded,
+                            size: 16, color: Colors.red.shade700),
+                        const SizedBox(width: AppSizes.sm),
+                        Expanded(
+                          child: Text(_erreurDocument!,
+                              style: TextStyle(
+                                  fontSize: 13, color: Colors.red.shade700)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (_documentNom == null)
+                  OutlinedButton.icon(
+                    onPressed: _choisirDocument,
+                    icon: const Icon(Icons.attach_file_rounded, size: 18),
+                    label: const Text('Joindre un document (PDF ou image)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.rouge,
+                      side: const BorderSide(color: AppColors.grisMedium),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(AppSizes.sm),
+                    decoration: BoxDecoration(
+                      color: AppColors.grisLight,
+                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                      border: Border.all(color: AppColors.grisMedium),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.description_rounded,
+                            color: AppColors.rouge),
+                        const SizedBox(width: AppSizes.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(_documentNom!,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.noir)),
+                              Text(formaterTaille(_documentOctets!.length),
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.grisDark)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          tooltip: 'Retirer le document',
+                          onPressed: _retirerDocument,
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: AppSizes.md),
                 SizedBox(
                   width: double.infinity,
