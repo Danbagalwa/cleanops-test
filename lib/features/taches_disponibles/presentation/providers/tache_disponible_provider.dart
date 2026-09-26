@@ -46,12 +46,10 @@ class TacheDisponibleState {
 }
 
 // ── Notifier ──────────────────────────────────────────────
-class TacheDisponibleNotifier
-    extends StateNotifier<TacheDisponibleState> {
+class TacheDisponibleNotifier extends StateNotifier<TacheDisponibleState> {
   final TacheDisponibleRepository _repo;
 
-  TacheDisponibleNotifier(this._repo)
-      : super(const TacheDisponibleState());
+  TacheDisponibleNotifier(this._repo) : super(const TacheDisponibleState());
 
   Future<void> charger({
     required String employeeId,
@@ -72,8 +70,8 @@ class TacheDisponibleNotifier
     required MotifDisponible motif,
     String? employeeVisibleId,
   }) async {
-    state = state.copyWith(
-        processingIds: {...state.processingIds, tacheJourId});
+    state =
+        state.copyWith(processingIds: {...state.processingIds, tacheJourId});
     final result = await _repo.libererTache(
       tacheJourId: tacheJourId,
       libereParId: libereParId,
@@ -88,8 +86,8 @@ class TacheDisponibleNotifier
         return false;
       },
       (td) {
-        state = state.copyWith(
-            taches: [...state.taches, td], processingIds: ids);
+        state =
+            state.copyWith(taches: [...state.taches, td], processingIds: ids);
         return true;
       },
     );
@@ -99,8 +97,8 @@ class TacheDisponibleNotifier
     required String tacheDisponibleId,
     required String employeeId,
   }) async {
-    state = state.copyWith(
-        processingIds: {...state.processingIds, tacheDisponibleId});
+    state = state
+        .copyWith(processingIds: {...state.processingIds, tacheDisponibleId});
     final result = await _repo.prendreEnCharge(
       tacheDisponibleId: tacheDisponibleId,
       employeeId: employeeId,

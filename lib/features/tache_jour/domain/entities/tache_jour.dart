@@ -24,6 +24,15 @@ enum StatutTache {
     }
   }
 
+  /// Libellé à AFFICHER (`label` est la valeur en base, ex. « NonCommencé »).
+  String get libelle => switch (this) {
+        StatutTache.nonCommence => 'À faire',
+        StatutTache.fait => 'Fait',
+        StatutTache.absent => 'Absent',
+        StatutTache.refus => 'Refus',
+        StatutTache.annule => 'Annulé',
+      };
+
   static StatutTache fromString(String value) {
     switch (value) {
       case 'Fait':
@@ -55,7 +64,7 @@ class TacheJour extends Equatable {
   final String employeeId;
   final String appartementId;
   final int numeroSemaine; // 1-4
-  final DateTime semaineReelle; // date du lundi
+  final DateTime semaineReelle; // date RÉELLE de la tâche (voir dateDuJour)
   final String jour; // 'Lundi', 'Mardi'...
   final PeriodeType periode; // AM ou PM
   final int numeroTache; // 1-8
@@ -97,6 +106,12 @@ class TacheJour extends Equatable {
 
   String get displayTaille => appartement?.taille ?? '?';
 
+  /// Date du ménage, sans l'heure. `semaine_reelle` contient déjà la date
+  /// RÉELLE de la tâche (génération serveur : lundi + décalage du jour),
+  /// malgré son nom.
+  DateTime? get dateDuJour =>
+      DateTime(semaineReelle.year, semaineReelle.month, semaineReelle.day);
+
   bool get estConfirmee => statut != StatutTache.nonCommence;
 
   bool get peutEtreModifiee =>
@@ -104,14 +119,14 @@ class TacheJour extends Equatable {
 
   @override
   List<Object?> get props => [
-    id,
-    employeeId,
-    appartementId,
-    numeroSemaine,
-    semaineReelle,
-    jour,
-    periode,
-    numeroTache,
-    statut,
-  ];
+        id,
+        employeeId,
+        appartementId,
+        numeroSemaine,
+        semaineReelle,
+        jour,
+        periode,
+        numeroTache,
+        statut,
+      ];
 }

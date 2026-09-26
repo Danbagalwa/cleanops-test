@@ -17,16 +17,23 @@
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
+            <!-- Liens de l'app web (GitHub Pages, dossier du dépôt) :
+                 https://danbagalwa.github.io/cleanops-test/#/partage/… .
+                 L'ouverture DIRECTE dans l'app (sans choix du navigateur)
+                 exige le fichier /.well-known/assetlinks.json à la RACINE de
+                 danbagalwa.github.io, pas dans /cleanops-test. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="jazz-teasdale.vercel.app" />
+                    android:host="danbagalwa.github.io"
+                    android:pathPrefix="/cleanops-test" />
             </intent-filter>
 
-            <!-- Pour le développement local -->
+            <!-- Lien d'application : cleanops://app/partage/… (bouton
+                 « Ouvrir dans l'application » de la page de partage) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

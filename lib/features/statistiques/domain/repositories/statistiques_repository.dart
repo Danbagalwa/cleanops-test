@@ -1,14 +1,11 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
-import '../entities/stat_semaine.dart';
-import '../entities/stat_preposee.dart';
-import '../entities/stat_appartement.dart';
+import '../entities/statistiques_menages.dart';
 
 abstract class StatistiquesRepository {
-  Future<Either<Failure, List<StatSemaine>>> getStatSemaine();
-  Future<Either<Failure, List<StatPreposee>>> getStatParPreposee({
+  /// Ménages planifiés entre [dateDebut] et [dateFin] (bornes comprises).
+  Future<Either<Failure, StatistiquesMenages>> getStatistiques({
     required DateTime dateDebut,
     required DateTime dateFin,
   });
-  Future<Either<Failure, List<StatAppartement>>> getTopAppartementsProblematiques();
 }

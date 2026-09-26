@@ -12,6 +12,8 @@ import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/reception_avis_models.dart';
 import '../../domain/reception_residents_repository.dart' show ReceptionErreur;
 import '../providers/reception_avis_provider.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 const _kPageSize = 10;
 
@@ -245,7 +247,8 @@ class _ReceptionAAviserScreenState
                   ),
                 ),
               ),
-              if (paginationBar != null) paginationBar,
+              if (paginationBar != null)
+                AuDessusDeLaBarre(child: paginationBar),
             ],
           );
         }
@@ -258,13 +261,16 @@ class _ReceptionAAviserScreenState
                 color: AppColors.rouge,
                 onRefresh: () async => ref.invalidate(receptionAvisProvider),
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                  padding: paginationBar == null
+                      ? const EdgeInsets.symmetric(vertical: AppSizes.sm)
+                          .plusBarre(context)
+                      : const EdgeInsets.symmetric(vertical: AppSizes.sm),
                   itemCount: paginated.length,
                   itemBuilder: (_, i) => ligne(i),
                 ),
               ),
             ),
-            if (paginationBar != null) paginationBar,
+            if (paginationBar != null) AuDessusDeLaBarre(child: paginationBar),
           ],
         );
       },
@@ -284,8 +290,8 @@ class _BandeauRetard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSizes.md, AppSizes.sm, AppSizes.md, 0),
+      padding:
+          const EdgeInsets.fromLTRB(AppSizes.md, AppSizes.sm, AppSizes.md, 0),
       child: Container(
         width: double.infinity,
         padding:
@@ -595,11 +601,11 @@ class _AvisRow extends StatelessWidget {
           child: Row(
             children: [
               _AvatarCircle(
-                proprietaire: ProprietairePhoto(
-                    TypeProprietairePhoto.resident, avis.residentId),
-                initiales: avis.initiales,
-                size: 30,
-                fontSize: 11),
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.resident, avis.residentId),
+                  initiales: avis.initiales,
+                  size: 30,
+                  fontSize: 11),
               const SizedBox(width: AppSizes.sm),
               Expanded(
                 flex: 2,
@@ -697,11 +703,11 @@ class _AvisRow extends StatelessWidget {
           child: Row(
             children: [
               _AvatarCircle(
-                proprietaire: ProprietairePhoto(
-                    TypeProprietairePhoto.resident, avis.residentId),
-                initiales: avis.initiales,
-                size: 42,
-                fontSize: 14),
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.resident, avis.residentId),
+                  initiales: avis.initiales,
+                  size: 42,
+                  fontSize: 14),
               const SizedBox(width: AppSizes.md),
               Expanded(
                 child: Column(
@@ -927,9 +933,7 @@ class _TraitementDialogState extends ConsumerState<_TraitementDialog> {
       if (!mounted) return;
       ref.invalidate(receptionAvisProvider);
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Avis enregistré : ${action.libelle}.')),
-      );
+      NotificationApp.succes(context, 'Avis enregistré : ${action.libelle}.');
     } on ReceptionErreur catch (e) {
       if (!mounted) return;
       setState(() {

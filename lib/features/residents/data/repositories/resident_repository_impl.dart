@@ -57,16 +57,14 @@ class ResidentRepositoryImpl implements ResidentRepository {
   Future<Either<Failure, Resident>> desactiverResident(
       String residentId, String desactiveParId) async {
     try {
-      return Right(
-          await _ds.desactiverResident(residentId, desactiveParId));
+      return Right(await _ds.desactiverResident(residentId, desactiveParId));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
   }
 
   @override
-  Future<Either<Failure, Resident>> activerResident(
-      String residentId) async {
+  Future<Either<Failure, Resident>> activerResident(String residentId) async {
     try {
       return Right(await _ds.activerResident(residentId));
     } on ServerException catch (e) {
@@ -78,8 +76,7 @@ class ResidentRepositoryImpl implements ResidentRepository {
   Future<Either<Failure, Resident>> toggleApplication(
       String residentId, bool aApplication) async {
     try {
-      return Right(
-          await _ds.toggleApplication(residentId, aApplication));
+      return Right(await _ds.toggleApplication(residentId, aApplication));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }

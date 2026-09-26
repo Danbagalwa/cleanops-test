@@ -1,18 +1,39 @@
 import 'package:flutter/material.dart';
+import '../../../../core/constants/app_colors.dart';
 import '../../../photo_profil/domain/photo_profil_models.dart';
 import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/chat_message.dart';
 
-class ChatBubble extends StatelessWidget {
+/// Couleur stable d'un auteur (prénom et avatar sans photo).
+Color couleurAuteur(String prenom) {
+  const palette = [
+    Color(0xFF1565C0),
+    Color(0xFF2E7D32),
+    Color(0xFF6A1B9A),
+    Color(0xFF00838F),
+    Color(0xFFAD1457),
+    Color(0xFF4527A0),
+    Color(0xFF558B2F),
+    Color(0xFFE65100),
+  ];
+  final hash = prenom.codeUnits.fold(0, (a, b) => a + b);
+  return palette[hash % palette.length];
+}
+
+const couleurEpingle = Color(0xFFE08A00);
+
+class ChatBubble extends StatefulWidget {
   final ChatMessage message;
   final bool isMine;
 
-  /// Premier message de la série de cet auteur (affiche prénom + coin supérieur pointu)
+  /// Premier message de la série de cet auteur (affiche le prénom).
   final bool isStreakStart;
 
-  /// Dernier message de la série (affiche avatar + coin inférieur pointu = queue)
+  /// Dernier message de la série (affiche l'avatar et la « queue »).
   final bool isStreakEnd;
 
+  /// Options du message (responsable) : appui long sur mobile, clic droit
+  /// ou bouton ⋮ au survol sur ordinateur.
   final VoidCallback? onLongPress;
 
   const ChatBubble({
@@ -24,78 +45,67 @@ class ChatBubble extends StatelessWidget {
     this.onLongPress,
   });
 
-  // Palette de couleurs pour identifier les auteurs
-  static const _palette = [
-    Color(0xFF1565C0), // bleu
-    Color(0xFF2E7D32), // vert
-    Color(0xFF6A1B9A), // violet
-    Color(0xFF00838F), // cyan
-    Color(0xFFAD1457), // rose
-    Color(0xFF4527A0), // indigo
-    Color(0xFF558B2F), // vert olive
-    Color(0xFFE65100), // orange
-  ];
+  @override
+  State<ChatBubble> createState() => _ChatBubbleState();
+}
 
-  Color _prenomColor() {
-    final hash = message.prenomAuteur.codeUnits.fold(0, (a, b) => a + b);
-    return _palette[hash % _palette.length];
-  }
+class _ChatBubbleState extends State<ChatBubble> {
+  bool _survol = false;
 
-  String get _initiale =>
-      message.prenomAuteur.isNotEmpty
-          ? message.prenomAuteur[0].toUpperCase()
-          : '?';
+  String get _initiale => widget.message.prenomAuteur.isNotEmpty
+      ? widget.message.prenomAuteur[0].toUpperCase()
+      : '?';
 
   String _heure(DateTime dt) =>
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    // Max ~72% de la largeur, entre 200 et 500px
-    final maxBubbleWidth = (screenWidth * 0.72).clamp(200.0, 500.0);
-    final isEpingle = message.estEpingle;
-    final prenomColor = _prenomColor();
+    final m = widget.message;
+    final isMine = widget.isMine;
+    final debut = widget.isStreakStart;
+    final fin = widget.isStreakEnd;
+    final largeur = MediaQuery.sizeOf(context).width;
+    final maxBulle = (largeur * 0.72).clamp(200.0, 520.0);
+    final couleur = couleurAuteur(m.prenomAuteur);
 
-    // ── Couleurs de bulle ──────────────────────────────────
-    final bubbleColor = isEpingle
-        ? const Color(0xFFFFF9C4)
-        : isMine
-            ? const Color(0xFFEAEAFF) // indigo très clair pour mes messages
-            : Colors.white;
+    final fond = isMine ? AppColors.rouge : Colors.white;
+    final encre = isMine ? Colors.white : AppColors.noir;
+    final discret =
+        isMine ? Colors.white.withValues(alpha: 0.72) : AppColors.grisText;
 
-    // ── Rayons style WhatsApp ──────────────────────────────
-    // Queue pointue en bas à l'extérieur pour le dernier d'une série
-    final BorderRadius radius;
-    if (isMine) {
-      radius = BorderRadius.only(
-        topLeft: const Radius.circular(18),
-        topRight: const Radius.circular(18),
-        bottomLeft: const Radius.circular(18),
-        bottomRight: Radius.circular(isStreakEnd ? 4 : 18),
-      );
-    } else {
-      radius = BorderRadius.only(
-        topLeft: Radius.circular(isStreakStart ? 4 : 18),
-        topRight: const Radius.circular(18),
-        bottomLeft: Radius.circular(isStreakEnd ? 4 : 18),
-        bottomRight: const Radius.circular(18),
-      );
-    }
+    final radius = isMine
+        ? BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: Radius.circular(fin ? 4 : 16),
+          )
+        : BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(fin ? 4 : 16),
+            bottomRight: const Radius.circular(16),
+          );
 
-    // ── Contenu de la bulle ────────────────────────────────
-    final bubble = GestureDetector(
-      onLongPress: onLongPress,
+    final bulle = GestureDetector(
+      onLongPress: widget.onLongPress,
+      onSecondaryTap: widget.onLongPress,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+        constraints: BoxConstraints(maxWidth: maxBulle),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
           decoration: BoxDecoration(
-            color: bubbleColor,
+            color: fond,
             borderRadius: radius,
+            border: m.estEpingle
+                ? Border.all(color: couleurEpingle, width: 1.5)
+                : isMine
+                    ? null
+                    : Border.all(color: AppColors.grisMedium),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x1A000000),
+                color: Color(0x0F000000),
                 blurRadius: 4,
                 offset: Offset(0, 1),
               ),
@@ -106,61 +116,48 @@ class ChatBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Indicateur épinglé
-                if (isEpingle)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 3),
+                if (m.estEpingle)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.push_pin_rounded,
-                            size: 10, color: Color(0xFFE65100)),
-                        SizedBox(width: 3),
+                            size: 11,
+                            color: isMine ? Colors.white : couleurEpingle),
+                        const SizedBox(width: 3),
                         Text(
                           'Épinglé',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFFE65100),
+                            color: isMine ? Colors.white : couleurEpingle,
                           ),
                         ),
                       ],
                     ),
                   ),
-
-                // Prénom auteur (premier message de la série)
-                if (!isMine && isStreakStart)
+                if (!isMine && debut)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      message.prenomAuteur,
+                      m.prenomAuteur,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: prenomColor,
+                        color: couleur,
                       ),
                     ),
                   ),
-
-                // Texte du message
                 Text(
-                  message.message,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    color: Color(0xFF111B21),
-                    height: 1.4,
-                  ),
+                  m.message,
+                  style: TextStyle(fontSize: 14.5, color: encre, height: 1.4),
                 ),
-
-                // Heure en bas-droite dans la bulle
                 const SizedBox(height: 2),
                 Text(
-                  _heure(message.dateEnvoi),
+                  _heure(m.dateEnvoi),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0x88111B21),
-                  ),
+                  style: TextStyle(fontSize: 10.5, color: discret),
                 ),
               ],
             ),
@@ -169,51 +166,69 @@ class ChatBubble extends StatelessWidget {
       ),
     );
 
-    // ── Mise en page (avec avatar pour les autres) ─────────
-    if (isMine) {
-      return Padding(
-        padding: EdgeInsets.only(
-          top: isStreakStart ? 6 : 1,
-          bottom: isStreakEnd ? 3 : 1,
-          left: 56,
-          right: 10,
-        ),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: bubble,
-        ),
-      );
-    }
+    // Bouton ⋮ discret au survol (souris), pour les responsables.
+    final options = widget.onLongPress == null
+        ? null
+        : AnimatedOpacity(
+            opacity: _survol ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            child: IconButton(
+              tooltip: 'Options du message',
+              onPressed: _survol ? widget.onLongPress : null,
+              visualDensity: VisualDensity.compact,
+              iconSize: 18,
+              color: AppColors.grisDark,
+              icon: const Icon(Icons.more_horiz_rounded),
+            ),
+          );
 
-    return Padding(
-      padding: EdgeInsets.only(
-        top: isStreakStart ? 6 : 1,
-        bottom: isStreakEnd ? 3 : 1,
-        left: 10,
-        right: 56,
-      ),
-      child: Row(
+    final Widget ligne;
+    if (isMine) {
+      ligne = Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (options != null) options,
+          Flexible(child: bulle),
+        ],
+      );
+    } else {
+      ligne = Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // Avatar visible uniquement sur le dernier de la série
           SizedBox(
             width: 32,
             height: 32,
-            child: isStreakEnd
+            child: fin
                 ? AvatarProfil(
                     proprietaire: ProprietairePhoto(
-                        TypeProprietairePhoto.employe, message.auteurId),
+                        TypeProprietairePhoto.employe, m.auteurId),
                     initiales: _initiale,
                     rayon: 16,
-                    couleurFond: prenomColor,
+                    couleurFond: couleur,
                     tailleTexte: 13,
                     poidsTexte: FontWeight.w600,
                   )
                 : null,
           ),
-          const SizedBox(width: 4),
-          bubble,
+          const SizedBox(width: 6),
+          Flexible(child: bulle),
+          if (options != null) options,
         ],
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _survol = true),
+      onExit: (_) => setState(() => _survol = false),
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: debut ? 6 : 1,
+          bottom: fin ? 3 : 1,
+          left: isMine ? 56 : 12,
+          right: isMine ? 12 : 56,
+        ),
+        child: ligne,
       ),
     );
   }

@@ -80,6 +80,22 @@ class DemandeResident extends Equatable {
   final bool? propositionHasAnimal;
   final String? propositionTypeAnimal;
 
+  /// Date de la réponse du responsable (si elle est connue).
+  final DateTime? dateReponse;
+
+  /// Date à laquelle la demande a été résolue.
+  final DateTime? dateResolution;
+
+  // Contexte chargé pour la vue responsable (absent côté résident).
+  final String? residentPrenom;
+  final String? residentNom;
+  final String? numeroAppartement;
+  final String? tailleAppartement;
+
+  /// Ménage visé par la demande (jour réel et période AM/PM).
+  final DateTime? menageDate;
+  final String? menagePeriode;
+
   const DemandeResident({
     required this.id,
     required this.residentId,
@@ -96,7 +112,52 @@ class DemandeResident extends Equatable {
     this.propositionNotes,
     this.propositionHasAnimal,
     this.propositionTypeAnimal,
+    this.dateReponse,
+    this.dateResolution,
+    this.residentPrenom,
+    this.residentNom,
+    this.numeroAppartement,
+    this.tailleAppartement,
+    this.menageDate,
+    this.menagePeriode,
   });
+
+  /// « Prénom Nom » du résident, ou `null` s'il n'a pas été chargé.
+  String? get nomResident {
+    final nom = [residentPrenom, residentNom]
+        .where((p) => p != null && p.trim().isNotEmpty)
+        .join(' ')
+        .trim();
+    return nom.isEmpty ? null : nom;
+  }
+
+  /// Reprend le contexte (résident, appartement, ménage) de [autre] : une
+  /// demande renvoyée après une réponse ne le contient pas.
+  DemandeResident avecContexteDe(DemandeResident autre) => DemandeResident(
+        id: id,
+        residentId: residentId,
+        type: type,
+        tacheJourId: tacheJourId,
+        motif: motif,
+        statut: statut,
+        reponse: reponse,
+        propositionDate: propositionDate,
+        propositionPeriode: propositionPeriode,
+        residentAccepte: residentAccepte,
+        estUrgente: estUrgente,
+        createdAt: createdAt,
+        propositionNotes: propositionNotes,
+        propositionHasAnimal: propositionHasAnimal,
+        propositionTypeAnimal: propositionTypeAnimal,
+        dateReponse: dateReponse ?? autre.dateReponse,
+        dateResolution: dateResolution ?? autre.dateResolution,
+        residentPrenom: residentPrenom ?? autre.residentPrenom,
+        residentNom: residentNom ?? autre.residentNom,
+        numeroAppartement: numeroAppartement ?? autre.numeroAppartement,
+        tailleAppartement: tailleAppartement ?? autre.tailleAppartement,
+        menageDate: menageDate ?? autre.menageDate,
+        menagePeriode: menagePeriode ?? autre.menagePeriode,
+      );
 
   bool get enAttente => statut == StatutDemande.enAttente;
   bool get repondue => statut == StatutDemande.repondue;

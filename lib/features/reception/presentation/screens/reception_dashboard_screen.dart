@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../../core/helpers/date_helper.dart';
-import '../../../../core/widgets/dashboard_account_actions.dart';
+import '../../../../core/widgets/dashboard_welcome_header.dart';
+import '../../../../core/widgets/mise_en_page.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../reception_sections.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 /// Tableau de bord de la Réception : un accueil et un accès direct aux 5
 /// sections de sa vue.
@@ -20,59 +21,35 @@ class ReceptionDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final employee = ref.watch(employeeCourantProvider);
+    final marge = estCompact(context) ? AppSizes.md : AppSizes.lg;
 
     return Scaffold(
       backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
-        backgroundColor: AppColors.rouge,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Réception',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-            ),
-            Text(
-              DateHelper.formatDate(DateTime.now()),
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
-          ],
-        ),
-        // Notifications, profil et déconnexion, comme pour les autres
-        // utilisateurs, vers les écrans de la Réception.
-        actions: const [
-          DashboardAccountActions(
-            profilRoute: receptionProfilRoute,
-            notificationsRoute: receptionNotificationsRoute,
-          ),
-          SizedBox(width: AppSizes.md),
-        ],
-      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSizes.lg),
+        padding: EdgeInsets.all(marge).plusBarre(context),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
+            constraints: const BoxConstraints(maxWidth: 1100),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  employee == null
-                      ? 'Bonjour'
-                      : 'Bonjour ${employee.prenom}',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                  ),
+                DashboardWelcomeHeader(
+                  employee: employee,
+                  actions: [
+                    EnTeteAction(
+                      icone: Icons.event_note_rounded,
+                      libelle: 'Mes demandes',
+                      onPressed: () =>
+                          context.go(receptionMesDemandesEquipeRoute),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSizes.xs),
+                SizedBox(height: marge),
                 const Text(
                   'Que souhaitez-vous faire ?',
                   style: TextStyle(color: AppColors.grisDark),
                 ),
-                const SizedBox(height: AppSizes.lg),
+                const SizedBox(height: AppSizes.md),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final deuxColonnes = constraints.maxWidth >= 640;

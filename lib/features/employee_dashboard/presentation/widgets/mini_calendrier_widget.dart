@@ -23,24 +23,30 @@ class MiniCalendrierWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       ),
+      // Chaque jour prend 1/7 de la largeur : les 7 tiennent sur un petit
+      // téléphone sans déborder, et s'espacent sur grand écran.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: jours.asMap().entries.map((entry) {
           final index = entry.key;
           final jour = entry.value;
-          return _JourItem(
-            jour: jour,
-            onTap: () => onJourTap?.call(jour),
-          )
-              .animate(delay: Duration(milliseconds: index * 80))
-              .fadeIn(duration: 300.ms)
-              .slideY(begin: 0.3, end: 0);
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: _JourItem(
+                jour: jour,
+                onTap: () => onJourTap?.call(jour),
+              )
+                  .animate(delay: Duration(milliseconds: index * 80))
+                  .fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.3, end: 0),
+            ),
+          );
         }).toList(),
       ),
     );
@@ -71,18 +77,18 @@ class _JourItem extends StatelessWidget {
 
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.sm,
-          vertical: AppSizes.sm,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
         decoration: BoxDecoration(
-          color:
-              isToday ? AppColors.rouge.withValues(alpha:0.08) : Colors.transparent,
+          color: isToday
+              ? AppColors.rouge.withValues(alpha: 0.08)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           border: isToday
-              ? Border.all(color: AppColors.rouge.withValues(alpha:0.3), width: 1)
+              ? Border.all(
+                  color: AppColors.rouge.withValues(alpha: 0.3), width: 1)
               : null,
         ),
         child: Column(

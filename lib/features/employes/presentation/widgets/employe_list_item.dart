@@ -40,274 +40,109 @@ Color roleColor(RoleType role) {
   }
 }
 
+String initialesEmploye(Employee e) {
+  final p = e.prenom.isNotEmpty ? e.prenom[0].toUpperCase() : '';
+  final n = e.nom.isNotEmpty ? e.nom[0].toUpperCase() : '';
+  return '$p$n';
+}
+
+/// Carte d'un employé (vue grille de la page Employés).
 class EmployeListItem extends StatelessWidget {
   final Employee employe;
   final VoidCallback onEdit;
   final VoidCallback onToggleActif;
+
+  /// Ouvre le planning (préposées uniquement).
+  final VoidCallback? onPlanning;
 
   const EmployeListItem({
     super.key,
     required this.employe,
     required this.onEdit,
     required this.onToggleActif,
+    this.onPlanning,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    return isDesktop ? _buildRow(context) : _buildCard(context);
-  }
-
-  // ── Desktop : ligne fine type tableau ────────────────────
-  Widget _buildRow(BuildContext context) {
-    final color = roleColor(employe.role);
-    final initials = _initials(employe.prenom, employe.nom);
-
-    return Opacity(
-      opacity: employe.isActif ? 1.0 : 0.55,
-      child: Material(
+    final e = employe;
+    final couleur = roleColor(e.role);
+    return Container(
+      decoration: BoxDecoration(
         color: Colors.white,
-        child: InkWell(
-          onTap: onEdit,
-          hoverColor: AppColors.rouge.withValues(alpha: 0.04),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.md,
-              vertical: 8,
-            ),
-            child: Row(
-              children: [
-                AvatarProfil(
-                  proprietaire: ProprietairePhoto.de(employe),
-                  initiales: initials,
-                  rayon: 16,
-                  couleurFond: color.withValues(alpha: 0.15),
-                  couleurTexte: color,
-                  tailleTexte: 12,
-                  poidsTexte: FontWeight.bold,
-                ),
-                const SizedBox(width: AppSizes.sm),
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    children: [
-                      Text(
-                        employe.nomComplet,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.noir,
-                        ),
-                      ),
-                      if (!employe.isActif) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.grisMedium,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Inactif',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: AppColors.grisDark,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: _RoleBadge(role: employe.role),
-                ),
-                Expanded(
-                  child: employe.numeroPointeuse != null
-                      ? Row(
-                          children: [
-                            const Icon(
-                              Icons.fingerprint_rounded,
-                              size: 13,
-                              color: AppColors.grisText,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              employe.numeroPointeuse!,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: AppColors.grisText,
-                              ),
-                            ),
-                          ],
-                        )
-                      : const Text(
-                          '—',
-                          style: TextStyle(
-                            color: AppColors.grisMedium,
-                            fontSize: 13,
-                          ),
-                        ),
-                ),
-                SizedBox(
-                  width: 96,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _IconBtn(
-                        icon: Icons.edit_outlined,
-                        tooltip: 'Modifier',
-                        color: AppColors.absent,
-                        onTap: onEdit,
-                      ),
-                      _IconBtn(
-                        icon: employe.isActif
-                            ? Icons.person_off_outlined
-                            : Icons.person_outlined,
-                        tooltip: employe.isActif ? 'Désactiver' : 'Activer',
-                        color: employe.isActif
-                            ? AppColors.refus
-                            : AppColors.jourVert,
-                        onTap: onToggleActif,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.grisMedium),
       ),
-    );
-  }
-
-  // ── Mobile : carte ───────────────────────────────────────
-  Widget _buildCard(BuildContext context) {
-    final color = roleColor(employe.role);
-    final initials = _initials(employe.prenom, employe.nom);
-
-    return Opacity(
-      opacity: employe.isActif ? 1.0 : 0.55,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
         child: InkWell(
           onTap: onEdit,
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.md,
-              vertical: 10,
-            ),
+            padding: const EdgeInsets.fromLTRB(AppSizes.md, 12, 4, 12),
             child: Row(
               children: [
-                AvatarProfil(
-                  proprietaire: ProprietairePhoto.de(employe),
-                  initiales: initials,
-                  rayon: 22,
-                  couleurFond: color.withValues(alpha: 0.15),
-                  couleurTexte: color,
-                  tailleTexte: 15,
-                  poidsTexte: FontWeight.bold,
+                Opacity(
+                  opacity: e.isActif ? 1 : 0.5,
+                  child: AvatarProfil(
+                    proprietaire: ProprietairePhoto.de(e),
+                    initiales: initialesEmploye(e),
+                    rayon: 22,
+                    couleurFond: couleur.withValues(alpha: 0.15),
+                    couleurTexte: couleur,
+                    tailleTexte: 15,
+                    poidsTexte: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(width: AppSizes.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            employe.nomComplet,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.noir,
-                            ),
-                          ),
-                          if (!employe.isActif) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.grisMedium,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'Inactif',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.grisDark,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
+                      Text(
+                        e.nomComplet,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              e.isActif ? AppColors.noir : AppColors.grisDark,
+                        ),
                       ),
-                      const SizedBox(height: 3),
-                      Row(
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          _RoleBadge(role: employe.role),
-                          if (employe.numeroPointeuse != null) ...[
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.fingerprint_rounded,
-                              size: 12,
-                              color: AppColors.grisText,
+                          BadgeRole(role: e.role),
+                          BadgeStatutEmploye(actif: e.isActif),
+                          if (e.numeroPointeuse != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.fingerprint_rounded,
+                                    size: 13, color: AppColors.grisText),
+                                const SizedBox(width: 2),
+                                Text(
+                                  e.numeroPointeuse!,
+                                  style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: AppColors.grisText),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 2),
-                            Text(
-                              employe.numeroPointeuse!,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.grisText,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  color: AppColors.absent,
-                  onPressed: onEdit,
-                  tooltip: 'Modifier',
-                  visualDensity: VisualDensity.compact,
-                ),
-                IconButton(
-                  icon: Icon(
-                    employe.isActif
-                        ? Icons.person_off_outlined
-                        : Icons.person_outlined,
-                    size: 18,
-                  ),
-                  color:
-                      employe.isActif ? AppColors.refus : AppColors.jourVert,
-                  onPressed: onToggleActif,
-                  tooltip: employe.isActif ? 'Désactiver' : 'Activer',
-                  visualDensity: VisualDensity.compact,
+                MenuEmploye(
+                  employe: e,
+                  onEdit: onEdit,
+                  onToggleActif: onToggleActif,
+                  onPlanning: onPlanning,
                 ),
               ],
             ),
@@ -316,65 +151,108 @@ class EmployeListItem extends StatelessWidget {
       ),
     );
   }
-
-  static String _initials(String prenom, String nom) {
-    final p = prenom.isNotEmpty ? prenom[0].toUpperCase() : '';
-    final n = nom.isNotEmpty ? nom[0].toUpperCase() : '';
-    return '$p$n';
-  }
 }
 
-class _RoleBadge extends StatelessWidget {
+class BadgeRole extends StatelessWidget {
   final RoleType role;
-  const _RoleBadge({required this.role});
+  const BadgeRole({super.key, required this.role});
 
   @override
   Widget build(BuildContext context) {
-    final color = roleColor(role);
+    final couleur = roleColor(role);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: couleur.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         roleDisplay(role),
         style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
+            fontSize: 11.5, fontWeight: FontWeight.w600, color: couleur),
       ),
     );
   }
 }
 
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
+class BadgeStatutEmploye extends StatelessWidget {
+  final bool actif;
+  const BadgeStatutEmploye({super.key, required this.actif});
 
-  const _IconBtn({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
+  @override
+  Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.fait : AppColors.grisDark;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: couleur, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          actif ? 'Actif' : 'Inactif',
+          style: TextStyle(
+              fontSize: 11.5, fontWeight: FontWeight.w600, color: couleur),
+        ),
+      ],
+    );
+  }
+}
+
+enum _ActionEmploye { modifier, planning, statut }
+
+/// Actions d'un employé (⋮) : modifier, voir son planning, (dés)activer.
+class MenuEmploye extends StatelessWidget {
+  final Employee employe;
+  final VoidCallback onEdit;
+  final VoidCallback onToggleActif;
+  final VoidCallback? onPlanning;
+
+  const MenuEmploye({
+    super.key,
+    required this.employe,
+    required this.onEdit,
+    required this.onToggleActif,
+    this.onPlanning,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: color),
-        ),
-      ),
+    PopupMenuItem<_ActionEmploye> item(
+            _ActionEmploye a, IconData icone, String texte, Color couleur) =>
+        PopupMenuItem(
+          value: a,
+          child: Row(
+            children: [
+              Icon(icone, size: 18, color: couleur),
+              const SizedBox(width: 10),
+              Text(texte),
+            ],
+          ),
+        );
+
+    return PopupMenuButton<_ActionEmploye>(
+      tooltip: 'Actions',
+      icon: const Icon(Icons.more_vert_rounded, color: AppColors.rouge),
+      onSelected: (a) => switch (a) {
+        _ActionEmploye.modifier => onEdit(),
+        _ActionEmploye.planning => onPlanning?.call(),
+        _ActionEmploye.statut => onToggleActif(),
+      },
+      itemBuilder: (_) => [
+        item(_ActionEmploye.modifier, Icons.edit_outlined, 'Modifier',
+            AppColors.absent),
+        if (onPlanning != null)
+          item(_ActionEmploye.planning, Icons.calendar_month_rounded,
+              'Voir son planning', AppColors.rouge),
+        employe.isActif
+            ? item(_ActionEmploye.statut, Icons.person_off_outlined,
+                'Désactiver', AppColors.refus)
+            : item(_ActionEmploye.statut, Icons.person_outlined, 'Activer',
+                AppColors.jourVert),
+      ],
     );
   }
 }

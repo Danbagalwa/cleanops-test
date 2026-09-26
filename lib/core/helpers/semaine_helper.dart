@@ -78,6 +78,10 @@ class SemaineHelper {
     return DateFormat('EEE d', 'fr_FR').format(date);
   }
 
+  // ── Jour de travail : du lundi au vendredi ───────────────
+  static bool estJourDeTravail(DateTime date) =>
+      date.weekday <= DateTime.friday;
+
   // ── Est-ce aujourd'hui ? ─────────────────────────────────
   static bool estAujourdhui(DateTime date) {
     final now = DateTime.now();

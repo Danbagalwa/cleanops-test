@@ -44,4 +44,24 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
       return Left(ServerFailure(error.toString()));
     }
   }
+
+  @override
+  Future<Either<Failure, Unit>> markAsUnread(String notificationId) async {
+    try {
+      await datasource.markAsUnread(notificationId);
+      return const Right(unit);
+    } catch (error) {
+      return Left(ServerFailure(error.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> delete(String notificationId) async {
+    try {
+      await datasource.delete(notificationId);
+      return const Right(unit);
+    } catch (error) {
+      return Left(ServerFailure(error.toString()));
+    }
+  }
 }

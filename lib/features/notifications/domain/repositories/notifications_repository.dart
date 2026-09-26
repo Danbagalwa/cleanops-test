@@ -10,4 +10,6 @@ abstract class NotificationsRepository {
   Stream<List<AppNotification>> watchNotifications(String recipientId);
   Future<Either<Failure, Unit>> markAsRead(String notificationId);
   Future<Either<Failure, Unit>> markAllAsRead(String recipientId);
+  Future<Either<Failure, Unit>> markAsUnread(String notificationId);
+  Future<Either<Failure, Unit>> delete(String notificationId);
 }

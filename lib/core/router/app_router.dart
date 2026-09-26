@@ -22,6 +22,8 @@ import '../../features/aire_commune/presentation/screens/aire_commune_config_scr
 import '../../features/messages_semaine/presentation/screens/messages_semaine_screen.dart';
 import '../../features/residents/presentation/screens/residents_screen.dart';
 import '../../features/resident_espace/presentation/screens/resident_accueil_screen.dart';
+import '../../features/resident_espace/presentation/screens/resident_calendrier_screen.dart';
+import '../../features/resident_espace/presentation/screens/resident_menage_screen.dart';
 import '../../features/resident_espace/presentation/screens/resident_demandes_screen.dart';
 import '../../features/resident_espace/presentation/screens/resident_profil_screen.dart';
 import '../../features/resident_espace/presentation/screens/demandes_residents_responsable_screen.dart';
@@ -38,6 +40,7 @@ import '../../features/reception/presentation/screens/reception_section_screen.d
 import '../../features/notifications/presentation/screens/notifications_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/demandes_equipe_responsable_screen.dart';
 import '../../features/demandes_equipe/presentation/screens/mes_demandes_equipe_screen.dart';
+import '../../features/demandes_equipe/presentation/screens/partage_demande_screen.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/splash_screen.dart';
 
@@ -69,6 +72,23 @@ String accueilDe(Employee employee) => switch (employee.profil) {
       ProfilAcces.resident => AppRoutes.residentDashboard,
     };
 
+/// « Mon profil » du profil d'accès (la Réception a le sien, dans son périmètre).
+String profilDe(Employee employee) => switch (employee.profil) {
+      ProfilAcces.reception => receptionProfilRoute,
+      ProfilAcces.resident => AppRoutes.residentProfil,
+      ProfilAcces.responsable || ProfilAcces.preposee => AppRoutes.profil,
+    };
+
+/// Écran des notifications du profil d'accès ; `null` pour le résident, qui
+/// n'en a pas (ses réponses arrivent dans « Mes demandes »).
+String? notificationsDe(Employee employee) => switch (employee.profil) {
+      ProfilAcces.reception => receptionNotificationsRoute,
+      ProfilAcces.resident => null,
+      ProfilAcces.responsable ||
+      ProfilAcces.preposee =>
+        AppRoutes.notifications,
+    };
+
 // ── Routes ────────────────────────────────────────────────
 class AppRoutes {
   AppRoutes._();
@@ -95,6 +115,13 @@ class AppRoutes {
   static const String residentDashboard = '/resident';
   static const String residentDemandes = '/resident/demandes';
   static const String residentProfil = '/resident/profil';
+  static const String residentCalendrier = '/resident/calendrier';
+
+  /// Détail d'une date du calendrier du résident.
+  static String residentMenage(DateTime date) =>
+      '$residentCalendrier/${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
 
   // Routes privées — à venir
   static const String aireCommune = '/aire-commune';
@@ -114,6 +141,68 @@ class AppRoutes {
   static const String notifications = '/notifications';
 
   static String loginSlug(String slug) => '/$slug';
+
+  /// Page publique d'un lien de partage de demande : /partage/{jeton}.
+  static const String partage = '/partage';
+}
+
+// ── Lien d'ouverture (lien partagé, page rechargée…) ──────
+String? _lienDemarrage;
+
+/// Mémorise l'adresse demandée à l'ouverture de l'app. À appeler dans
+/// `main()` AVANT tout affichage : l'écran provisoire de démarrage remplace
+/// ensuite l'adresse du navigateur par « / », que le routeur lirait à tort.
+void memoriserLienDemarrage(String route) {
+  var lien = routeDepuisLien(route) ?? '';
+  if (lien.isEmpty || lien == '/' || lien == AppRoutes.splash) {
+    // Web : l'adresse est parfois seulement dans le fragment (#/…).
+    final fragment = Uri.base.fragment;
+    lien = fragment.startsWith('/') ? fragment : '';
+  }
+  _lienDemarrage =
+      lien.isEmpty || lien == '/' || lien == AppRoutes.splash ? null : lien;
+}
+
+/// Route de l'app contenue dans un lien reçu : « /#/partage/x » (lien web
+/// ouvert par Android), « https://…/#/partage/x », « cleanops://app/partage/x »
+/// ou simplement « /partage/x ». `null` si rien d'exploitable.
+String? routeDepuisLien(String lien) {
+  final uri = Uri.tryParse(lien.trim());
+  if (uri == null) return null;
+  if (uri.fragment.startsWith('/')) return uri.fragment;
+  final chemin = sansDossierWeb(uri.path.isEmpty ? '/' : uri.path);
+  return uri.hasQuery ? '$chemin?${uri.query}' : chemin;
+}
+
+/// Dossier de l'app web sur GitHub Pages (nom du dépôt, voir
+/// .github/workflows/deploy-pages.yml et AndroidManifest.xml).
+const kDossierAppWeb = '/cleanops-test';
+
+/// Retire le dossier de l'app web d'un chemin reçu par l'app mobile
+/// (« /cleanops-test/ » → « / ») : sinon « cleanops-test » serait pris pour
+/// un identifiant de connexion (route /:slug).
+String sansDossierWeb(String chemin) {
+  if (chemin != kDossierAppWeb && !chemin.startsWith('$kDossierAppWeb/')) {
+    return chemin;
+  }
+  final reste = chemin.substring(kDossierAppWeb.length);
+  return reste.isEmpty ? '/' : reste;
+}
+
+/// Rend le lien d'ouverture (une seule fois) ; `null` s'il n'y en a pas.
+String? consommerLienDemarrage() {
+  final lien = _lienDemarrage;
+  _lienDemarrage = null;
+  return lien;
+}
+
+/// Un lien de partage s'ouvre directement, sans passer par le démarrage
+/// (session, tableau de bord) : sa page est publique.
+String? _consommerLienPublic() {
+  final lien = _lienDemarrage;
+  if (lien == null || !lien.startsWith('${AppRoutes.partage}/')) return null;
+  _lienDemarrage = null;
+  return lien;
 }
 
 // ── Routes protégées ──────────────────────────────────────
@@ -142,6 +231,16 @@ const _routesProtegees = [
   '/reception',
 ];
 
+/// Un identifiant sert aussi d'adresse de connexion (`/:slug`) : il ne doit
+/// pas pouvoir être pris pour une page de l'app (les routes protégées sont
+/// reconnues par leur début, d'où `startsWith`).
+bool estSlugReserve(String slug) {
+  final chemin = '/$slug';
+  return chemin == AppRoutes.splash ||
+      chemin == AppRoutes.partage ||
+      _routesProtegees.any(chemin.startsWith);
+}
+
 // ── Redirection selon le profil d'accès ───────────────────
 /// Décide de la redirection d'une navigation selon l'utilisateur connecté.
 ///
@@ -153,6 +252,10 @@ String? redirectionSelonAcces({
   required Employee? employee,
   required String location,
 }) {
+  // Lien de partage : page publique, ouverte telle quelle quel que soit le
+  // profil connecté (ou sans connexion). C'est son jeton qui en donne l'accès.
+  if (location.startsWith('${AppRoutes.partage}/')) return null;
+
   final isOnSplash = location == AppRoutes.splash;
   final isOnLogin = location == AppRoutes.login;
   final isProtege = _routesProtegees.any((r) => location.startsWith(r));
@@ -180,11 +283,10 @@ String? redirectionSelonAcces({
 
     // Responsable — tableau de bord à la connexion, accès aux routes, sauf
     // l'écran réservé à la Réception
-    ProfilAcces.responsable => isOnSplash ||
-            isOnLogin ||
-            location.startsWith(AppRoutes.reception)
-        ? AppRoutes.employerDashboard
-        : null,
+    ProfilAcces.responsable =>
+      isOnSplash || isOnLogin || location.startsWith(AppRoutes.reception)
+          ? AppRoutes.employerDashboard
+          : null,
 
     // Préposée — tableau de bord à la connexion, jamais la route responsable
     // ni l'écran réservé à la Réception
@@ -200,14 +302,26 @@ String? redirectionSelonAcces({
 // ── Router provider ───────────────────────────────────────
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: AppRoutes.splash,
+    // Lien de partage : ouvert directement. Sinon, démarrage (session) puis
+    // éventuellement le lien d'ouverture (voir SplashScreen).
+    initialLocation: _consommerLienPublic() ?? AppRoutes.splash,
+    overridePlatformDefaultLocation: true,
     debugLogDiagnostics: true,
 
     // ── Redirection globale ───────────────────────────────
-    redirect: (context, state) => redirectionSelonAcces(
-      employee: ref.read(authNotifierProvider).employee,
-      location: state.matchedLocation,
-    ),
+    redirect: (context, state) {
+      // Lien web reçu par l'app mobile déjà ouverte (App Link Android) :
+      // « /#/partage/x » → « /partage/x ».
+      final fragment = state.uri.fragment;
+      if (fragment.startsWith('/')) return fragment;
+      // Adresse d'accueil de l'app web (…/cleanops-test/) : même chose.
+      final chemin = sansDossierWeb(state.uri.path);
+      if (chemin != state.uri.path) return chemin;
+      return redirectionSelonAcces(
+        employee: ref.read(authNotifierProvider).employee,
+        location: state.matchedLocation,
+      );
+    },
 
     errorBuilder: (context, state) => const _ErrorScreen(),
 
@@ -410,6 +524,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
+            path: receptionMesDemandesEquipeRoute,
+            builder: (context, state) => const MesDemandesEquipeScreen(),
+          ),
+          GoRoute(
             path: receptionFichePattern,
             builder: (context, state) => ReceptionFicheScreen(
               appartementId: state.pathParameters['appartementId'] ?? '',
@@ -429,7 +547,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/resident/profil',
             builder: (context, state) => const ResidentProfilScreen(),
           ),
+          GoRoute(
+            path: AppRoutes.residentCalendrier,
+            builder: (context, state) => ResidentCalendrierScreen(
+              mois: DateTime.tryParse(state.uri.queryParameters['mois'] ?? ''),
+            ),
+          ),
+          GoRoute(
+            path: '${AppRoutes.residentCalendrier}/:date',
+            builder: (context, state) => ResidentMenageScreen(
+              date: DateTime.tryParse(state.pathParameters['date'] ?? '') ??
+                  DateTime.now(),
+            ),
+          ),
         ],
+      ),
+
+      // ── Lien de partage d'une demande (public) ─────────
+      GoRoute(
+        path: '/partage/:jeton',
+        builder: (context, state) =>
+            PartageDemandeScreen(jeton: state.pathParameters['jeton'] ?? ''),
       ),
 
       // ── Slug employé — TOUJOURS EN DERNIER ─────────────

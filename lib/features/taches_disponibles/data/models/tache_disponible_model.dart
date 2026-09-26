@@ -41,8 +41,7 @@ class TacheDisponibleModel extends TacheDisponible {
           ? DateTime.parse(json['date_expiration'] as String)
           : null,
       tacheJour: json['taches_jour'] != null
-          ? TacheJourModel.fromJson(
-              json['taches_jour'] as Map<String, dynamic>)
+          ? TacheJourModel.fromJson(json['taches_jour'] as Map<String, dynamic>)
           : null,
       prisePar: json['employees'] != null
           ? EmployeeModel.fromJson(json['employees'] as Map<String, dynamic>)

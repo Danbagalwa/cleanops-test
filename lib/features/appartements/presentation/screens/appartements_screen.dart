@@ -1,10 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/dialogue_app.dart';
 import '../../../../core/widgets/error_widget.dart';
-import '../../../../core/widgets/export_menu_button.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/export_menu_button.dart'
+    show showExportSuccess;
+import '../../../../core/widgets/mise_en_page.dart';
+import '../../../../core/widgets/notification_app.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../pdf/domain/usecases/generate_appartements_export.dart';
 import '../../../pdf/presentation/screens/appartements_pdf_preview_screen.dart';
@@ -13,8 +20,9 @@ import '../providers/appartements_provider.dart';
 import '../widgets/appartement_form_widget.dart';
 import '../widgets/appartement_list_item.dart';
 
-const _kPageSize = 10;
-const _kTailles = ['2 1/2', '3 1/2', '4 1/2', '5 1/2'];
+enum _Filtre { tous, avecAnimal, avecNotes }
+
+enum _Tri { numero, taille, duree }
 
 class AppartementsScreen extends ConsumerStatefulWidget {
   const AppartementsScreen({super.key});
@@ -25,22 +33,21 @@ class AppartementsScreen extends ConsumerStatefulWidget {
 
 class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
   final _searchCtrl = TextEditingController();
-  String _searchQuery = '';
-  String? _filterTaille;
+  String _recherche = '';
+  String? _taille;
+  _Filtre _filtre = _Filtre.tous;
+  _Tri _tri = _Tri.numero;
+  bool _croissant = true;
   int _page = 0;
+  int _parPage = 10;
+
+  /// `null` : choisi selon la largeur (grille sur téléphone, tableau sinon).
+  ModeAffichage? _mode;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(appartementsNotifierProvider.notifier).charger(),
-    );
-    _searchCtrl.addListener(() {
-      setState(() {
-        _searchQuery = _searchCtrl.text.toLowerCase().trim();
-        _page = 0;
-      });
-    });
+    Future.microtask(_charger);
   }
 
   @override
@@ -49,25 +56,68 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
     super.dispose();
   }
 
-  List<Appartement> _filtered(List<Appartement> all) {
-    return all.where((a) {
-      final matchSearch =
-          _searchQuery.isEmpty || a.numero.toLowerCase().contains(_searchQuery);
-      final matchTaille = _filterTaille == null || a.taille == _filterTaille;
-      return matchSearch && matchTaille;
-    }).toList();
+  Future<void> _charger() =>
+      ref.read(appartementsNotifierProvider.notifier).charger();
+
+  void _changer(VoidCallback maj) => setState(() {
+        maj();
+        _page = 0;
+      });
+
+  void _trier(_Tri tri) => _changer(() {
+        _croissant = _tri == tri ? !_croissant : true;
+        _tri = tri;
+      });
+
+  void _effacerFiltres() {
+    _searchCtrl.clear();
+    _changer(() {
+      _recherche = '';
+      _taille = null;
+      _filtre = _Filtre.tous;
+    });
   }
 
-  String _filterDescription() {
-    final filters = <String>[];
-    if (_searchQuery.isNotEmpty) {
-      filters.add('Recherche : "${_searchCtrl.text.trim()}"');
-    }
-    if (_filterTaille != null) {
-      filters.add('Taille : $_filterTaille');
-    }
-    return filters.isEmpty ? 'Tous les appartements' : filters.join(' · ');
+  bool _duFiltre(Appartement a) => switch (_filtre) {
+        _Filtre.tous => true,
+        _Filtre.avecAnimal => a.hasAnimal,
+        _Filtre.avecNotes => a.notes?.trim().isNotEmpty ?? false,
+      };
+
+  List<Appartement> _lignes(List<Appartement> tous) {
+    final q = _recherche.trim().toLowerCase();
+    int sens(int c) => _croissant ? c : -c;
+    return tous.where((a) {
+      if (_taille != null && a.taille != _taille) return false;
+      if (!_duFiltre(a)) return false;
+      return q.isEmpty ||
+          a.numero.toLowerCase().contains(q) ||
+          (a.notes?.toLowerCase().contains(q) ?? false) ||
+          (a.typeAnimal?.toLowerCase().contains(q) ?? false);
+    }).toList()
+      ..sort((a, b) {
+        final c = switch (_tri) {
+          _Tri.numero => 0,
+          _Tri.taille => a.taille.compareTo(b.taille),
+          _Tri.duree => a.minutesBase.compareTo(b.minutesBase),
+        };
+        if (c != 0) return sens(c);
+        final n = comparerNumeros(a.numero, b.numero);
+        return _tri == _Tri.numero ? sens(n) : n;
+      });
   }
+
+  String _descriptionFiltres() {
+    final f = <String>[
+      if (_recherche.trim().isNotEmpty) 'Recherche : "${_recherche.trim()}"',
+      if (_taille != null) 'Taille : $_taille',
+      if (_filtre == _Filtre.avecAnimal) 'Avec animal',
+      if (_filtre == _Filtre.avecNotes) 'Avec notes',
+    ];
+    return f.isEmpty ? 'Tous les appartements' : f.join(' · ');
+  }
+
+  // ── Actions ────────────────────────────────────────────
 
   void _ouvrirFormulaire({Appartement? appartement}) {
     showDialog(
@@ -77,487 +127,430 @@ class _AppartementsScreenState extends ConsumerState<AppartementsScreen> {
     );
   }
 
-  void _confirmerSuppression(Appartement appt) {
-    showDialog(
+  Future<void> _confirmerSuppression(Appartement appt) async {
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      builder: (ctx) => DialogueApp(
+        titre: 'Supprimer l’appartement',
+        largeur: 440,
+        libelleAction: 'Supprimer',
+        libelleSecondaire: 'Annuler',
+        onFermer: () => Navigator.of(ctx).pop(false),
+        onAction: () => Navigator.of(ctx).pop(true),
+        contenu: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: AppColors.aVerifier, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'L’appartement ${appt.numero} sera définitivement supprimé. '
+                'Vérifiez qu’il n’est plus utilisé dans le planning.',
+                style: const TextStyle(
+                    fontSize: 14, height: 1.4, color: AppColors.grisDark),
+              ),
+            ),
+          ],
         ),
-        title: const Text('Supprimer l\'appartement ?'),
-        content: Text(
-          'L\'appartement ${appt.numero} sera définitivement supprimé.',
-          style: const TextStyle(color: AppColors.grisDark),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final succes = await ref
+        .read(appartementsNotifierProvider.notifier)
+        .supprimer(appt.id);
+    if (!mounted) return;
+    if (succes) {
+      NotificationApp.succes(
+          context, 'L’appartement ${appt.numero} a été supprimé.');
+    } else {
+      AppFeedback.showError(
+          context, ref.read(appartementsNotifierProvider).error ?? 'Échec.');
+    }
+  }
+
+  void _exporterPdf(List<Appartement> lignes) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AppartementsPdfPreviewScreen(
+          appartements: lignes,
+          filterDescription: _descriptionFiltres(),
+          generatedBy:
+              ref.read(employeeCourantProvider)?.nomComplet ?? 'CleanOps',
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final ok = await ref
-                  .read(appartementsNotifierProvider.notifier)
-                  .supprimer(appt.id);
-              if (!ok && mounted) _showError();
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
-            child: const Text('Supprimer'),
-          ),
-        ],
       ),
     );
   }
 
-  void _showError() {
-    final error = ref.read(appartementsNotifierProvider).error;
-    if (error == null) return;
-    AppFeedback.showError(context, error);
+  void _exporterExcel(List<Appartement> lignes) {
+    try {
+      const GenerateAppartementsExcel()(
+        appartements: lignes,
+        filterDescription: _descriptionFiltres(),
+      );
+      showExportSuccess(
+          context, 'La liste Excel des appartements a été téléchargée.');
+    } catch (error) {
+      AppFeedback.showError(context, error);
+    }
   }
+
+  // ── Construction ───────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appartementsNotifierProvider);
-    final currentEmployee = ref.watch(employeeCourantProvider);
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    final filtered = _filtered(state.appartements);
-    final filterDescription = _filterDescription();
-    final totalPages = (filtered.length / _kPageSize).ceil().clamp(1, 9999);
-    final safePage = _page.clamp(0, totalPages - 1);
-    final paginated =
-        filtered.skip(safePage * _kPageSize).take(_kPageSize).toList();
+    final compact = estCompact(context);
+    final mode =
+        compact ? ModeAffichage.grille : (_mode ?? ModeAffichage.tableau);
+    final marge = compact ? 12.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
+    final tous = state.appartements;
+    final avecAnimal = tous.where((a) => a.hasAnimal).length;
+    final minutesTotal = tous.fold(0, (s, a) => s + a.minutesBase);
+    final lignes = _lignes(tous);
+    final nbPages = lignes.isEmpty ? 1 : ((lignes.length - 1) ~/ _parPage) + 1;
+    final page = _page.clamp(0, nbPages - 1);
+    final visibles = lignes.skip(page * _parPage).take(_parPage).toList();
+
+    FiltreSection filtre(_Filtre f, IconData icone, String info) =>
+        FiltreSection(
+          icone: icone,
+          infoBulle: info,
+          actif: _filtre == f,
+          onTap: () => _changer(() => _filtre = f),
+        );
+
+    final recherche = ChampRecherche(
+      controller: _searchCtrl,
+      indice: 'Rechercher un numéro, une note ou un animal',
+      onChanged: (v) => _changer(() => _recherche = v),
+    );
+    final ajouter = FilledButton.icon(
+      onPressed: () => _ouvrirFormulaire(),
+      style: FilledButton.styleFrom(
         backgroundColor: AppColors.rouge,
-        elevation: 0,
-        title: Text(
-          'Appartements${state.total > 0 ? '  (${state.total})' : ''}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        actions: [
-          AppExportMenuButton(
-            enabled: filtered.isNotEmpty && !state.isLoading,
-            onPdf: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => AppartementsPdfPreviewScreen(
-                  appartements: filtered,
-                  filterDescription: filterDescription,
-                  generatedBy: currentEmployee?.nomComplet ?? 'CleanOps',
-                ),
-              ),
+        shape: const StadiumBorder(),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+      ),
+      icon: const Icon(Icons.add_rounded, size: 19),
+      label: Text(compact ? 'Ajouter' : 'Ajouter un appartement'),
+    );
+
+    Widget corps;
+    if (state.isLoading && tous.isEmpty) {
+      corps = const Padding(
+        padding: EdgeInsets.only(top: 60),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
+    } else if (state.error != null && tous.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: AppErrorNotice(error: state.error!, onRetry: _charger),
+      );
+    } else if (tous.isEmpty) {
+      corps = _EtatVide(onAdd: () => _ouvrirFormulaire());
+    } else if (lignes.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: Column(
+          children: [
+            const Text(
+              'Aucun appartement ne correspond à votre recherche ou filtre.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.grisDark),
             ),
-            onExcel: () {
-              try {
-                const GenerateAppartementsExcel()(
-                  appartements: filtered,
-                  filterDescription: filterDescription,
-                );
-                showExportSuccess(
-                  context,
-                  'La liste Excel des appartements a été téléchargée.',
-                );
-              } catch (error) {
-                AppFeedback.showError(context, error);
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-          if (isDesktop)
-            Padding(
-              padding: const EdgeInsets.only(right: AppSizes.md),
-              child: FilledButton.icon(
-                onPressed: () => _ouvrirFormulaire(),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Ajouter'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.rouge,
-                ),
-              ),
+            const SizedBox(height: AppSizes.md),
+            OutlinedButton.icon(
+              onPressed: _effacerFiltres,
+              icon: const Icon(Icons.clear_rounded),
+              label: const Text('Effacer les filtres'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      corps = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mode == ModeAffichage.tableau)
+            _TableauAppartements(
+              lignes: visibles,
+              premierNumero: page * _parPage + 1,
+              tri: _tri,
+              croissant: _croissant,
+              onTrier: _trier,
+              onModifier: (a) => _ouvrirFormulaire(appartement: a),
+              onSupprimer: _confirmerSuppression,
             )
           else
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: IconButton(
-                tooltip: 'Ajouter un appartement',
-                onPressed: () => _ouvrirFormulaire(),
-                style: IconButton.styleFrom(
-                  foregroundColor: AppColors.rouge,
-                  backgroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.add_rounded),
-              ),
+            _GrilleAppartements(
+              lignes: visibles,
+              onModifier: (a) => _ouvrirFormulaire(appartement: a),
+              onSupprimer: _confirmerSuppression,
             ),
-        ],
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? 1100 : double.infinity,
+          const SizedBox(height: AppSizes.md),
+          BarrePagination(
+            page: page,
+            parPage: _parPage,
+            total: lignes.length,
+            onPage: (p) => setState(() => _page = p),
+            onParPage: (n) => _changer(() => _parPage = n),
           ),
-          child: Column(
-            children: [
-              // Barre recherche + filtres (une seule ligne sur desktop)
-              _SearchFilterBar(
-                controller: _searchCtrl,
-                hasText: _searchQuery.isNotEmpty,
-                filterTaille: _filterTaille,
-                isDesktop: isDesktop,
-                onFilterChanged: (t) => setState(() {
-                  _filterTaille = t;
-                  _page = 0;
-                }),
-              ),
+        ],
+      );
+    }
 
-              // Barre de progression (refresh en arrière-plan)
-              if (state.isLoading && state.appartements.isNotEmpty)
-                const LinearProgressIndicator(
-                  color: AppColors.rouge,
-                  backgroundColor: Colors.transparent,
-                  minHeight: 2,
+    return PageAvecEnTete(
+      chargement: state.isLoading,
+      enTete: EnTetePage(
+        icone: Icons.apartment_rounded,
+        titre: 'Appartements',
+        sousTitre: tous.isEmpty
+            ? 'Résidence — logements à entretenir'
+            : 'Résidence — ${tous.length} appartements · '
+                '${_duree(minutesTotal)} d’entretien au total'
+                '${avecAnimal > 0 ? ' · $avecAnimal avec animal' : ''}',
+      ),
+      contenu: RefreshIndicator(
+        color: AppColors.rouge,
+        onRefresh: _charger,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+              .plusBarre(context),
+          children: [
+            BarreSection(
+              titre: 'Appartements (${lignes.length})',
+              onRetour: () => context.backOrHome(AppRoutes.employerDashboard),
+              filtres: [
+                filtre(_Filtre.tous, Icons.apartment_rounded,
+                    'Tous les appartements'),
+                filtre(_Filtre.avecAnimal, Icons.pets_rounded, 'Avec animal'),
+                filtre(_Filtre.avecNotes, Icons.sticky_note_2_outlined,
+                    'Avec notes'),
+              ],
+              actions: [
+                ActionSection(
+                  icone: Icons.print_rounded,
+                  infoBulle: 'Imprimer ou exporter en PDF',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterPdf(lignes),
                 ),
-
-              Expanded(
-                child: _buildBody(
-                  state: state,
-                  filtered: filtered,
-                  paginated: paginated,
-                  totalPages: totalPages,
-                  currentPage: safePage,
-                  isDesktop: isDesktop,
+                ActionSection(
+                  icone: Icons.download_rounded,
+                  infoBulle: 'Télécharger en Excel',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterExcel(lignes),
                 ),
+                ActionSection(
+                  icone: Icons.refresh_rounded,
+                  infoBulle: 'Actualiser',
+                  onPressed: state.isLoading ? null : _charger,
+                ),
+              ],
+            ),
+            if (tous.isNotEmpty) ...[
+              const SizedBox(height: AppSizes.md),
+              _FiltreTailles(
+                appartements: tous.where(_duFiltre).toList(),
+                selection: _taille,
+                onChanged: (t) => _changer(() => _taille = t),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody({
-    required AppartementsState state,
-    required List<Appartement> filtered,
-    required List<Appartement> paginated,
-    required int totalPages,
-    required int currentPage,
-    required bool isDesktop,
-  }) {
-    if (state.isLoading && state.appartements.isEmpty) {
-      return const AppSkeletonList();
-    }
-
-    if (state.error != null && state.appartements.isEmpty) {
-      return _ErrorState(
-        message: state.error!,
-        onRetry: () =>
-            ref.read(appartementsNotifierProvider.notifier).charger(),
-      );
-    }
-
-    if (state.appartements.isEmpty) {
-      return _EmptyState(onAdd: () => _ouvrirFormulaire());
-    }
-
-    if (filtered.isEmpty) {
-      return _EmptySearch(
-        onClear: () {
-          _searchCtrl.clear();
-          setState(() {
-            _filterTaille = null;
-            _page = 0;
-          });
-        },
-      );
-    }
-
-    final paginationBar = totalPages > 1
-        ? _PaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            totalItems: filtered.length,
-            pageSize: _kPageSize,
-            onPageChanged: (p) => setState(() => _page = p),
-          )
-        : null;
-
-    if (isDesktop) {
-      return Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.md,
-                vertical: AppSizes.sm,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: AppColors.grisMedium),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    const _ColumnHeader(),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppColors.grisMedium,
-                    ),
-                    Expanded(
-                      child: RefreshIndicator(
-                        color: AppColors.rouge,
-                        onRefresh: () => ref
-                            .read(appartementsNotifierProvider.notifier)
-                            .charger(),
-                        child: ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: paginated.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: AppColors.grisMedium,
-                          ),
-                          itemBuilder: (context, i) {
-                            final appt = paginated[i];
-                            return AppartementListItem(
-                              appartement: appt,
-                              isAlternate: i.isOdd,
-                              onEdit: () =>
-                                  _ouvrirFormulaire(appartement: appt),
-                              onDelete: () => _confirmerSuppression(appt),
-                            );
-                          },
-                        ),
+            const SizedBox(height: AppSizes.md),
+            if (compact)
+              Row(
+                children: [
+                  Expanded(child: recherche),
+                  const SizedBox(width: AppSizes.sm),
+                  ajouter,
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: recherche,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  BasculeAffichage(
+                    mode: mode,
+                    onChanged: (m) => setState(() => _mode = m),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  ajouter,
+                ],
               ),
-            ),
-          ),
-          if (paginationBar != null) paginationBar,
-        ],
+            const SizedBox(height: AppSizes.md),
+            corps,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Durée « 12 h 30 » lisible pour un total de minutes.
+String _duree(int minutes) {
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  if (h == 0) return '$m min';
+  return m == 0 ? '$h h' : '$h h ${m.toString().padLeft(2, '0')}';
+}
+
+// ── Filtre par taille (avec effectifs) ─────────────────────
+
+class _FiltreTailles extends StatelessWidget {
+  final List<Appartement> appartements;
+  final String? selection;
+  final ValueChanged<String?> onChanged;
+
+  const _FiltreTailles({
+    required this.appartements,
+    required this.selection,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    _TuileTaille tuile(String? t) {
+      final dans = t == null
+          ? appartements
+          : appartements.where((a) => a.taille == t).toList();
+      final minutes = dans.fold(0, (s, a) => s + a.minutesBase);
+      return _TuileTaille(
+        taille: t,
+        nombre: dans.length,
+        detail: dans.isEmpty ? '—' : _duree(minutes),
+        actif: selection == t,
+        onTap: () => onChanged(selection == t ? null : t),
       );
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: RefreshIndicator(
-            color: AppColors.rouge,
-            onRefresh: () =>
-                ref.read(appartementsNotifierProvider.notifier).charger(),
-            child: ListView.separated(
-              padding: EdgeInsets.zero,
-              itemCount: paginated.length,
-              separatorBuilder: (_, __) => const SizedBox.shrink(),
-              itemBuilder: (context, i) {
-                final appt = paginated[i];
-                return AppartementListItem(
-                  appartement: appt,
-                  isAlternate: i.isOdd,
-                  onEdit: () => _ouvrirFormulaire(appartement: appt),
-                  onDelete: () => _confirmerSuppression(appt),
-                );
-              },
-            ),
-          ),
+    final tuiles = [tuile(null), for (final t in taillesAppartement) tuile(t)];
+
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      const minimum = 150.0;
+      final tiennent =
+          c.maxWidth >= tuiles.length * minimum + ecart * (tuiles.length - 1);
+      if (tiennent) {
+        return Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              Expanded(child: t),
+            ],
+          ],
+        );
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              SizedBox(width: minimum, child: t),
+            ],
+          ],
         ),
-        if (paginationBar != null) paginationBar,
-      ],
-    );
+      );
+    });
   }
 }
 
-// ── En-tête de colonnes (desktop) ─────────────────────────
-class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const labelStyle = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: AppColors.grisText,
-      letterSpacing: 0.2,
-    );
-
-    return Container(
-      color: AppColors.grisLight,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 8,
-      ),
-      child: const Row(
-        children: [
-          SizedBox(width: 42 + AppSizes.md), // aligné sur l'icône de la row
-          Expanded(flex: 2, child: Text('NUMÉRO', style: labelStyle)),
-          Expanded(child: Text('TAILLE', style: labelStyle)),
-          Expanded(child: Text('DURÉE', style: labelStyle)),
-          SizedBox(width: 96, child: Text('ACTIONS', style: labelStyle)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Barre recherche + filtres ─────────────────────────────
-class _SearchFilterBar extends StatelessWidget {
-  final TextEditingController controller;
-  final bool hasText;
-  final String? filterTaille;
-  final bool isDesktop;
-  final ValueChanged<String?> onFilterChanged;
-
-  const _SearchFilterBar({
-    required this.controller,
-    required this.hasText,
-    required this.filterTaille,
-    required this.isDesktop,
-    required this.onFilterChanged,
-  });
-
-  Widget _buildSearchField() {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        hintText: 'Rechercher par numéro...',
-        hintStyle: const TextStyle(fontSize: 13),
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          size: 18,
-          color: AppColors.grisText,
-        ),
-        suffixIcon: hasText
-            ? IconButton(
-                icon: const Icon(Icons.clear_rounded, size: 16),
-                onPressed: controller.clear,
-                color: AppColors.grisText,
-              )
-            : null,
-        filled: true,
-        fillColor: AppColors.grisLight,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: const BorderSide(color: AppColors.rouge, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        isDense: true,
-      ),
-      style: const TextStyle(fontSize: 13),
-    );
-  }
-
-  Widget _buildChips() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _ChipFiltre(
-          label: 'Tous',
-          selected: filterTaille == null,
-          onTap: () => onFilterChanged(null),
-        ),
-        ..._kTailles.map((t) => _ChipFiltre(
-              label: t,
-              selected: filterTaille == t,
-              onTap: () => onFilterChanged(filterTaille == t ? null : t),
-            )),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: AppSizes.sm,
-      ),
-      child: isDesktop
-          // ── Desktop : recherche + filtres sur une seule ligne ──
-          ? Row(
-              children: [
-                SizedBox(width: 280, child: _buildSearchField()),
-                const SizedBox(width: AppSizes.md),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _buildChips(),
-                  ),
-                ),
-              ],
-            )
-          // ── Mobile : empilé verticalement ──────────────────
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSearchField(),
-                const SizedBox(height: AppSizes.sm),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: _buildChips(),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-class _ChipFiltre extends StatelessWidget {
-  final String label;
-  final bool selected;
+class _TuileTaille extends StatelessWidget {
+  final String? taille;
+  final int nombre;
+  final String detail;
+  final bool actif;
   final VoidCallback onTap;
 
-  const _ChipFiltre({
-    required this.label,
-    required this.selected,
+  const _TuileTaille({
+    required this.taille,
+    required this.nombre,
+    required this.detail,
+    required this.actif,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
+    final couleur = taille == null ? AppColors.rouge : couleurTaille(taille!);
+    return Material(
+      color: actif ? AppColors.rouge.withValues(alpha: 0.06) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: actif ? AppColors.rouge : AppColors.grisMedium,
+          width: actif ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.rouge.withValues(alpha: 0.1)
-                : AppColors.grisLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? AppColors.rouge : AppColors.grisMedium,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? AppColors.rouge : AppColors.grisDark,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: couleur.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: taille == null
+                    ? Icon(Icons.apartment_rounded, size: 18, color: couleur)
+                    : Text(
+                        tailleCourte(taille!),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: couleur,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$nombre',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.noir,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      taille == null
+                          ? 'Toutes · $detail'
+                          : '${tailleCourte(taille!)} · $detail',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: actif ? FontWeight.w700 : FontWeight.w500,
+                        color: actif ? AppColors.rouge : AppColors.grisDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -565,113 +558,257 @@ class _ChipFiltre extends StatelessWidget {
   }
 }
 
-// ── Pagination ────────────────────────────────────────────
-class _PaginationBar extends StatelessWidget {
-  final int currentPage;
-  final int totalPages;
-  final int totalItems;
-  final int pageSize;
-  final ValueChanged<int> onPageChanged;
+// ── Tableau ────────────────────────────────────────────────
 
-  const _PaginationBar({
-    required this.currentPage,
-    required this.totalPages,
-    required this.totalItems,
-    required this.pageSize,
-    required this.onPageChanged,
+const _styleEnTete = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+  color: AppColors.grisDark,
+);
+
+class _TableauAppartements extends StatelessWidget {
+  final List<Appartement> lignes;
+  final int premierNumero;
+  final _Tri tri;
+  final bool croissant;
+  final ValueChanged<_Tri> onTrier;
+  final ValueChanged<Appartement> onModifier;
+  final ValueChanged<Appartement> onSupprimer;
+
+  const _TableauAppartements({
+    required this.lignes,
+    required this.premierNumero,
+    required this.tri,
+    required this.croissant,
+    required this.onTrier,
+    required this.onModifier,
+    required this.onSupprimer,
   });
-
-  List<Widget> _buildPageNumbers() {
-    final buttons = <Widget>[];
-    final start =
-        (currentPage - 2).clamp(0, (totalPages - 5).clamp(0, totalPages));
-    final end = (start + 5).clamp(0, totalPages);
-
-    for (int i = start; i < end; i++) {
-      final active = i == currentPage;
-      buttons.add(
-        GestureDetector(
-          onTap: active ? null : () => onPageChanged(i),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 28,
-            height: 28,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: active ? AppColors.rouge : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '${i + 1}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                color: active ? Colors.white : AppColors.grisDark,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    return buttons;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final start = currentPage * pageSize + 1;
-    final end = ((currentPage + 1) * pageSize).clamp(0, totalItems);
+    Widget entete(String libelle, _Tri t) => _EnTeteTri(
+          libelle: libelle,
+          actif: tri == t,
+          croissant: croissant,
+          onTap: () => onTrier(t),
+        );
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: AppColors.grisMedium, width: 1),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 10,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return CarteContenu(
+      child: Column(
         children: [
-          Text(
-            '$start–$end sur $totalItems',
-            style: const TextStyle(fontSize: 12, color: AppColors.grisText),
+          Container(
+            color: const Color(0xFFF7F8FA),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const SizedBox(
+                    width: 40, child: Text('N°', style: _styleEnTete)),
+                Expanded(flex: 3, child: entete('Appartement', _Tri.numero)),
+                Expanded(flex: 2, child: entete('Taille', _Tri.taille)),
+                Expanded(flex: 2, child: entete('Durée', _Tri.duree)),
+                const Expanded(
+                    flex: 2, child: Text('Animal', style: _styleEnTete)),
+                const Expanded(
+                    flex: 4, child: Text('Notes', style: _styleEnTete)),
+                const SizedBox(width: 48),
+              ],
+            ),
           ),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: currentPage > 0
-                    ? () => onPageChanged(currentPage - 1)
-                    : null,
-                tooltip: 'Précédent',
-                iconSize: 18,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
-              ),
-              ..._buildPageNumbers(),
-              IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: currentPage < totalPages - 1
-                    ? () => onPageChanged(currentPage + 1)
-                    : null,
-                tooltip: 'Suivant',
-                iconSize: 18,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
-              ),
-            ],
-          ),
+          for (final (i, a) in lignes.indexed) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
+            _LigneAppartement(
+              appartement: a,
+              numero: premierNumero + i,
+              onModifier: () => onModifier(a),
+              onSupprimer: () => onSupprimer(a),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
+class _EnTeteTri extends StatelessWidget {
+  final String libelle;
+  final bool actif;
+  final bool croissant;
+  final VoidCallback onTap;
+
+  const _EnTeteTri({
+    required this.libelle,
+    required this.actif,
+    required this.croissant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.rouge : AppColors.grisDark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(libelle, style: _styleEnTete.copyWith(color: couleur)),
+              const SizedBox(width: 4),
+              Icon(
+                !actif
+                    ? Icons.swap_vert_rounded
+                    : croissant
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                size: 14,
+                color: couleur,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LigneAppartement extends StatelessWidget {
+  final Appartement appartement;
+  final int numero;
+  final VoidCallback onModifier;
+  final VoidCallback onSupprimer;
+
+  const _LigneAppartement({
+    required this.appartement,
+    required this.numero,
+    required this.onModifier,
+    required this.onSupprimer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final a = appartement;
+    const style = TextStyle(fontSize: 13, color: AppColors.noir);
+    final notes = a.notes?.trim() ?? '';
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onModifier,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              SizedBox(width: 40, child: Text('$numero', style: style)),
+              Expanded(
+                flex: 3,
+                child: Row(
+                  children: [
+                    IconeAppartement(taille: a.taille),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        a.numero,
+                        overflow: TextOverflow.ellipsis,
+                        style: style.copyWith(
+                            fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BadgeTaille(taille: a.taille),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: DureeAppartement(minutes: a.minutesBase),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: a.hasAnimal
+                      ? AnimalAppartement(appartement: a)
+                      : const Text('—',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.grisText)),
+                ),
+              ),
+              Expanded(
+                flex: 4,
+                child: Text(
+                  notes.isEmpty ? '—' : notes,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style.copyWith(
+                    color:
+                        notes.isEmpty ? AppColors.grisText : AppColors.grisDark,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 48,
+                child:
+                    MenuAppartement(onEdit: onModifier, onDelete: onSupprimer),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Grille ─────────────────────────────────────────────────
+
+class _GrilleAppartements extends StatelessWidget {
+  final List<Appartement> lignes;
+  final ValueChanged<Appartement> onModifier;
+  final ValueChanged<Appartement> onSupprimer;
+
+  const _GrilleAppartements({
+    required this.lignes,
+    required this.onModifier,
+    required this.onSupprimer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      final colonnes = math.max(1, (c.maxWidth + ecart) ~/ (320 + ecart));
+      final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+      return Wrap(
+        spacing: ecart,
+        runSpacing: ecart,
+        children: [
+          for (final a in lignes)
+            SizedBox(
+              width: largeur,
+              child: AppartementListItem(
+                appartement: a,
+                onEdit: () => onModifier(a),
+                onDelete: () => onSupprimer(a),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+}
+
 // ── Dialog formulaire ─────────────────────────────────────
+
 class _FormDialog extends ConsumerWidget {
   final Appartement? appartement;
   const _FormDialog({this.appartement});
@@ -710,129 +847,70 @@ class _FormDialog extends ConsumerWidget {
           );
         }
 
-        if (ok && context.mounted) Navigator.of(context).pop();
-        if (!ok && context.mounted) {
+        if (!context.mounted) return;
+        if (ok) {
+          Navigator.of(context).pop();
+          NotificationApp.succes(
+            context,
+            appartement == null
+                ? 'L’appartement $numero a été ajouté.'
+                : 'L’appartement $numero a été modifié.',
+          );
+        } else {
           final error = ref.read(appartementsNotifierProvider).error;
-          if (error != null) {
-            AppFeedback.showError(context, error);
-          }
+          if (error != null) AppFeedback.showError(context, error);
         }
       },
     );
   }
 }
 
-// ── États visuels ─────────────────────────────────────────
+// ── État vide ──────────────────────────────────────────────
 
-class _EmptyState extends StatelessWidget {
+class _EtatVide extends StatelessWidget {
   final VoidCallback onAdd;
-  const _EmptyState({required this.onAdd});
+  const _EtatVide({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return CarteContenu(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(AppSizes.xl),
+            padding: const EdgeInsets.all(AppSizes.lg),
             decoration: BoxDecoration(
               color: AppColors.rouge.withValues(alpha: 0.06),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.apartment_rounded,
-              size: 56,
-              color: AppColors.rouge,
-            ),
+            child: const Icon(Icons.apartment_rounded,
+                size: 48, color: AppColors.rouge),
           ),
-          const SizedBox(height: AppSizes.lg),
+          const SizedBox(height: AppSizes.md),
           const Text(
             'Aucun appartement',
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.noir),
           ),
           const SizedBox(height: AppSizes.sm),
           const Text(
-            'Ajoutez votre premier appartement\npour commencer la configuration.',
+            'Ajoutez les appartements de la résidence\npour préparer le planning.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.grisDark, height: 1.5),
           ),
-          const SizedBox(height: AppSizes.xl),
+          const SizedBox(height: AppSizes.lg),
           FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add_rounded),
             label: const Text('Ajouter un appartement'),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.rouge,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.lg,
-                vertical: AppSizes.md,
-              ),
+              shape: const StadiumBorder(),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptySearch extends StatelessWidget {
-  final VoidCallback onClear;
-  const _EmptySearch({required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.search_off_rounded,
-            size: 48,
-            color: AppColors.grisDark,
-          ),
-          const SizedBox(height: AppSizes.md),
-          const Text(
-            'Aucun résultat',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
-          ),
-          const SizedBox(height: AppSizes.sm),
-          const Text(
-            'Aucun appartement ne correspond\nà votre recherche ou filtre.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.grisDark, height: 1.5),
-          ),
-          const SizedBox(height: AppSizes.lg),
-          OutlinedButton.icon(
-            onPressed: onClear,
-            icon: const Icon(Icons.clear_rounded),
-            label: const Text('Effacer les filtres'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSizes.xl),
-        child: AppErrorNotice(error: message, onRetry: onRetry),
       ),
     );
   }

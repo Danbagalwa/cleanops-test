@@ -16,7 +16,8 @@ import 'package:cleanops/features/notifications/presentation/providers/notificat
 import 'package:cleanops/features/profile/presentation/screens/profile_screen.dart';
 import 'package:cleanops/features/reception/presentation/reception_sections.dart';
 import 'package:cleanops/features/reception/presentation/screens/reception_dashboard_screen.dart';
-import 'package:cleanops/core/widgets/dashboard_account_actions.dart';
+import 'package:cleanops/core/widgets/app_shell.dart';
+import 'package:cleanops/core/widgets/app_top_bar.dart';
 
 const _reception = Employee(
   id: 'r1',
@@ -79,9 +80,17 @@ Future<_RepoAuth> _afficher(
   final router = GoRouter(
     initialLocation: initiale,
     routes: [
-      GoRoute(
-        path: receptionAccueilRoute,
-        builder: (_, __) => const ReceptionDashboardScreen(),
+      // L'accueil dans l'enveloppe de l'app : c'est elle qui porte la cloche
+      // et le menu du compte.
+      ShellRoute(
+        builder: (_, state, child) =>
+            AppShell(location: state.matchedLocation, child: child),
+        routes: [
+          GoRoute(
+            path: receptionAccueilRoute,
+            builder: (_, __) => const ReceptionDashboardScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: receptionProfilRoute,
@@ -184,30 +193,47 @@ void main() {
   });
 
   group('Tableau de bord : profil et déconnexion', () {
+    Future<void> ouvrirMenuCompte(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Mon compte'));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('notifications, profil et déconnexion', (tester) async {
       await _afficher(tester, initiale: receptionAccueilRoute);
 
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Mon profil'), findsOneWidget);
-      expect(find.byTooltip('Se déconnecter'), findsOneWidget);
+      await ouvrirMenuCompte(tester);
+      expect(find.text('Mon profil'), findsOneWidget);
+      expect(find.text('Se déconnecter'), findsOneWidget);
     });
 
-    testWidgets('l\'icône du profil ouvre « Mon profil »', (tester) async {
+    testWidgets('« Mon Profil » de l\'en-tête ouvre « Mon profil »',
+        (tester) async {
       await _afficher(tester, initiale: receptionAccueilRoute);
 
-      await tester.tap(find.byTooltip('Mon profil'));
+      await tester.tap(find.text('Mon Profil'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Mon profil'), findsOneWidget);
       expect(find.text('Informations personnelles'), findsOneWidget);
       expect(_adresse, receptionProfilRoute,
           reason: 'le profil de la Réception, pas celui des autres');
     });
 
+    testWidgets('le menu du compte ouvre aussi « Mon profil »', (tester) async {
+      await _afficher(tester, initiale: receptionAccueilRoute);
+
+      await ouvrirMenuCompte(tester);
+      await tester.tap(find.text('Mon profil'));
+      await tester.pumpAndSettle();
+
+      expect(_adresse, receptionProfilRoute);
+    });
+
     testWidgets('se déconnecter depuis l\'accueil', (tester) async {
       final repo = await _afficher(tester, initiale: receptionAccueilRoute);
 
-      await tester.tap(find.byTooltip('Se déconnecter'));
+      await ouvrirMenuCompte(tester);
+      await tester.tap(find.text('Se déconnecter'));
       await tester.pumpAndSettle();
       expect(find.text('Se déconnecter ?'), findsOneWidget);
 
@@ -221,7 +247,8 @@ void main() {
     testWidgets('rester connecté ne déconnecte pas', (tester) async {
       final repo = await _afficher(tester, initiale: receptionAccueilRoute);
 
-      await tester.tap(find.byTooltip('Se déconnecter'));
+      await ouvrirMenuCompte(tester);
+      await tester.tap(find.text('Se déconnecter'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Rester connecté'));
       await tester.pumpAndSettle();
@@ -242,8 +269,9 @@ void main() {
     testWidgets('affiche le prénom, le nom et le rôle', (tester) async {
       await _afficher(tester, initiale: receptionProfilRoute);
 
-      expect(find.text('Mon profil'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, 'Receptioniste'), findsOneWidget);
+      expect(find.text('MON PROFIL'), findsOneWidget);
+      expect(
+          find.widgetWithText(TextFormField, 'Receptioniste'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Dab'), findsOneWidget);
       expect(find.text('Réception'), findsWidgets);
       expect(find.text('Reception'), findsNothing,
@@ -307,7 +335,8 @@ void main() {
     testWidgets('se déconnecter depuis le profil', (tester) async {
       final repo = await _afficher(tester, initiale: receptionProfilRoute);
 
-      await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Se déconnecter'));
+      await tester
+          .ensureVisible(find.widgetWithText(OutlinedButton, 'Se déconnecter'));
       await tester.tap(find.widgetWithText(OutlinedButton, 'Se déconnecter'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Se déconnecter'));
@@ -321,7 +350,7 @@ void main() {
       await _afficher(tester,
           initiale: receptionProfilRoute, taille: const Size(420, 900));
 
-      expect(find.text('Mon profil'), findsOneWidget);
+      expect(find.text('MON PROFIL'), findsOneWidget);
       expect(find.byType(TextFormField), findsNWidgets(2));
       expect(find.text('Réception'), findsWidgets);
     });
@@ -363,7 +392,7 @@ void main() {
       expect(find.text('ACCUEIL PREPOSEE'), findsOneWidget);
     });
 
-    testWidgets('les actions de compte gardent les notifications par défaut',
+    testWidgets('la barre du haut d\'un responsable : cloche et compte',
         (tester) async {
       tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = const Size(1200, 800);
@@ -371,16 +400,20 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [unreadNotificationsCountProvider.overrideWithValue(0)],
-          child: const MaterialApp(
-            home: Scaffold(body: DashboardAccountActions()),
+          overrides: [
+            employeeCourantProvider.overrideWithValue(_admin),
+            unreadNotificationsCountProvider.overrideWithValue(0),
+          ],
+          child: MaterialApp(
+            home: Scaffold(body: AppTopBar(onMenu: () {})),
           ),
         ),
       );
+      await tester.pumpAndSettle();
 
+      expect(find.byTooltip('Menu'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Mon profil'), findsOneWidget);
-      expect(find.byTooltip('Se déconnecter'), findsOneWidget);
+      expect(find.byTooltip('Mon compte'), findsOneWidget);
     });
   });
 }

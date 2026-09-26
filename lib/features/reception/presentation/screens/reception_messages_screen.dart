@@ -6,6 +6,7 @@ import '../../../../core/widgets/error_widget.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
 import '../../domain/reception_messages_models.dart';
 import '../providers/reception_messages_provider.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 const _kPageSize = 10;
 
@@ -224,7 +225,8 @@ class _ReceptionMessagesScreenState
                   ),
                 ),
               ),
-              if (paginationBar != null) paginationBar,
+              if (paginationBar != null)
+                AuDessusDeLaBarre(child: paginationBar),
             ],
           );
         }
@@ -234,15 +236,19 @@ class _ReceptionMessagesScreenState
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.rouge,
-                onRefresh: () async => ref.invalidate(receptionMessagesProvider),
+                onRefresh: () async =>
+                    ref.invalidate(receptionMessagesProvider),
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                  padding: paginationBar == null
+                      ? const EdgeInsets.symmetric(vertical: AppSizes.sm)
+                          .plusBarre(context)
+                      : const EdgeInsets.symmetric(vertical: AppSizes.sm),
                   itemCount: paginated.length,
                   itemBuilder: (_, i) => ligne(i),
                 ),
               ),
             ),
-            if (paginationBar != null) paginationBar,
+            if (paginationBar != null) AuDessusDeLaBarre(child: paginationBar),
           ],
         );
       },
@@ -774,7 +780,8 @@ class _DetailDialog extends StatelessWidget {
                 const SizedBox(height: AppSizes.xs),
                 Text(
                   m.signification,
-                  style: const TextStyle(fontWeight: FontWeight.w600, height: 1.4),
+                  style:
+                      const TextStyle(fontWeight: FontWeight.w600, height: 1.4),
                 ),
                 const SizedBox(height: AppSizes.xs),
                 Text(

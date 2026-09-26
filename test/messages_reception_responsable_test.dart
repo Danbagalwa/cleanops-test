@@ -32,8 +32,7 @@ class _DepotMessages implements MessagesReceptionResponsableRepository {
   Object? erreurListe;
   Object? erreurAction;
   int chargements = 0;
-  final reponses =
-      <({String messageId, String auteurId, String reponse})>[];
+  final reponses = <({String messageId, String auteurId, String reponse})>[];
   final resolutions = <({String messageId, String auteurId})>[];
 
   _DepotMessages(this.liste);
@@ -138,7 +137,7 @@ List<MessageTransmis> _jeu() => [
 Future<void> _afficherSection(
   WidgetTester tester,
   _DepotMessages depot, {
-  Size taille = const Size(1200, 1600),
+  Size taille = const Size(420, 1600),
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = taille;
@@ -148,8 +147,7 @@ Future<void> _afficherSection(
     ProviderScope(
       overrides: [
         employeeCourantProvider.overrideWithValue(_admin),
-        messagesReceptionResponsableRepositoryProvider
-            .overrideWithValue(depot),
+        messagesReceptionResponsableRepositoryProvider.overrideWithValue(depot),
       ],
       child: const MaterialApp(
         home: Scaffold(body: MessagesReceptionSection()),
@@ -160,17 +158,23 @@ Future<void> _afficherSection(
 }
 
 Finder _champReponse() =>
-    find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    find.descendant(of: find.byType(Dialog), matching: find.byType(TextField));
 
 void main() {
   group('Section « Messages de la réception »', () {
-    testWidgets('groupée par statut, avec le nombre de chaque groupe',
+    testWidgets('triée par statut : en attente, répondues puis résolues',
         (tester) async {
       await _afficherSection(tester, _DepotMessages(_jeu()));
 
-      expect(find.text('En attente (1)'), findsOneWidget);
-      expect(find.text('Répondues (1)'), findsOneWidget);
-      expect(find.text('Résolues (1)'), findsOneWidget);
+      expect(find.text('MESSAGES (3)'), findsOneWidget);
+      expect(find.text('En attente'), findsOneWidget);
+      expect(find.text('Répondue'), findsOneWidget);
+      expect(find.text('Résolue'), findsOneWidget);
+
+      double haut(String texte) => tester.getTopLeft(find.text(texte)).dy;
+      expect(haut('Annuler le ménage de jeudi'),
+          lessThan(haut("Repousser à l'après-midi")));
+      expect(haut("Repousser à l'après-midi"), lessThan(haut('Clé perdue')));
     });
 
     testWidgets('chaque carte : appartement, nature, message, auteur, date',
@@ -224,25 +228,24 @@ void main() {
     testWidgets('filtres par statut', (tester) async {
       await _afficherSection(tester, _DepotMessages(_jeu()));
 
-      await tester.tap(find.widgetWithText(InkWell, 'En attente').first);
+      await tester.tap(find.byTooltip('En attente'));
       await tester.pump();
       expect(find.text('Annuler le ménage de jeudi'), findsOneWidget);
       expect(find.text('Clé perdue'), findsNothing);
-      expect(find.text('En attente (1)'), findsNothing,
-          reason: 'sans regroupement quand un filtre est actif');
+      expect(find.text('MESSAGES (1)'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(InkWell, 'Résolues'));
+      await tester.tap(find.byTooltip('Résolues'));
       await tester.pump();
       expect(find.text('Clé perdue'), findsOneWidget);
       expect(find.text('Annuler le ménage de jeudi'), findsNothing);
 
-      await tester.tap(find.widgetWithText(InkWell, 'Répondues'));
+      await tester.tap(find.byTooltip('Répondues'));
       await tester.pump();
       expect(find.text('Repousser à l\'après-midi'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(InkWell, 'Tous'));
+      await tester.tap(find.byTooltip('Tous les messages'));
       await tester.pump();
-      expect(find.text('En attente (1)'), findsOneWidget);
+      expect(find.text('MESSAGES (3)'), findsOneWidget);
     });
 
     testWidgets('un filtre sans résultat propose de tout afficher',
@@ -250,10 +253,10 @@ void main() {
       final depot = _DepotMessages([_msg('1', '101', 'Un seul message')]);
       await _afficherSection(tester, depot);
 
-      await tester.tap(find.widgetWithText(InkWell, 'Résolues'));
+      await tester.tap(find.byTooltip('Résolues'));
       await tester.pump();
-      expect(find.text('Aucun message ne correspond à ce filtre'),
-          findsOneWidget);
+      expect(
+          find.text('Aucun message ne correspond à ce filtre'), findsOneWidget);
 
       await tester.tap(find.text('Tout afficher'));
       await tester.pump();
@@ -280,44 +283,65 @@ void main() {
       expect(find.text('Clé perdue'), findsOneWidget);
     });
 
-    testWidgets('sur mobile aussi', (tester) async {
+    testWidgets('sur ordinateur : tableau avec actions en icônes',
+        (tester) async {
       await _afficherSection(tester, _DepotMessages(_jeu()),
-          taille: const Size(420, 1200));
+          taille: const Size(1400, 1200));
 
-      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
-      expect(find.text('Répondre'), findsOneWidget);
+      expect(find.text('Annuler le ménage de jeudi'), findsOneWidget);
+      expect(find.byTooltip('Répondre'), findsOneWidget);
+      expect(find.byTooltip('Modifier la réponse'), findsOneWidget);
+      expect(find.byTooltip('Horaire modifié'), findsNWidgets(2));
+    });
+
+    testWidgets('toucher un message ouvre son détail', (tester) async {
+      await _afficherSection(tester, _DepotMessages(_jeu()));
+
+      await tester.tap(find.text('Clé perdue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('MESSAGE DE LA RÉCEPTION'), findsOneWidget);
+      expect(find.text("L'horaire a été modifié."), findsOneWidget);
     });
   });
 
   group("« Horaire modifié » seulement pour les demandes d'horaire", () {
     testWidgets('annulation et reprogrammation : le bouton est proposé',
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
-        _msg('2', '202', 'Repousser', nature: NatureDemande.reprogrammation),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
+            _msg('2', '202', 'Repousser',
+                nature: NatureDemande.reprogrammation),
+          ]));
 
       expect(find.text('Horaire modifié'), findsNWidgets(2));
     });
 
     testWidgets('« Autre demande » : pas de bouton, seulement Répondre',
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
+          ]));
 
       expect(find.text('Répondre'), findsOneWidget);
       expect(find.text('Horaire modifié'), findsNothing);
     });
 
-    testWidgets("un message « Autre » déjà répondu : seulement modifier la réponse",
+    testWidgets(
+        "un message « Autre » déjà répondu : seulement modifier la réponse",
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Clé perdue',
-            nature: NatureDemande.autre,
-            statut: StatutMessage.repondue,
-            reponse: 'Nous cherchons.'),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Clé perdue',
+                nature: NatureDemande.autre,
+                statut: StatutMessage.repondue,
+                reponse: 'Nous cherchons.'),
+          ]));
 
       expect(find.text('Modifier la réponse'), findsOneWidget);
       expect(find.text('Horaire modifié'), findsNothing);
@@ -325,11 +349,13 @@ void main() {
 
     testWidgets("le bouton n'apparaît que sur les cartes concernées",
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
-        _msg('2', '202', 'Clé perdue', nature: NatureDemande.autre),
-        _msg('3', '303', 'Question', nature: NatureDemande.autre),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Annuler jeudi', nature: NatureDemande.annulation),
+            _msg('2', '202', 'Clé perdue', nature: NatureDemande.autre),
+            _msg('3', '303', 'Question', nature: NatureDemande.autre),
+          ]));
 
       expect(find.text('Répondre'), findsNWidgets(3));
       expect(find.text('Horaire modifié'), findsOneWidget,
@@ -338,9 +364,11 @@ void main() {
 
     testWidgets("la fenêtre de réponse ne parle pas d'horaire pour « Autre »",
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Clé perdue', nature: NatureDemande.autre),
+          ]));
 
       await tester.tap(find.text('Répondre'));
       await tester.pumpAndSettle();
@@ -353,9 +381,11 @@ void main() {
 
     testWidgets("la fenêtre de réponse d'une annulation explique la suite",
         (tester) async {
-      await _afficherSection(tester, _DepotMessages([
-        _msg('1', '101', 'Annuler', nature: NatureDemande.annulation),
-      ]));
+      await _afficherSection(
+          tester,
+          _DepotMessages([
+            _msg('1', '101', 'Annuler', nature: NatureDemande.annulation),
+          ]));
 
       await tester.tap(find.text('Répondre'));
       await tester.pumpAndSettle();
@@ -402,10 +432,10 @@ void main() {
       expect(depot.reponses.single.messageId, '1');
       expect(depot.reponses.single.auteurId, 'a1');
       expect(depot.reponses.single.reponse, 'Nous passons demain');
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
       expect(find.text('Réponse enregistrée.'), findsOneWidget);
       expect(depot.chargements, greaterThan(avant));
-      expect(find.text('Répondues (2)'), findsOneWidget);
+      expect(find.text('Répondue'), findsNWidgets(2));
       expect(find.text('Nous passons demain'), findsOneWidget);
     });
 
@@ -431,7 +461,7 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(AlertDialog),
+          of: find.byType(Dialog),
           matching: find.text('Bien reçu, je vérifie le planning.'),
         ),
         findsOneWidget,
@@ -457,7 +487,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(depot.reponses, isEmpty);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
     });
 
     testWidgets('une erreur du serveur s\'affiche, la fenêtre reste',
@@ -474,7 +504,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Ce message est déjà résolu.'), findsOneWidget);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(Dialog), findsOneWidget);
       expect(find.text('Réponse enregistrée.'), findsNothing);
     });
   });
@@ -488,9 +518,11 @@ void main() {
       await tester.tap(find.text('Horaire modifié').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('Horaire modifié ?'), findsOneWidget);
+      expect(find.text('HORAIRE MODIFIÉ ?'), findsOneWidget);
       expect(find.text('Apt 101 · Annulation'), findsWidgets);
-      expect(find.text('Cette action ne modifie pas le planning : faites-le avant.'),
+      expect(
+          find.text(
+              'Cette action ne modifie pas le planning : faites-le avant.'),
           findsOneWidget);
       expect(depot.resolutions, isEmpty, reason: 'rien avant la confirmation');
     });
@@ -508,8 +540,8 @@ void main() {
       expect(depot.resolutions.single.messageId, '1');
       expect(depot.resolutions.single.auteurId, 'a1');
       expect(find.text('Message marqué comme résolu.'), findsOneWidget);
-      expect(find.text('Résolues (2)'), findsOneWidget);
-      expect(find.text('En attente (1)'), findsNothing,
+      expect(find.text('Résolue'), findsNWidgets(2));
+      expect(find.text('En attente'), findsNothing,
           reason: 'plus rien en attente');
     });
 
@@ -523,7 +555,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(depot.resolutions, isEmpty);
-      expect(find.text('En attente (1)'), findsOneWidget);
+      expect(find.text('En attente'), findsOneWidget);
     });
 
     testWidgets('on peut résoudre un message déjà répondu', (tester) async {
@@ -564,8 +596,8 @@ void main() {
       expect(container.read(messagesReceptionEnAttenteProvider), 0,
           reason: '0 tant que la liste n\'est pas chargée');
 
-      final sub = container.listen(
-          messagesReceptionResponsableProvider, (_, __) {});
+      final sub =
+          container.listen(messagesReceptionResponsableProvider, (_, __) {});
       await container.read(messagesReceptionResponsableProvider.future);
 
       expect(container.read(messagesReceptionEnAttenteProvider), 1);
@@ -607,9 +639,9 @@ void main() {
       expect(find.text('Demandes résidents'), findsOneWidget);
       expect(find.text('Demandes des résidents'), findsOneWidget);
       expect(find.text('Messages de la réception'), findsOneWidget);
-      // Le contenu d'origine est intact : ses filtres de type sont là.
-      expect(find.text('Tous types'), findsOneWidget);
-      expect(find.text('Apt 101 · Annulation'), findsNothing);
+      // Onglet des demandes de résidents (vide dans ce test).
+      expect(find.text('Aucune demande de résident'), findsOneWidget);
+      expect(find.text('Annuler le ménage de jeudi'), findsNothing);
     });
 
     testWidgets('le compteur de l\'onglet montre les messages en attente',
@@ -621,11 +653,11 @@ void main() {
           findsOneWidget);
       // L'onglet des demandes de résidents n'a pas de compteur de messages.
       final autre = find.widgetWithText(InkWell, 'Demandes des résidents');
-      expect(find.descendant(of: autre, matching: find.text('1')), findsNothing);
+      expect(
+          find.descendant(of: autre, matching: find.text('1')), findsNothing);
     });
 
-    testWidgets('pas de compteur quand rien n\'est en attente',
-        (tester) async {
+    testWidgets('pas de compteur quand rien n\'est en attente', (tester) async {
       await ecran(tester, messages: [
         _msg('3', '303', 'Clé perdue', statut: StatutMessage.resolue),
       ]);
@@ -644,10 +676,10 @@ void main() {
       await tester.tap(find.text('Messages de la réception'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
-      expect(find.text('En attente (1)'), findsOneWidget);
-      expect(find.text('Tous types'), findsNothing,
-          reason: 'les filtres des demandes de résidents disparaissent');
+      expect(find.text('Annuler le ménage de jeudi'), findsOneWidget);
+      expect(find.text('En attente'), findsOneWidget);
+      expect(find.text('Aucune demande de résident'), findsNothing,
+          reason: 'le contenu des demandes de résidents disparaît');
     });
 
     testWidgets('revenir aux demandes des résidents', (tester) async {
@@ -658,8 +690,8 @@ void main() {
       await tester.tap(find.text('Demandes des résidents'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Tous types'), findsOneWidget);
-      expect(find.text('Apt 101 · Annulation'), findsNothing);
+      expect(find.text('Aucune demande de résident'), findsOneWidget);
+      expect(find.text('Annuler le ménage de jeudi'), findsNothing);
     });
 
     testWidgets('« Actualiser » recharge la liste de l\'onglet affiché',
@@ -678,7 +710,8 @@ void main() {
           reason: 'les demandes de résidents ne sont pas rechargées');
     });
 
-    testWidgets('sur l\'onglet des demandes, « Actualiser » recharge les '
+    testWidgets(
+        'sur l\'onglet des demandes, « Actualiser » recharge les '
         'demandes de résidents', (tester) async {
       final ctx = await ecran(tester);
       final residentsAvant = ctx.residents.chargements;
@@ -694,7 +727,7 @@ void main() {
 
       await tester.tap(find.text('Messages de la réception'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Répondre'));
+      await tester.tap(find.byTooltip('Répondre'));
       await tester.pumpAndSettle();
       await tester.enterText(_champReponse(), 'Vu.');
       await tester.pump();
@@ -726,8 +759,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
-      expect(find.text('Tous types'), findsNothing);
+      expect(find.text('Annuler le ménage de jeudi'), findsOneWidget);
+      expect(find.text('Aucune demande de résident'), findsNothing);
     });
 
     testWidgets('sur mobile', (tester) async {

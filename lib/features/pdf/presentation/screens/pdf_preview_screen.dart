@@ -3,11 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
-import 'package:printing/printing.dart';
 
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/error_widget.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/widgets/lecteur_pdf.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../employes/presentation/providers/employes_provider.dart';
@@ -72,88 +69,29 @@ class _PdfPreviewScreenState extends ConsumerState<PdfPreviewScreen> {
           )
         : null;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
-        backgroundColor: AppColors.rouge,
-        foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.isIndividual
-                  ? 'Planning personnel'
-                  : 'Planning de l’équipe',
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              widget.isIndividual
-                  ? (employee?.nomComplet ?? 'Préparation du document…')
-                  : 'Semaine ${widget.numeroSemaine ?? 1}',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
+    return LecteurPdf(
+      titre:
+          widget.isIndividual ? 'Planning personnel' : 'Planning de l’équipe',
+      sousTitre: widget.isIndividual
+          ? (employee?.nomComplet ?? 'Préparation du document…')
+          : 'Semaine ${widget.numeroSemaine ?? 1} du cycle',
+      icone: Icons.calendar_month_rounded,
+      nomFichier: _fileName(employee),
+      format:
+          widget.isIndividual ? PdfPageFormat.a4 : PdfPageFormat.a4.landscape,
+      chargement: isLoading,
+      erreur: error ??
+          (widget.isIndividual && employee == null
+              ? 'Cet employé est introuvable. Revenez au planning '
+                  'et sélectionnez-le à nouveau.'
+              : null),
+      onReessayer: _loadData,
+      generer: () => _buildDocument(
+        currentEmployee: currentEmployee,
+        selectedEmployee: employee,
+        employees: employeesState.employes,
+        templates: planningState.templates,
       ),
-      body: isLoading
-          ? const AppSkeletonList(
-              itemCount: 5,
-            )
-          : error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: AppErrorNotice(
-                      error: error,
-                      onRetry: _loadData,
-                    ),
-                  ),
-                )
-              : widget.isIndividual && employee == null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: AppErrorNotice(
-                          error:
-                              'Cet employé est introuvable. Revenez au planning '
-                              'et sélectionnez-le à nouveau.',
-                          onRetry: _loadData,
-                        ),
-                      ),
-                    )
-                  : PdfPreview(
-                      build: (_) => _buildDocument(
-                        currentEmployee: currentEmployee,
-                        selectedEmployee: employee,
-                        employees: employeesState.employes,
-                        templates: planningState.templates,
-                      ),
-                      initialPageFormat: widget.isIndividual
-                          ? PdfPageFormat.a4
-                          : PdfPageFormat.a4.landscape,
-                      canChangePageFormat: false,
-                      canChangeOrientation: false,
-                      allowPrinting: true,
-                      allowSharing: true,
-                      pdfFileName: _fileName(employee),
-                      loadingWidget: const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.rouge,
-                        ),
-                      ),
-                      onError: (context, error) => Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: AppErrorNotice(error: error),
-                        ),
-                      ),
-                    ),
     );
   }
 

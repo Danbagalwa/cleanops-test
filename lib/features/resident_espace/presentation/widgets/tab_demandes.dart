@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/widgets/dialogue_app.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../pdf/presentation/screens/resident_cleaning_dates_pdf_screen.dart';
 import '../../domain/entities/demande_resident.dart';
 import '../../domain/entities/tache_resident.dart';
 import '../providers/resident_espace_provider.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 enum _StatutFiltre { tous, enAttente, repondues, resolues }
 
@@ -139,17 +141,19 @@ class _TabDemandesState extends ConsumerState<TabDemandes> {
                         ? _EmptyDemandes(
                             onNouvelleDemande: widget.onNouvelleDemande)
                         : filtrees.isEmpty
-                            ? _EmptyFiltre(onReinitialiser: () => setState(() {
-                                _statutFiltre = _StatutFiltre.tous;
-                                _typeFiltre = null;
-                              }))
+                            ? _EmptyFiltre(
+                                onReinitialiser: () => setState(() {
+                                      _statutFiltre = _StatutFiltre.tous;
+                                      _typeFiltre = null;
+                                    }))
                             : RefreshIndicator(
                                 onRefresh: () => ref
-                                    .read(residentEspaceNotifierProvider
-                                        .notifier)
+                                    .read(
+                                        residentEspaceNotifierProvider.notifier)
                                     .chargerDemandes(),
                                 child: ListView.separated(
-                                  padding: const EdgeInsets.all(AppSizes.md),
+                                  padding: const EdgeInsets.all(AppSizes.md)
+                                      .plusBarre(context),
                                   itemCount: filtrees.length,
                                   separatorBuilder: (_, __) =>
                                       const SizedBox(height: AppSizes.sm),
@@ -174,28 +178,24 @@ class _TabDemandesState extends ConsumerState<TabDemandes> {
 
   void _confirmerRefus(
       BuildContext context, WidgetRef ref, DemandeResident demande) {
-    showDialog(
+    // La fenêtre se ferme avec SON contexte (`dialogue`) : celui de la page
+    // fermait la page elle-même, et l'application avec elle.
+    showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Refuser la proposition ?'),
-        content: const Text(
-            'L\'équipe sera informée que vous refusez cette proposition.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ref
-                  .read(residentEspaceNotifierProvider.notifier)
-                  .refuserProposition(demande.id);
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.rouge),
-            child: const Text('Confirmer le refus'),
-          ),
-        ],
+      builder: (dialogue) => DialogueApp(
+        titre: 'Refuser la proposition ?',
+        contenu: const Text(
+          'L\'équipe sera informée que vous refusez cette proposition.',
+          style: TextStyle(fontSize: 14, height: 1.45),
+        ),
+        libelleSecondaire: 'Annuler',
+        libelleAction: 'Confirmer le refus',
+        onAction: () {
+          Navigator.of(dialogue).pop();
+          ref
+              .read(residentEspaceNotifierProvider.notifier)
+              .refuserProposition(demande.id);
+        },
       ),
     );
   }

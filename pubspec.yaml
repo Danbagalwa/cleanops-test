@@ -48,6 +48,10 @@ dependencies:
   image_picker: ^1.2.3
   image: ^4.3.0
   file_picker: ^13.1.0
+  # Téléchargement avec progression (documents joints) et partage natif web
+  http: ^1.6.0
+  web: ^1.1.1
+  liquid_glass_widgets: ^1.7.2
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +74,7 @@ flutter:
   assets:
     - assets/images/
     - assets/icon/
+    - assets/fonts/
 
 flutter_launcher_icons:
   android: true

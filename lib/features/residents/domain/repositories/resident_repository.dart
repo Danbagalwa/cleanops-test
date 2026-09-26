@@ -15,8 +15,7 @@ abstract class ResidentRepository {
     bool aApplication,
   );
 
-  Future<Either<Failure, Resident>> attribuerPin(
-      String residentId, String pin);
+  Future<Either<Failure, Resident>> attribuerPin(String residentId, String pin);
 
   Future<Either<Failure, Resident>> desactiverResident(
       String residentId, String desactiveParId);

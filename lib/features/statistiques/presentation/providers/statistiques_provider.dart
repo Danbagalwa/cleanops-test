@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/datasources/statistiques_datasource.dart';
 import '../../data/repositories/statistiques_repository_impl.dart';
-import '../../domain/entities/stat_semaine.dart';
-import '../../domain/entities/stat_preposee.dart';
-import '../../domain/entities/stat_appartement.dart';
+import '../../domain/entities/statistiques_menages.dart';
 import '../../domain/repositories/statistiques_repository.dart';
 
 // ── Infrastructure ────────────────────────────────────────
@@ -16,84 +14,109 @@ final statistiquesRepositoryProvider = Provider<StatistiquesRepository>((ref) {
   return StatistiquesRepositoryImpl(ref.watch(statistiquesDatasourceProvider));
 });
 
-// ── Type de période ───────────────────────────────────────
+// ── Périodes rapides ──────────────────────────────────────
 
-enum PeriodeType {
+DateTime _jour(DateTime d) => DateTime(d.year, d.month, d.day);
+
+enum PeriodeRapide {
+  aujourdhui,
   semaineCourante,
   semainePrecedente,
   moisCourant,
-  personnalisee,
-}
+  moisPrecedent,
+  trenteDerniersJours;
 
-extension PeriodeTypeLabel on PeriodeType {
-  String get label => switch (this) {
-        PeriodeType.semaineCourante => 'Cette semaine',
-        PeriodeType.semainePrecedente => 'Semaine précédente',
-        PeriodeType.moisCourant => 'Ce mois',
-        PeriodeType.personnalisee => 'Période personnalisée…',
+  String get libelle => switch (this) {
+        PeriodeRapide.aujourdhui => 'Aujourd’hui',
+        PeriodeRapide.semaineCourante => 'Cette semaine',
+        PeriodeRapide.semainePrecedente => 'Semaine précédente',
+        PeriodeRapide.moisCourant => 'Ce mois-ci',
+        PeriodeRapide.moisPrecedent => 'Mois précédent',
+        PeriodeRapide.trenteDerniersJours => '30 derniers jours',
       };
+
+  ({DateTime debut, DateTime fin}) bornes([DateTime? maintenant]) {
+    final auj = _jour(maintenant ?? DateTime.now());
+    final lundi = auj.subtract(Duration(days: auj.weekday - 1));
+    return switch (this) {
+      PeriodeRapide.aujourdhui => (debut: auj, fin: auj),
+      PeriodeRapide.semaineCourante => (
+          debut: lundi,
+          fin: lundi.add(const Duration(days: 6))
+        ),
+      PeriodeRapide.semainePrecedente => (
+          debut: lundi.subtract(const Duration(days: 7)),
+          fin: lundi.subtract(const Duration(days: 1))
+        ),
+      PeriodeRapide.moisCourant => (
+          debut: DateTime(auj.year, auj.month, 1),
+          fin: DateTime(auj.year, auj.month + 1, 0)
+        ),
+      PeriodeRapide.moisPrecedent => (
+          debut: DateTime(auj.year, auj.month - 1, 1),
+          fin: DateTime(auj.year, auj.month, 0)
+        ),
+      PeriodeRapide.trenteDerniersJours => (
+          debut: auj.subtract(const Duration(days: 29)),
+          fin: auj
+        ),
+    };
+  }
 }
-
-// ── Helpers de date ───────────────────────────────────────
-
-DateTime _lundiCourant() {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day)
-      .subtract(Duration(days: now.weekday - 1));
-}
-
-DateTime _vendrediCourant() => _lundiCourant().add(const Duration(days: 4));
 
 // ── État ──────────────────────────────────────────────────
 
 class StatistiquesState {
-  final List<StatSemaine> statSemaine;
-  final List<StatPreposee> statPreposees;
-  final List<StatAppartement> topAppartements;
-  final bool isLoading;
-  final String? error;
-  final int selectedTab;
-  final PeriodeType periodeSelectionnee;
+  /// Période appliquée (celle des chiffres affichés).
   final DateTime dateDebut;
   final DateTime dateFin;
 
-  StatistiquesState({
-    this.statSemaine = const [],
-    this.statPreposees = const [],
-    this.topAppartements = const [],
+  /// Préposée filtrée (`null` : toutes).
+  final String? employeId;
+
+  final StatistiquesMenages? donnees;
+  final bool isLoading;
+  final String? error;
+
+  const StatistiquesState({
+    required this.dateDebut,
+    required this.dateFin,
+    this.employeId,
+    this.donnees,
     this.isLoading = false,
     this.error,
-    this.selectedTab = 0,
-    this.periodeSelectionnee = PeriodeType.semaineCourante,
-    DateTime? dateDebut,
-    DateTime? dateFin,
-  })  : dateDebut = dateDebut ?? _lundiCourant(),
-        dateFin = dateFin ?? _vendrediCourant();
+  });
+
+  /// Du 1er du mois à aujourd'hui.
+  factory StatistiquesState.initial() {
+    final auj = _jour(DateTime.now());
+    return StatistiquesState(
+      dateDebut: DateTime(auj.year, auj.month, 1),
+      dateFin: auj,
+    );
+  }
+
+  /// Chiffres de la préposée choisie (ou de toutes).
+  StatistiquesMenages? get vue => donnees?.pour(employeId);
 
   StatistiquesState copyWith({
-    List<StatSemaine>? statSemaine,
-    List<StatPreposee>? statPreposees,
-    List<StatAppartement>? topAppartements,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    String? employeId,
+    bool toutesPreposees = false,
+    StatistiquesMenages? donnees,
     bool? isLoading,
     String? error,
     bool clearError = false,
-    int? selectedTab,
-    PeriodeType? periodeSelectionnee,
-    DateTime? dateDebut,
-    DateTime? dateFin,
-  }) {
-    return StatistiquesState(
-      statSemaine: statSemaine ?? this.statSemaine,
-      statPreposees: statPreposees ?? this.statPreposees,
-      topAppartements: topAppartements ?? this.topAppartements,
-      isLoading: isLoading ?? this.isLoading,
-      error: clearError ? null : error ?? this.error,
-      selectedTab: selectedTab ?? this.selectedTab,
-      periodeSelectionnee: periodeSelectionnee ?? this.periodeSelectionnee,
-      dateDebut: dateDebut ?? this.dateDebut,
-      dateFin: dateFin ?? this.dateFin,
-    );
-  }
+  }) =>
+      StatistiquesState(
+        dateDebut: dateDebut ?? this.dateDebut,
+        dateFin: dateFin ?? this.dateFin,
+        employeId: toutesPreposees ? null : employeId ?? this.employeId,
+        donnees: donnees ?? this.donnees,
+        isLoading: isLoading ?? this.isLoading,
+        error: clearError ? null : error ?? this.error,
+      );
 }
 
 // ── Notifier ──────────────────────────────────────────────
@@ -101,113 +124,55 @@ class StatistiquesState {
 class StatistiquesNotifier extends StateNotifier<StatistiquesState> {
   final StatistiquesRepository _repo;
 
-  StatistiquesNotifier(this._repo) : super(StatistiquesState());
+  StatistiquesNotifier(this._repo) : super(StatistiquesState.initial());
 
-  Future<void> loadAll() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    await Future.wait([
-      _chargerSemaine(),
-      _chargerPreposees(),
-      _chargerAppartements(),
-    ]);
-    state = state.copyWith(isLoading: false);
-  }
+  /// Recharge la période appliquée.
+  Future<void> charger() =>
+      rechercher(dateDebut: state.dateDebut, dateFin: state.dateFin);
 
-  Future<void> loadStatSemaine() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    await _chargerSemaine();
-    state = state.copyWith(isLoading: false);
-  }
-
-  Future<void> loadStatPreposees() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    await _chargerPreposees();
-    state = state.copyWith(isLoading: false);
-  }
-
-  Future<void> loadTopAppartements() async {
-    state = state.copyWith(isLoading: true, clearError: true);
-    await _chargerAppartements();
-    state = state.copyWith(isLoading: false);
-  }
-
-  void selectTab(int index) => state = state.copyWith(selectedTab: index);
-
-  // ── Filtre par période ────────────────────────────────────
-
-  void selectionnerPeriode(PeriodeType type) {
-    final now = DateTime.now();
-    final lundi = _lundiCourant();
-
-    final DateTime debut;
-    final DateTime fin;
-
-    switch (type) {
-      case PeriodeType.semaineCourante:
-        debut = lundi;
-        fin = _vendrediCourant();
-      case PeriodeType.semainePrecedente:
-        debut = lundi.subtract(const Duration(days: 7));
-        fin = debut.add(const Duration(days: 4));
-      case PeriodeType.moisCourant:
-        debut = DateTime(now.year, now.month, 1);
-        fin = DateTime(now.year, now.month + 1, 0);
-      case PeriodeType.personnalisee:
-        // Le widget gère les date pickers — on ne change rien ici
-        state = state.copyWith(periodeSelectionnee: type);
-        return;
-    }
-
+  /// Applique une période (et une préposée) puis charge ses chiffres.
+  Future<void> rechercher({
+    required DateTime dateDebut,
+    required DateTime dateFin,
+    String? employeId,
+    bool garderPreposee = true,
+  }) async {
     state = state.copyWith(
-      periodeSelectionnee: type,
-      dateDebut: debut,
-      dateFin: fin,
+      dateDebut: _jour(dateDebut),
+      dateFin: _jour(dateFin),
+      employeId: employeId,
+      toutesPreposees: !garderPreposee && employeId == null,
+      isLoading: true,
+      clearError: true,
     );
-    loadStatPreposees();
-  }
-
-  void selectionnerPeriodePersonnalisee(DateTime debut, DateTime fin) {
-    state = state.copyWith(
-      periodeSelectionnee: PeriodeType.personnalisee,
-      dateDebut: debut,
-      dateFin: fin,
-    );
-    loadStatPreposees();
-  }
-
-  // ── Interne ───────────────────────────────────────────────
-
-  Future<void> _chargerSemaine() async {
-    final r = await _repo.getStatSemaine();
-    r.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (data) => state = state.copyWith(statSemaine: data),
-    );
-  }
-
-  Future<void> _chargerPreposees() async {
-    final r = await _repo.getStatParPreposee(
+    final r = await _repo.getStatistiques(
       dateDebut: state.dateDebut,
       dateFin: state.dateFin,
     );
+    if (!mounted) return;
     r.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (data) => state = state.copyWith(statPreposees: data),
-    );
-  }
-
-  Future<void> _chargerAppartements() async {
-    final r = await _repo.getTopAppartementsProblematiques();
-    r.fold(
-      (f) => state = state.copyWith(error: f.message),
-      (data) => state = state.copyWith(topAppartements: data),
+      (f) => state = state.copyWith(isLoading: false, error: f.message),
+      (d) => state = state.copyWith(isLoading: false, donnees: d),
     );
   }
 }
 
 // ── Provider ──────────────────────────────────────────────
 
+/// Ménages de la semaine en cours (lundi → dimanche), pour le graphique du
+/// tableau de bord responsable.
+final statistiquesSemaineProvider =
+    FutureProvider.autoDispose<StatistiquesMenages>((ref) async {
+  final b = PeriodeRapide.semaineCourante.bornes();
+  final r = await ref
+      .watch(statistiquesRepositoryProvider)
+      .getStatistiques(dateDebut: b.debut, dateFin: b.fin);
+  return r.fold((f) => throw Exception(f.message), (d) => d);
+});
+
 final statistiquesNotifierProvider =
-    StateNotifierProvider<StatistiquesNotifier, StatistiquesState>((ref) {
-  return StatistiquesNotifier(ref.watch(statistiquesRepositoryProvider));
+    StateNotifierProvider.autoDispose<StatistiquesNotifier, StatistiquesState>(
+        (ref) {
+  return StatistiquesNotifier(ref.watch(statistiquesRepositoryProvider))
+    ..charger();
 });

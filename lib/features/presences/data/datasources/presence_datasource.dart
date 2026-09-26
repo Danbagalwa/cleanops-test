@@ -18,9 +18,11 @@ abstract class PresenceDatasource {
     required DateTime date,
   });
 
-  Future<List<PresenceModel>> getAbsencesDuJour(DateTime date);
+  /// Absences (journée, matin ou après-midi) du [debut] au [fin] inclus.
+  Future<List<PresenceModel>> getAbsences(DateTime debut, DateTime fin);
 
-  Future<List<PresenceModel>> getPresencesAvecHeures(DateTime date);
+  Future<List<PresenceModel>> getPresencesAvecHeures(
+      DateTime debut, DateTime fin);
 
   Future<void> envoyerAlerteResponsable({
     required String presenceId,
@@ -33,7 +35,8 @@ abstract class PresenceDatasource {
 
 class PresenceDatasourceImpl implements PresenceDatasource {
   // Deux FK vers employees (employee_id + valide_par) → préciser laquelle
-  static const _join = '*, employees!employee_id(id, nom, prenom, slug, role, is_actif)';
+  static const _join =
+      '*, employees!employee_id(id, nom, prenom, slug, role, is_actif)';
   static const _joinSimple = '*';
 
   static String _dateStr(DateTime d) =>
@@ -51,8 +54,7 @@ class PresenceDatasourceImpl implements PresenceDatasource {
       final dateStr = _dateStr(date);
 
       // Upsert sur la contrainte unique (employee_id, date)
-      final data = await SupabaseService
-          .table(SupabaseService.presences)
+      final data = await SupabaseService.table(SupabaseService.presences)
           .upsert(
             {
               'employee_id': employeeId,
@@ -83,8 +85,7 @@ class PresenceDatasourceImpl implements PresenceDatasource {
     required DateTime date,
   }) async {
     try {
-      final data = await SupabaseService
-          .table(SupabaseService.presences)
+      final data = await SupabaseService.table(SupabaseService.presences)
           .select(_joinSimple)
           .eq('employee_id', employeeId)
           .eq('date', _dateStr(date))
@@ -100,13 +101,14 @@ class PresenceDatasourceImpl implements PresenceDatasource {
   }
 
   @override
-  Future<List<PresenceModel>> getAbsencesDuJour(DateTime date) async {
+  Future<List<PresenceModel>> getAbsences(DateTime debut, DateTime fin) async {
     try {
-      final data = await SupabaseService
-          .table(SupabaseService.presences)
+      final data = await SupabaseService.table(SupabaseService.presences)
           .select(_join)
-          .eq('date', _dateStr(date))
+          .gte('date', _dateStr(debut))
+          .lte('date', _dateStr(fin))
           .neq('statut', StatutPresence.present.label)
+          .order('date', ascending: false)
           .order('confirme_le');
 
       return (data as List)
@@ -121,14 +123,16 @@ class PresenceDatasourceImpl implements PresenceDatasource {
   }
 
   @override
-  Future<List<PresenceModel>> getPresencesAvecHeures(DateTime date) async {
+  Future<List<PresenceModel>> getPresencesAvecHeures(
+      DateTime debut, DateTime fin) async {
     try {
-      final data = await SupabaseService
-          .table(SupabaseService.presences)
+      final data = await SupabaseService.table(SupabaseService.presences)
           .select(_join)
-          .eq('date', _dateStr(date))
+          .gte('date', _dateStr(debut))
+          .lte('date', _dateStr(fin))
           .eq('statut', StatutPresence.present.label)
           .not('heure_debut', 'is', null)
+          .order('date', ascending: false)
           .order('heure_debut');
 
       return (data as List)
@@ -152,10 +156,8 @@ class PresenceDatasourceImpl implements PresenceDatasource {
   }) async {
     try {
       // Marquer alerte envoyée
-      await SupabaseService
-          .table(SupabaseService.presences)
-          .update({'alerte_responsable_envoyee': true})
-          .eq('id', presenceId);
+      await SupabaseService.table(SupabaseService.presences)
+          .update({'alerte_responsable_envoyee': true}).eq('id', presenceId);
 
       // Insérer notifications pour chaque responsable
       if (responsableIds.isNotEmpty) {
@@ -168,9 +170,7 @@ class PresenceDatasourceImpl implements PresenceDatasource {
                   'entity_type': 'Presence',
                 })
             .toList();
-        await SupabaseService
-            .table(SupabaseService.notifications)
-            .insert(rows);
+        await SupabaseService.table(SupabaseService.notifications).insert(rows);
       }
     } catch (_) {
       // Silencieux — la notification n'est pas critique

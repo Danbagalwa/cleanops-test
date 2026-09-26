@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:cleanops/core/errors/failures.dart';
 import 'package:cleanops/core/router/app_router.dart';
+import 'package:cleanops/core/widgets/app_shell.dart';
 import 'package:cleanops/features/auth/domain/entities/employee.dart';
 import 'package:cleanops/features/auth/presentation/providers/auth_provider.dart';
 import 'package:cleanops/features/messages_reception_responsable/domain/messages_reception_responsable_repository.dart';
@@ -102,6 +103,14 @@ class _RepoNotifs implements NotificationsRepository {
   @override
   Future<Either<Failure, Unit>> markAllAsRead(String recipientId) async =>
       const Right(unit);
+
+  @override
+  Future<Either<Failure, Unit>> markAsUnread(String notificationId) async =>
+      const Right(unit);
+
+  @override
+  Future<Either<Failure, Unit>> delete(String notificationId) async =>
+      const Right(unit);
 }
 
 class _MessagesVides implements MessagesReceptionResponsableRepository {
@@ -161,9 +170,16 @@ Future<_RepoNotifs> _afficher(
   _routeur = GoRouter(
     initialLocation: initiale,
     routes: [
-      GoRoute(
-        path: receptionAccueilRoute,
-        builder: (_, __) => const ReceptionDashboardScreen(),
+      // La cloche est dans la barre du haut de l'enveloppe de l'app.
+      ShellRoute(
+        builder: (_, state, child) =>
+            AppShell(location: state.matchedLocation, child: child),
+        routes: [
+          GoRoute(
+            path: receptionAccueilRoute,
+            builder: (_, __) => const ReceptionDashboardScreen(),
+          ),
+        ],
       ),
       GoRoute(
         path: receptionNotificationsRoute,
@@ -171,7 +187,8 @@ Future<_RepoNotifs> _afficher(
       ),
       GoRoute(
         path: receptionMessagesRoute,
-        builder: (_, __) => const Scaffold(body: Text('PAGE MESSAGES TRANSMIS')),
+        builder: (_, __) =>
+            const Scaffold(body: Text('PAGE MESSAGES TRANSMIS')),
       ),
       GoRoute(
         path: AppRoutes.notifications,
@@ -313,7 +330,7 @@ void main() {
         (tester) async {
       await _afficher(tester, initiale: receptionNotificationsRoute);
 
-      expect(find.text('Notifications'), findsWidgets);
+      expect(find.text('NOTIFICATIONS'), findsOneWidget);
       expect(find.text(_reponse), findsOneWidget);
       expect(find.text(_resolue), findsOneWidget);
       expect(find.text('Ancienne réponse'), findsOneWidget);
@@ -385,8 +402,8 @@ void main() {
 
       expect(_adresse, AppRoutes.demandesResidentsMessages);
       expect(_adresse, contains('onglet=messages'));
-      expect(find.text('Apt 101 · Annulation'), findsOneWidget);
-      expect(find.text('Tous types'), findsNothing,
+      expect(find.text('Annuler jeudi'), findsOneWidget);
+      expect(find.text('Aucune demande de résident'), findsNothing,
           reason: 'l\'onglet des messages est ouvert, pas celui des demandes');
     });
 
@@ -405,7 +422,8 @@ void main() {
       expect(find.text('PAGE MEMO'), findsNothing);
     });
 
-    testWidgets('les autres notifications du responsable vont où elles allaient',
+    testWidgets(
+        'les autres notifications du responsable vont où elles allaient',
         (tester) async {
       await _afficher(
         tester,

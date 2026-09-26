@@ -1,27 +1,39 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/dialogue_app.dart';
 import '../../../../core/widgets/error_widget.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
 import '../../../../core/widgets/export_menu_button.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/widgets/mise_en_page.dart';
+import '../../../../core/widgets/notification_app.dart';
 import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../pdf/domain/usecases/generate_employes_export.dart';
 import '../../../pdf/presentation/screens/employes_pdf_preview_screen.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/usecases/add_employe.dart';
 import '../../domain/usecases/update_employe.dart';
 import '../providers/employes_provider.dart';
 import '../widgets/employe_form_widget.dart';
 import '../widgets/employe_list_item.dart';
 
-const _kPageSize = 10;
 const _kRolesFiltres = [
   RoleType.employe,
   RoleType.superviseurMenage,
   RoleType.reception,
   RoleType.direction,
 ];
+
+enum _Statut { tous, actifs, inactifs }
+
+enum _Tri { nom, role, statut }
 
 class EmployesScreen extends ConsumerStatefulWidget {
   const EmployesScreen({super.key});
@@ -32,23 +44,21 @@ class EmployesScreen extends ConsumerStatefulWidget {
 
 class _EmployesScreenState extends ConsumerState<EmployesScreen> {
   final _searchCtrl = TextEditingController();
-  String _searchQuery = '';
-  RoleType? _filterRole;
-  bool? _filterActif; // null = tous, true = actifs, false = inactifs
+  String _recherche = '';
+  RoleType? _role;
+  _Statut _statut = _Statut.tous;
+  _Tri _tri = _Tri.nom;
+  bool _croissant = true;
   int _page = 0;
+  int _parPage = 10;
+
+  /// `null` : choisi selon la largeur (grille sur téléphone, tableau sinon).
+  ModeAffichage? _mode;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(employesNotifierProvider.notifier).charger(),
-    );
-    _searchCtrl.addListener(() {
-      setState(() {
-        _searchQuery = _searchCtrl.text.toLowerCase().trim();
-        _page = 0;
-      });
-    });
+    Future.microtask(_charger);
   }
 
   @override
@@ -57,30 +67,69 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
     super.dispose();
   }
 
-  List<Employee> _filtered(List<Employee> all) {
-    return all.where((e) {
-      final matchSearch = _searchQuery.isEmpty ||
-          e.nomComplet.toLowerCase().contains(_searchQuery) ||
-          (e.numeroPointeuse?.contains(_searchQuery) ?? false);
-      final matchRole = _filterRole == null || e.role == _filterRole;
-      final matchActif = _filterActif == null || e.isActif == _filterActif;
-      return matchSearch && matchRole && matchActif;
-    }).toList();
+  Future<void> _charger() =>
+      ref.read(employesNotifierProvider.notifier).charger();
+
+  void _changer(VoidCallback maj) => setState(() {
+        maj();
+        _page = 0;
+      });
+
+  void _trier(_Tri tri) => _changer(() {
+        _croissant = _tri == tri ? !_croissant : true;
+        _tri = tri;
+      });
+
+  void _effacerFiltres() {
+    _searchCtrl.clear();
+    _changer(() {
+      _recherche = '';
+      _role = null;
+      _statut = _Statut.tous;
+    });
   }
 
-  String _filterDescription() {
-    final filters = <String>[];
-    if (_searchQuery.isNotEmpty) {
-      filters.add('Recherche : "${_searchCtrl.text.trim()}"');
-    }
-    if (_filterRole != null) {
-      filters.add('Rôle : ${roleDisplay(_filterRole!)}');
-    }
-    if (_filterActif != null) {
-      filters.add(_filterActif! ? 'Statut : actifs' : 'Statut : inactifs');
-    }
-    return filters.isEmpty ? 'Tous les employés' : filters.join(' · ');
+  bool _duStatut(Employee e) => switch (_statut) {
+        _Statut.tous => true,
+        _Statut.actifs => e.isActif,
+        _Statut.inactifs => !e.isActif,
+      };
+
+  List<Employee> _lignes(List<Employee> tous) {
+    final q = _recherche.trim().toLowerCase();
+    int parNom(Employee a, Employee b) =>
+        a.nomComplet.toLowerCase().compareTo(b.nomComplet.toLowerCase());
+    int sens(int c) => _croissant ? c : -c;
+    return tous.where((e) {
+      if (_role != null && e.role != _role) return false;
+      if (!_duStatut(e)) return false;
+      return q.isEmpty ||
+          e.nomComplet.toLowerCase().contains(q) ||
+          (e.numeroPointeuse?.contains(q) ?? false);
+    }).toList()
+      ..sort((a, b) {
+        final c = switch (_tri) {
+          _Tri.nom => 0,
+          _Tri.role => roleDisplay(a.role).compareTo(roleDisplay(b.role)),
+          _Tri.statut => (a.isActif ? 0 : 1).compareTo(b.isActif ? 0 : 1),
+        };
+        return c != 0
+            ? sens(c)
+            : (_tri == _Tri.nom ? sens(parNom(a, b)) : parNom(a, b));
+      });
   }
+
+  String _descriptionFiltres() {
+    final filtres = <String>[
+      if (_recherche.trim().isNotEmpty) 'Recherche : "${_recherche.trim()}"',
+      if (_role != null) 'Rôle : ${roleDisplay(_role!)}',
+      if (_statut == _Statut.actifs) 'Statut : actifs',
+      if (_statut == _Statut.inactifs) 'Statut : inactifs',
+    ];
+    return filtres.isEmpty ? 'Tous les employés' : filtres.join(' · ');
+  }
+
+  // ── Actions ────────────────────────────────────────────
 
   void _ouvrirFormulaire({Employee? employe}) {
     showDialog(
@@ -90,156 +139,418 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
     );
   }
 
-  void _confirmerToggle(Employee emp) {
+  Future<void> _confirmerToggle(Employee emp) async {
     final desactiver = emp.isActif;
-    showDialog(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-        ),
-        title: Text(
-            desactiver ? 'Désactiver l\'employé ?' : 'Activer l\'employé ?'),
-        content: Text(
+      builder: (ctx) => DialogueApp(
+        titre: desactiver ? 'Désactiver l’employé' : 'Activer l’employé',
+        largeur: 440,
+        libelleAction: desactiver ? 'Désactiver' : 'Activer',
+        libelleSecondaire: 'Annuler',
+        onFermer: () => Navigator.of(ctx).pop(false),
+        onAction: () => Navigator.of(ctx).pop(true),
+        contenu: Text(
           desactiver
               ? '${emp.nomComplet} ne sera plus affiché dans le planning.'
               : '${emp.nomComplet} sera à nouveau disponible dans le planning.',
-          style: const TextStyle(color: AppColors.grisDark),
+          style: const TextStyle(
+              fontSize: 14, height: 1.4, color: AppColors.grisDark),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await ref
-                  .read(employesNotifierProvider.notifier)
-                  .toggleActif(emp.id, isActif: !emp.isActif);
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor:
-                  desactiver ? AppColors.refus : AppColors.jourVert,
-            ),
-            child: Text(desactiver ? 'Désactiver' : 'Activer'),
-          ),
-        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final succes = await ref
+        .read(employesNotifierProvider.notifier)
+        .toggleActif(emp.id, isActif: !emp.isActif);
+    if (!mounted) return;
+    if (succes) {
+      NotificationApp.succes(
+        context,
+        desactiver
+            ? '${emp.nomComplet} a été désactivé(e).'
+            : '${emp.nomComplet} a été réactivé(e).',
+      );
+    } else {
+      AppFeedback.showError(
+          context, ref.read(employesNotifierProvider).error ?? 'Échec.');
+    }
+  }
+
+  VoidCallback? _planning(Employee e) => e.role == RoleType.employe
+      ? () => context.go('${AppRoutes.planning}?employeeId=${e.id}')
+      : null;
+
+  void _exporterPdf(List<Employee> lignes) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EmployesPdfPreviewScreen(
+          employees: lignes,
+          filterDescription: _descriptionFiltres(),
+          generatedBy:
+              ref.read(employeeCourantProvider)?.nomComplet ?? 'CleanOps',
+        ),
       ),
     );
   }
 
+  void _exporterExcel(List<Employee> lignes) {
+    try {
+      const GenerateEmployesExcel()(
+        employees: lignes,
+        filterDescription: _descriptionFiltres(),
+      );
+      showExportSuccess(
+          context, 'La liste Excel des employés a été téléchargée.');
+    } catch (error) {
+      AppFeedback.showError(context, error);
+    }
+  }
+
+  // ── Construction ───────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(employesNotifierProvider);
-    final currentEmployee = ref.watch(employeeCourantProvider);
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    final filtered = _filtered(state.employes);
-    final filterDescription = _filterDescription();
-    final totalPages = (filtered.length / _kPageSize).ceil().clamp(1, 9999);
-    final safePage = _page.clamp(0, totalPages - 1);
-    final paginated =
-        filtered.skip(safePage * _kPageSize).take(_kPageSize).toList();
+    final compact = estCompact(context);
+    final mode =
+        compact ? ModeAffichage.grille : (_mode ?? ModeAffichage.tableau);
+    final marge = compact ? 12.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
+    final tous = state.employes;
+    final actifs = tous.where((e) => e.isActif).length;
+    final lignes = _lignes(tous);
+    final nbPages = lignes.isEmpty ? 1 : ((lignes.length - 1) ~/ _parPage) + 1;
+    final page = _page.clamp(0, nbPages - 1);
+    final visibles = lignes.skip(page * _parPage).take(_parPage).toList();
+
+    FiltreSection filtre(_Statut s, IconData icone, String info) =>
+        FiltreSection(
+          icone: icone,
+          infoBulle: info,
+          actif: _statut == s,
+          onTap: () => _changer(() => _statut = s),
+        );
+
+    final recherche = ChampRecherche(
+      controller: _searchCtrl,
+      indice: 'Rechercher par nom ou n° de pointeuse',
+      onChanged: (v) => _changer(() => _recherche = v),
+    );
+    final ajouter = FilledButton.icon(
+      onPressed: () => _ouvrirFormulaire(),
+      style: FilledButton.styleFrom(
         backgroundColor: AppColors.rouge,
-        elevation: 0,
-        title: Text(
-          'Employés${state.total > 0 ? '  (${state.total})' : ''}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        actions: [
-          AppExportMenuButton(
-            enabled: filtered.isNotEmpty && !state.isLoading,
-            onPdf: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => EmployesPdfPreviewScreen(
-                  employees: filtered,
-                  filterDescription: filterDescription,
-                  generatedBy: currentEmployee?.nomComplet ?? 'CleanOps',
-                ),
-              ),
-            ),
-            onExcel: () {
-              try {
-                const GenerateEmployesExcel()(
-                  employees: filtered,
-                  filterDescription: filterDescription,
-                );
-                showExportSuccess(
-                  context,
-                  'La liste Excel des employés a été téléchargée.',
-                );
-              } catch (error) {
-                AppFeedback.showError(context, error);
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-          if (isDesktop)
-            Padding(
-              padding: const EdgeInsets.only(right: AppSizes.md),
-              child: FilledButton.icon(
-                onPressed: () => _ouvrirFormulaire(),
-                icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Ajouter'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.rouge,
-                ),
-              ),
-            ),
-        ],
+        shape: const StadiumBorder(),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
       ),
-      floatingActionButton: isDesktop
-          ? null
-          : FloatingActionButton(
-              onPressed: () => _ouvrirFormulaire(),
-              backgroundColor: AppColors.rouge,
-              child: const Icon(Icons.person_add_rounded, color: Colors.white),
+      icon: const Icon(Icons.person_add_rounded, size: 18),
+      label: Text(compact ? 'Ajouter' : 'Ajouter un employé'),
+    );
+
+    Widget corps;
+    if (state.isLoading && tous.isEmpty) {
+      corps = const Padding(
+        padding: EdgeInsets.only(top: 60),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
+    } else if (state.error != null && tous.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: AppErrorNotice(error: state.error!, onRetry: _charger),
+      );
+    } else if (tous.isEmpty) {
+      corps = _EtatVide(onAdd: () => _ouvrirFormulaire());
+    } else if (lignes.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: Column(
+          children: [
+            const Text(
+              'Aucun employé ne correspond à votre recherche ou filtre.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.grisDark),
             ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? 1100 : double.infinity,
+            const SizedBox(height: AppSizes.md),
+            OutlinedButton.icon(
+              onPressed: _effacerFiltres,
+              icon: const Icon(Icons.clear_rounded),
+              label: const Text('Effacer les filtres'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      corps = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mode == ModeAffichage.tableau)
+            _TableauEmployes(
+              lignes: visibles,
+              premierNumero: page * _parPage + 1,
+              tri: _tri,
+              croissant: _croissant,
+              onTrier: _trier,
+              onModifier: (e) => _ouvrirFormulaire(employe: e),
+              onToggle: _confirmerToggle,
+              onPlanning: _planning,
+            )
+          else
+            _GrilleEmployes(
+              lignes: visibles,
+              onModifier: (e) => _ouvrirFormulaire(employe: e),
+              onToggle: _confirmerToggle,
+              onPlanning: _planning,
+            ),
+          const SizedBox(height: AppSizes.md),
+          BarrePagination(
+            page: page,
+            parPage: _parPage,
+            total: lignes.length,
+            onPage: (p) => setState(() => _page = p),
+            onParPage: (n) => _changer(() => _parPage = n),
           ),
-          child: Column(
-            children: [
-              _SearchFilterBar(
-                controller: _searchCtrl,
-                hasText: _searchQuery.isNotEmpty,
-                filterRole: _filterRole,
-                filterActif: _filterActif,
-                onRoleChanged: (r) => setState(() {
-                  _filterRole = r;
-                  _page = 0;
-                }),
-                onActifChanged: (a) => setState(() {
-                  _filterActif = a;
-                  _page = 0;
-                }),
-              ),
-              if (state.isLoading && state.employes.isNotEmpty)
-                const LinearProgressIndicator(
-                  color: AppColors.rouge,
-                  backgroundColor: Colors.transparent,
-                  minHeight: 2,
+        ],
+      );
+    }
+
+    return PageAvecEnTete(
+      chargement: state.isLoading,
+      enTete: EnTetePage(
+        icone: Icons.badge_rounded,
+        titre: 'Employés',
+        sousTitre: tous.isEmpty
+            ? 'Équipe de la résidence'
+            : 'Équipe de la résidence — ${tous.length} employés, '
+                '$actifs actif${actifs > 1 ? 's' : ''}',
+      ),
+      contenu: RefreshIndicator(
+        color: AppColors.rouge,
+        onRefresh: _charger,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+              .plusBarre(context),
+          children: [
+            BarreSection(
+              titre: 'Employés (${lignes.length})',
+              onRetour: () => context.backOrHome(AppRoutes.employerDashboard),
+              filtres: [
+                filtre(_Statut.tous, Icons.groups_rounded, 'Tous les employés'),
+                filtre(_Statut.actifs, Icons.person_rounded, 'Actifs'),
+                filtre(_Statut.inactifs, Icons.person_off_outlined, 'Inactifs'),
+              ],
+              actions: [
+                ActionSection(
+                  icone: Icons.print_rounded,
+                  infoBulle: 'Imprimer ou exporter en PDF',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterPdf(lignes),
                 ),
+                ActionSection(
+                  icone: Icons.download_rounded,
+                  infoBulle: 'Télécharger en Excel',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterExcel(lignes),
+                ),
+                ActionSection(
+                  icone: Icons.refresh_rounded,
+                  infoBulle: 'Actualiser',
+                  onPressed: state.isLoading ? null : _charger,
+                ),
+              ],
+            ),
+            if (tous.isNotEmpty) ...[
+              const SizedBox(height: AppSizes.md),
+              _FiltreRoles(
+                employes: tous.where(_duStatut).toList(),
+                selection: _role,
+                onChanged: (r) => _changer(() => _role = r),
+              ),
+            ],
+            const SizedBox(height: AppSizes.md),
+            if (compact)
+              Row(
+                children: [
+                  Expanded(child: recherche),
+                  const SizedBox(width: AppSizes.sm),
+                  ajouter,
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: recherche,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  BasculeAffichage(
+                    mode: mode,
+                    onChanged: (m) => setState(() => _mode = m),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  ajouter,
+                ],
+              ),
+            const SizedBox(height: AppSizes.md),
+            corps,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Filtre par rôle (avec effectifs) ───────────────────────
+
+class _FiltreRoles extends StatelessWidget {
+  final List<Employee> employes;
+  final RoleType? selection;
+  final ValueChanged<RoleType?> onChanged;
+
+  const _FiltreRoles({
+    required this.employes,
+    required this.selection,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tuiles = [
+      _TuileRole(
+        icone: Icons.groups_rounded,
+        couleur: AppColors.rouge,
+        libelle: 'Tous les rôles',
+        nombre: employes.length,
+        actif: selection == null,
+        onTap: () => onChanged(null),
+      ),
+      for (final r in _kRolesFiltres)
+        _TuileRole(
+          icone: _iconeRole(r),
+          couleur: roleColor(r),
+          libelle: roleDisplay(r),
+          nombre: employes.where((e) => e.role == r).length,
+          actif: selection == r,
+          onTap: () => onChanged(selection == r ? null : r),
+        ),
+    ];
+
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      const minimum = 150.0;
+      final tiennent =
+          c.maxWidth >= tuiles.length * minimum + ecart * (tuiles.length - 1);
+      if (tiennent) {
+        return Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              Expanded(child: t),
+            ],
+          ],
+        );
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              SizedBox(width: minimum, child: t),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+}
+
+IconData _iconeRole(RoleType r) => switch (r) {
+      RoleType.employe => Icons.cleaning_services_rounded,
+      RoleType.superviseurMenage => Icons.supervisor_account_rounded,
+      RoleType.reception => Icons.support_agent_rounded,
+      RoleType.direction => Icons.business_center_rounded,
+      _ => Icons.person_rounded,
+    };
+
+class _TuileRole extends StatelessWidget {
+  final IconData icone;
+  final Color couleur;
+  final String libelle;
+  final int nombre;
+  final bool actif;
+  final VoidCallback onTap;
+
+  const _TuileRole({
+    required this.icone,
+    required this.couleur,
+    required this.libelle,
+    required this.nombre,
+    required this.actif,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: actif ? AppColors.rouge.withValues(alpha: 0.06) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: actif ? AppColors.rouge : AppColors.grisMedium,
+          width: actif ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: couleur.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icone, size: 17, color: couleur),
+              ),
+              const SizedBox(width: 10),
               Expanded(
-                child: _buildBody(
-                  state: state,
-                  filtered: filtered,
-                  paginated: paginated,
-                  totalPages: totalPages,
-                  currentPage: safePage,
-                  isDesktop: isDesktop,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$nombre',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.noir,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      libelle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: actif ? FontWeight.w700 : FontWeight.w500,
+                        color: actif ? AppColors.rouge : AppColors.grisDark,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -248,454 +559,276 @@ class _EmployesScreenState extends ConsumerState<EmployesScreen> {
       ),
     );
   }
+}
 
-  Widget _buildBody({
-    required EmployesState state,
-    required List<Employee> filtered,
-    required List<Employee> paginated,
-    required int totalPages,
-    required int currentPage,
-    required bool isDesktop,
-  }) {
-    if (state.isLoading && state.employes.isEmpty) {
-      return const AppSkeletonList();
-    }
+// ── Tableau ────────────────────────────────────────────────
 
-    if (state.error != null && state.employes.isEmpty) {
-      return _ErrorState(
-        message: state.error!,
-        onRetry: () => ref.read(employesNotifierProvider.notifier).charger(),
-      );
-    }
+const _styleEnTete = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+  color: AppColors.grisDark,
+);
 
-    if (state.employes.isEmpty) {
-      return _EmptyState(onAdd: () => _ouvrirFormulaire());
-    }
+class _TableauEmployes extends StatelessWidget {
+  final List<Employee> lignes;
+  final int premierNumero;
+  final _Tri tri;
+  final bool croissant;
+  final ValueChanged<_Tri> onTrier;
+  final ValueChanged<Employee> onModifier;
+  final ValueChanged<Employee> onToggle;
+  final VoidCallback? Function(Employee) onPlanning;
 
-    if (filtered.isEmpty) {
-      return _EmptySearch(
-        onClear: () {
-          _searchCtrl.clear();
-          setState(() {
-            _filterRole = null;
-            _filterActif = null;
-            _page = 0;
-          });
-        },
-      );
-    }
+  const _TableauEmployes({
+    required this.lignes,
+    required this.premierNumero,
+    required this.tri,
+    required this.croissant,
+    required this.onTrier,
+    required this.onModifier,
+    required this.onToggle,
+    required this.onPlanning,
+  });
 
-    final paginationBar = totalPages > 1
-        ? _PaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            totalItems: filtered.length,
-            pageSize: _kPageSize,
-            onPageChanged: (p) => setState(() => _page = p),
-          )
-        : null;
+  @override
+  Widget build(BuildContext context) {
+    Widget entete(String libelle, _Tri t) => _EnTeteTri(
+          libelle: libelle,
+          actif: tri == t,
+          croissant: croissant,
+          onTap: () => onTrier(t),
+        );
 
-    if (isDesktop) {
-      return Column(
+    return CarteContenu(
+      child: Column(
         children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.md,
-                vertical: AppSizes.sm,
+          Container(
+            color: const Color(0xFFF7F8FA),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const SizedBox(
+                    width: 40, child: Text('N°', style: _styleEnTete)),
+                Expanded(flex: 4, child: entete('Employé', _Tri.nom)),
+                Expanded(flex: 3, child: entete('Rôle', _Tri.role)),
+                const Expanded(
+                    flex: 2, child: Text('Pointeuse', style: _styleEnTete)),
+                Expanded(flex: 2, child: entete('Statut', _Tri.statut)),
+                const SizedBox(width: 48),
+              ],
+            ),
+          ),
+          for (final (i, e) in lignes.indexed) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
+            _LigneEmploye(
+              employe: e,
+              numero: premierNumero + i,
+              onModifier: () => onModifier(e),
+              onToggle: () => onToggle(e),
+              onPlanning: onPlanning(e),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EnTeteTri extends StatelessWidget {
+  final String libelle;
+  final bool actif;
+  final bool croissant;
+  final VoidCallback onTap;
+
+  const _EnTeteTri({
+    required this.libelle,
+    required this.actif,
+    required this.croissant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.rouge : AppColors.grisDark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(libelle, style: _styleEnTete.copyWith(color: couleur)),
+              const SizedBox(width: 4),
+              Icon(
+                !actif
+                    ? Icons.swap_vert_rounded
+                    : croissant
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                size: 14,
+                color: couleur,
               ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: AppColors.grisMedium),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LigneEmploye extends StatelessWidget {
+  final Employee employe;
+  final int numero;
+  final VoidCallback onModifier;
+  final VoidCallback onToggle;
+  final VoidCallback? onPlanning;
+
+  const _LigneEmploye({
+    required this.employe,
+    required this.numero,
+    required this.onModifier,
+    required this.onToggle,
+    required this.onPlanning,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final e = employe;
+    final couleur = roleColor(e.role);
+    const style = TextStyle(fontSize: 13, color: AppColors.noir);
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onModifier,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              SizedBox(width: 40, child: Text('$numero', style: style)),
+              Expanded(
+                flex: 4,
+                child: Row(
                   children: [
-                    const _ColumnHeader(),
-                    const Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: AppColors.grisMedium,
+                    Opacity(
+                      opacity: e.isActif ? 1 : 0.5,
+                      child: AvatarProfil(
+                        proprietaire: ProprietairePhoto.de(e),
+                        initiales: initialesEmploye(e),
+                        rayon: 16,
+                        couleurFond: couleur.withValues(alpha: 0.15),
+                        couleurTexte: couleur,
+                        tailleTexte: 12,
+                        poidsTexte: FontWeight.bold,
+                      ),
                     ),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: RefreshIndicator(
-                        color: AppColors.rouge,
-                        onRefresh: () => ref
-                            .read(employesNotifierProvider.notifier)
-                            .charger(),
-                        child: ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: paginated.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: AppColors.grisMedium,
-                          ),
-                          itemBuilder: (context, i) {
-                            final emp = paginated[i];
-                            return EmployeListItem(
-                              employe: emp,
-                              onEdit: () => _ouvrirFormulaire(employe: emp),
-                              onToggleActif: () => _confirmerToggle(emp),
-                            );
-                          },
+                      child: Text(
+                        e.nomComplet,
+                        overflow: TextOverflow.ellipsis,
+                        style: style.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color:
+                              e.isActif ? AppColors.noir : AppColors.grisDark,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
-          if (paginationBar != null) paginationBar,
-        ],
-      );
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: RefreshIndicator(
-            color: AppColors.rouge,
-            onRefresh: () =>
-                ref.read(employesNotifierProvider.notifier).charger(),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(
-                top: AppSizes.sm,
-                bottom: AppSizes.md,
-              ),
-              itemCount: paginated.length,
-              itemBuilder: (context, i) {
-                final emp = paginated[i];
-                return EmployeListItem(
-                  employe: emp,
-                  onEdit: () => _ouvrirFormulaire(employe: emp),
-                  onToggleActif: () => _confirmerToggle(emp),
-                );
-              },
-            ),
-          ),
-        ),
-        if (paginationBar != null) paginationBar,
-      ],
-    );
-  }
-}
-
-// ── En-tête de colonnes (desktop) ─────────────────────────
-class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const labelStyle = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: AppColors.grisText,
-      letterSpacing: 0.2,
-    );
-
-    return Container(
-      color: AppColors.grisLight,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 8,
-      ),
-      child: const Row(
-        children: [
-          SizedBox(width: 32 + AppSizes.sm), // aligné sur l'avatar
-          Expanded(flex: 3, child: Text('NOM', style: labelStyle)),
-          Expanded(flex: 2, child: Text('RÔLE', style: labelStyle)),
-          Expanded(child: Text('POINTEUSE', style: labelStyle)),
-          SizedBox(width: 96, child: Text('ACTIONS', style: labelStyle)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Barre recherche + filtres ─────────────────────────────
-class _SearchFilterBar extends StatelessWidget {
-  final TextEditingController controller;
-  final bool hasText;
-  final RoleType? filterRole;
-  final bool? filterActif;
-  final ValueChanged<RoleType?> onRoleChanged;
-  final ValueChanged<bool?> onActifChanged;
-
-  const _SearchFilterBar({
-    required this.controller,
-    required this.hasText,
-    required this.filterRole,
-    required this.filterActif,
-    required this.onRoleChanged,
-    required this.onActifChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(
-        AppSizes.md,
-        AppSizes.sm,
-        AppSizes.md,
-        AppSizes.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: controller,
-            decoration: InputDecoration(
-              hintText: 'Rechercher par nom...',
-              hintStyle: const TextStyle(fontSize: 14),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                size: 20,
-                color: AppColors.grisText,
-              ),
-              suffixIcon: hasText
-                  ? IconButton(
-                      icon: const Icon(Icons.clear_rounded, size: 18),
-                      onPressed: controller.clear,
-                      color: AppColors.grisText,
-                    )
-                  : null,
-              filled: true,
-              fillColor: AppColors.grisLight,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-                borderSide:
-                    const BorderSide(color: AppColors.rouge, width: 1.5),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              isDense: true,
-            ),
-          ),
-          const SizedBox(height: AppSizes.sm),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                // Filtre statut
-                _Chip(
-                  label: 'Tous',
-                  selected: filterActif == null,
-                  onTap: () => onActifChanged(null),
+              Expanded(
+                flex: 3,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BadgeRole(role: e.role),
                 ),
-                _Chip(
-                  label: 'Actifs',
-                  selected: filterActif == true,
-                  color: AppColors.jourVert,
-                  onTap: () =>
-                      onActifChanged(filterActif == true ? null : true),
-                ),
-                _Chip(
-                  label: 'Inactifs',
-                  selected: filterActif == false,
-                  color: AppColors.grisDark,
-                  onTap: () =>
-                      onActifChanged(filterActif == false ? null : false),
-                ),
-
-                const SizedBox(width: 8),
-                Container(
-                  width: 1,
-                  height: 20,
-                  color: AppColors.grisMedium,
-                ),
-                const SizedBox(width: 8),
-
-                // Filtre rôle
-                ..._kRolesFiltres.map((r) => _Chip(
-                      label: roleDisplay(r),
-                      selected: filterRole == r,
-                      color: roleColor(r),
-                      onTap: () => onRoleChanged(filterRole == r ? null : r),
-                    )),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _Chip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? AppColors.rouge;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected ? c.withValues(alpha: 0.1) : AppColors.grisLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? c : AppColors.grisMedium,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? c : AppColors.grisDark,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Pagination ────────────────────────────────────────────
-class _PaginationBar extends StatelessWidget {
-  final int currentPage;
-  final int totalPages;
-  final int totalItems;
-  final int pageSize;
-  final ValueChanged<int> onPageChanged;
-
-  const _PaginationBar({
-    required this.currentPage,
-    required this.totalPages,
-    required this.totalItems,
-    required this.pageSize,
-    required this.onPageChanged,
-  });
-
-  List<Widget> _buildPageNumbers() {
-    final buttons = <Widget>[];
-    final start =
-        (currentPage - 2).clamp(0, (totalPages - 5).clamp(0, totalPages));
-    final end = (start + 5).clamp(0, totalPages);
-    for (int i = start; i < end; i++) {
-      final active = i == currentPage;
-      buttons.add(
-        GestureDetector(
-          onTap: active ? null : () => onPageChanged(i),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: 30,
-            height: 30,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: active ? AppColors.rouge : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '${i + 1}',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                color: active ? Colors.white : AppColors.grisDark,
               ),
-            ),
-          ),
-        ),
-      );
-    }
-    return buttons;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final start = currentPage * pageSize + 1;
-    final end = ((currentPage + 1) * pageSize).clamp(0, totalItems);
-    final isCompact = MediaQuery.sizeOf(context).width < 600;
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: AppColors.grisMedium),
-        ),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isCompact ? AppSizes.sm : AppSizes.md,
-        vertical: AppSizes.sm,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            '$start–$end sur $totalItems',
-            style: const TextStyle(fontSize: 12, color: AppColors.grisText),
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: currentPage > 0
-                    ? () => onPageChanged(currentPage - 1)
-                    : null,
-                iconSize: 20,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
+              Expanded(
+                flex: 2,
+                child: e.numeroPointeuse == null
+                    ? const Text('—',
+                        style:
+                            TextStyle(fontSize: 13, color: AppColors.grisText))
+                    : Row(
+                        children: [
+                          const Icon(Icons.fingerprint_rounded,
+                              size: 14, color: AppColors.grisText),
+                          const SizedBox(width: 4),
+                          Text(e.numeroPointeuse!,
+                              style: style.copyWith(color: AppColors.grisDark)),
+                        ],
+                      ),
               ),
-              if (isCompact)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: Text(
-                    'Page ${currentPage + 1}/$totalPages',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.grisDark,
-                    ),
-                  ),
-                )
-              else
-                ..._buildPageNumbers(),
-              IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: currentPage < totalPages - 1
-                    ? () => onPageChanged(currentPage + 1)
-                    : null,
-                iconSize: 20,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BadgeStatutEmploye(actif: e.isActif),
+                ),
+              ),
+              SizedBox(
+                width: 48,
+                child: MenuEmploye(
+                  employe: e,
+                  onEdit: onModifier,
+                  onToggleActif: onToggle,
+                  onPlanning: onPlanning,
+                ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
+  }
+}
+
+// ── Grille ─────────────────────────────────────────────────
+
+class _GrilleEmployes extends StatelessWidget {
+  final List<Employee> lignes;
+  final ValueChanged<Employee> onModifier;
+  final ValueChanged<Employee> onToggle;
+  final VoidCallback? Function(Employee) onPlanning;
+
+  const _GrilleEmployes({
+    required this.lignes,
+    required this.onModifier,
+    required this.onToggle,
+    required this.onPlanning,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      final colonnes = math.max(1, (c.maxWidth + ecart) ~/ (320 + ecart));
+      final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+      return Wrap(
+        spacing: ecart,
+        runSpacing: ecart,
+        children: [
+          for (final e in lignes)
+            SizedBox(
+              width: largeur,
+              child: EmployeListItem(
+                employe: e,
+                onEdit: () => onModifier(e),
+                onToggleActif: () => onToggle(e),
+                onPlanning: onPlanning(e),
+              ),
+            ),
+        ],
+      );
+    });
   }
 }
 
 // ── Dialog formulaire ─────────────────────────────────────
+
 class _FormDialog extends ConsumerWidget {
   final Employee? employe;
   const _FormDialog({this.employe});
@@ -741,49 +874,52 @@ class _FormDialog extends ConsumerWidget {
           ));
         }
 
-        if (ok && context.mounted) Navigator.of(context).pop();
-        if (!ok && context.mounted) {
+        if (!context.mounted) return;
+        if (ok) {
+          Navigator.of(context).pop();
+          NotificationApp.succes(
+            context,
+            employe == null
+                ? '$prenom $nom a été ajouté(e) à l’équipe.'
+                : 'Les informations de $prenom $nom ont été enregistrées.',
+          );
+        } else {
           final error = ref.read(employesNotifierProvider).error;
-          if (error != null) {
-            AppFeedback.showError(context, error);
-          }
+          if (error != null) AppFeedback.showError(context, error);
         }
       },
     );
   }
 }
 
-// ── États visuels ─────────────────────────────────────────
-class _EmptyState extends StatelessWidget {
+// ── État vide ──────────────────────────────────────────────
+
+class _EtatVide extends StatelessWidget {
   final VoidCallback onAdd;
-  const _EmptyState({required this.onAdd});
+  const _EtatVide({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return CarteContenu(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(AppSizes.xl),
+            padding: const EdgeInsets.all(AppSizes.lg),
             decoration: BoxDecoration(
               color: AppColors.rouge.withValues(alpha: 0.06),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.group_rounded,
-              size: 56,
-              color: AppColors.rouge,
-            ),
+            child: const Icon(Icons.group_rounded,
+                size: 48, color: AppColors.rouge),
           ),
-          const SizedBox(height: AppSizes.lg),
+          const SizedBox(height: AppSizes.md),
           const Text(
             'Aucun employé',
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.noir),
           ),
           const SizedBox(height: AppSizes.sm),
           const Text(
@@ -791,75 +927,17 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.grisDark, height: 1.5),
           ),
-          const SizedBox(height: AppSizes.xl),
+          const SizedBox(height: AppSizes.lg),
           FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.person_add_rounded),
             label: const Text('Ajouter un employé'),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.rouge,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.lg,
-                vertical: AppSizes.md,
-              ),
+              shape: const StadiumBorder(),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptySearch extends StatelessWidget {
-  final VoidCallback onClear;
-  const _EmptySearch({required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.search_off_rounded,
-              size: 48, color: AppColors.grisDark),
-          const SizedBox(height: AppSizes.md),
-          const Text(
-            'Aucun résultat',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
-          ),
-          const SizedBox(height: AppSizes.sm),
-          const Text(
-            'Aucun employé ne correspond\nà votre recherche ou filtre.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.grisDark, height: 1.5),
-          ),
-          const SizedBox(height: AppSizes.lg),
-          OutlinedButton.icon(
-            onPressed: onClear,
-            icon: const Icon(Icons.clear_rounded),
-            label: const Text('Effacer les filtres'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSizes.xl),
-        child: AppErrorNotice(error: message, onRetry: onRetry),
       ),
     );
   }

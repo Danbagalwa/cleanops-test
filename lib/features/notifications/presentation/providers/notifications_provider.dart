@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:dartz/dartz.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/failures.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/notifications_datasource.dart';
 import '../../data/repositories/notifications_repository_impl.dart';
@@ -113,6 +115,44 @@ class NotificationsNotifier extends StateNotifier<NotificationsState> {
       (_) => true,
     );
   }
+
+  Future<bool> markAsUnread(String id) async {
+    final index = state.notifications.indexWhere((item) => item.id == id);
+    if (index < 0 || !state.notifications[index].isRead) return true;
+    final previous = state.notifications;
+    state = state.copyWith(
+      notifications: [
+        for (final item in previous)
+          item.id == id ? item.marqueeNonLue() : item,
+      ],
+      clearError: true,
+    );
+    return _appliquer(await repository.markAsUnread(id), previous);
+  }
+
+  /// Supprime la notification : elle disparaît aussitôt de la liste et y
+  /// revient si l'enregistrement échoue.
+  Future<bool> delete(String id) async {
+    final previous = state.notifications;
+    state = state.copyWith(
+      notifications: previous.where((item) => item.id != id).toList(),
+      clearError: true,
+    );
+    return _appliquer(await repository.delete(id), previous);
+  }
+
+  bool _appliquer(
+    Either<Failure, Unit> result,
+    List<AppNotification> previous,
+  ) =>
+      result.fold(
+        (failure) {
+          state =
+              state.copyWith(notifications: previous, error: failure.message);
+          return false;
+        },
+        (_) => true,
+      );
 
   Future<bool> markAllAsRead() async {
     if (state.unreadCount == 0) return true;

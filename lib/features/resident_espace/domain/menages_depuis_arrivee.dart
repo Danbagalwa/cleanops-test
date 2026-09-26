@@ -11,7 +11,8 @@ List<Map<String, dynamic>> menagesDepuisArrivee(
   String? dateArrivee,
 ) {
   if (dateArrivee == null || dateArrivee.isEmpty) return menages;
-  final debut = dateArrivee.length >= 10 ? dateArrivee.substring(0, 10) : dateArrivee;
+  final debut =
+      dateArrivee.length >= 10 ? dateArrivee.substring(0, 10) : dateArrivee;
   return [
     for (final m in menages)
       if (((m['semaine_reelle'] as String?) ?? '').compareTo(debut) >= 0) m,

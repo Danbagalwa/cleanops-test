@@ -1,6 +1,13 @@
 import 'package:equatable/equatable.dart';
 
-enum RoleType { employe, superviseurMenage, direction, reception, admin, resident }
+enum RoleType {
+  employe,
+  superviseurMenage,
+  direction,
+  reception,
+  admin,
+  resident
+}
 
 /// Profil d'accès : ce qu'un rôle a le droit de faire dans l'application.
 ///
@@ -30,6 +37,16 @@ extension RoleTypeExtension on RoleType {
   /// Libellé à AFFICHER. `label` sert aussi de valeur en base (« Reception »,
   /// sans accent) : on ne le modifie pas, on affiche celui-ci.
   String get libelleAffiche => this == RoleType.reception ? 'Réception' : label;
+
+  /// Intitulé du poste affiché sous le nom (en-têtes, menu du compte).
+  String get intitule => switch (this) {
+        RoleType.employe => 'Préposée',
+        RoleType.superviseurMenage => 'Superviseur',
+        RoleType.direction => 'Direction',
+        RoleType.reception => 'Réception',
+        RoleType.admin => 'Admin',
+        RoleType.resident => 'Résident',
+      };
 
   /// Profil d'accès du rôle.
   ///
@@ -97,6 +114,25 @@ class Employee extends Equatable {
 
   String get nomComplet => '$prenom $nom';
 
+  Employee copyWith({
+    String? nom,
+    String? prenom,
+    String? slug,
+    DateTime? dateMiseAJour,
+  }) =>
+      Employee(
+        id: id,
+        nom: nom ?? this.nom,
+        prenom: prenom ?? this.prenom,
+        slug: slug ?? this.slug,
+        role: role,
+        isActif: isActif,
+        numeroPointeuse: numeroPointeuse,
+        nomResidence: nomResidence,
+        dateCreation: dateCreation,
+        dateMiseAJour: dateMiseAJour ?? this.dateMiseAJour,
+      );
+
   bool get isPreposee => role == RoleType.employe;
 
   bool get isResponsable => role.isResponsable;
@@ -109,13 +145,13 @@ class Employee extends Equatable {
 
   @override
   List<Object?> get props => [
-    id,
-    nom,
-    prenom,
-    slug,
-    role,
-    isActif,
-    numeroPointeuse,
-    nomResidence,
-  ];
+        id,
+        nom,
+        prenom,
+        slug,
+        role,
+        isActif,
+        numeroPointeuse,
+        nomResidence,
+      ];
 }

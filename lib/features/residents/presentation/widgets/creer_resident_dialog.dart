@@ -1,18 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/services/supabase_service.dart';
-import '../../../auth/presentation/widgets/pin_input_widget.dart';
+import '../../../../core/widgets/dialogue_app.dart';
 
-// Signature du callback de soumission
+/// Création d'un résident. [pin] est `null` quand le résident n'utilise pas
+/// l'application (aucun code de connexion à lui attribuer).
 typedef CreerResidentCallback = Future<bool> Function({
   required String aptId,
   required String nom,
   required String prenom,
   required bool aApplication,
-  required String pin,
+  required String? pin,
 });
 
 class CreerResidentDialog extends StatefulWidget {
@@ -25,25 +27,23 @@ class CreerResidentDialog extends StatefulWidget {
 }
 
 class _CreerResidentDialogState extends State<CreerResidentDialog> {
-  // Champs texte
   final _prenomCtrl = TextEditingController();
   final _nomCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
 
   // Appartement
   List<Map<String, dynamic>> _aptResults = [];
+  bool _rechercheFaite = false;
   String? _selectedAptId;
   String? _selectedAptNumero;
   String? _selectedAptTaille;
   bool _searchLoading = false;
   Timer? _debounce;
 
-  // Accès app (défaut = Non)
+  // Accès à l'application (par défaut : sans application)
   bool _aApplication = false;
-
-  // PIN
-  String? _pin;
-  String? _pinError;
+  bool _pinVisible = false;
 
   // Soumission
   bool _loading = false;
@@ -54,16 +54,20 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
     _prenomCtrl.dispose();
     _nomCtrl.dispose();
     _searchCtrl.dispose();
+    _pinCtrl.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
-  // ── Recherche appartements ─────────────────────────────
+  // ── Recherche d'appartement ────────────────────────────
 
   void _onSearchChanged(String query) {
     _debounce?.cancel();
     if (query.trim().isEmpty) {
-      setState(() => _aptResults = []);
+      setState(() {
+        _aptResults = [];
+        _rechercheFaite = false;
+      });
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 350), () => _search(query));
@@ -76,15 +80,22 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
           .from('appartements')
           .select('id, numero, taille')
           .ilike('numero', '%${query.trim()}%')
-          .limit(5);
+          .order('numero')
+          .limit(6);
       if (mounted) {
         setState(() {
           _aptResults = List<Map<String, dynamic>>.from(data as List);
           _searchLoading = false;
+          _rechercheFaite = true;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _searchLoading = false);
+      if (mounted) {
+        setState(() {
+          _searchLoading = false;
+          _rechercheFaite = true;
+        });
+      }
     }
   }
 
@@ -94,8 +105,9 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
       _selectedAptNumero = apt['numero'] as String?;
       _selectedAptTaille = apt['taille']?.toString();
       _aptResults = [];
+      _rechercheFaite = false;
       _searchCtrl.clear();
-      _pinError = null;
+      _erreurGlobal = null;
     });
   }
 
@@ -109,34 +121,43 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
 
   // ── Validation ─────────────────────────────────────────
 
-  String? _valider() {
-    if (_prenomCtrl.text.trim().length < 2) return 'Prénom trop court (min 2 caractères).';
-    if (_nomCtrl.text.trim().length < 2) return 'Nom trop court (min 2 caractères).';
-    if (_selectedAptId == null) return 'Sélectionnez un appartement.';
-    if (_pin == null || _pin!.length != 4) return 'Entrez un PIN à 4 chiffres.';
+  String get _pin => _pinCtrl.text.trim();
+
+  /// Erreur du PIN à afficher sous le champ (seulement une fois saisi).
+  String? get _erreurPin {
+    if (!_aApplication || _pin.isEmpty) return null;
+    if (_pin.length < 4) return null; // saisie en cours
     if (_selectedAptNumero != null && _pin == _selectedAptNumero) {
-      return 'Le PIN ne peut pas être le numéro d\'appartement.';
+      return 'Le PIN ne peut pas être le numéro d’appartement.';
     }
     return null;
   }
+
+  bool get _pinValide =>
+      _pin.length == 4 &&
+      (_selectedAptNumero == null || _pin != _selectedAptNumero);
 
   bool get _peutSoumettre =>
       _prenomCtrl.text.trim().length >= 2 &&
       _nomCtrl.text.trim().length >= 2 &&
       _selectedAptId != null &&
-      _pin != null &&
-      _pin!.length == 4 &&
-      (_selectedAptNumero == null || _pin != _selectedAptNumero);
+      (!_aApplication || _pinValide);
+
+  /// Ce qu'il reste à compléter (affiché au-dessus des boutons).
+  String? get _manquant {
+    if (_prenomCtrl.text.trim().length < 2) return 'Indiquez le prénom.';
+    if (_nomCtrl.text.trim().length < 2) return 'Indiquez le nom.';
+    if (_selectedAptId == null) return 'Choisissez l’appartement.';
+    if (_aApplication && _pin.length != 4) {
+      return 'Saisissez un PIN à 4 chiffres.';
+    }
+    return null;
+  }
 
   // ── Soumission ─────────────────────────────────────────
 
   Future<void> _soumettre() async {
-    final erreur = _valider();
-    if (erreur != null) {
-      setState(() => _erreurGlobal = erreur);
-      return;
-    }
-
+    if (!_peutSoumettre) return;
     setState(() {
       _loading = true;
       _erreurGlobal = null;
@@ -147,15 +168,14 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
       nom: _nomCtrl.text.trim(),
       prenom: _prenomCtrl.text.trim(),
       aApplication: _aApplication,
-      pin: _pin!,
+      pin: _aApplication ? _pin : null,
     );
 
-    if (mounted) {
-      if (ok) {
-        Navigator.pop(context, true);
-      } else {
-        setState(() => _loading = false);
-      }
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() => _loading = false);
     }
   }
 
@@ -163,159 +183,211 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusXl)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── En-tête ──────────────────────────────────
-            _DialogHeader(onClose: () => Navigator.pop(context, false)),
+    final manquant = _manquant;
+    return DialogueApp(
+      titre: 'Nouveau résident',
+      largeur: 500,
+      libelleAction: _aApplication ? 'Créer avec PIN' : 'Enregistrer',
+      libelleSecondaire: 'Annuler',
+      enCours: _loading,
+      onFermer: () => Navigator.pop(context, false),
+      onSecondaire: () => Navigator.pop(context, false),
+      onAction: _peutSoumettre ? _soumettre : null,
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── 1. Identité ────────────────────────────────
+          const _Etape(numero: 1, titre: 'Identité'),
+          const SizedBox(height: 10),
+          LayoutBuilder(builder: (context, c) {
+            final prenom = _champ(_prenomCtrl, 'Prénom', Icons.badge_outlined,
+                autofocus: true);
+            final nom = _champ(_nomCtrl, 'Nom', Icons.person_outline_rounded);
+            if (c.maxWidth < 380) {
+              return Column(
+                children: [prenom, const SizedBox(height: 10), nom],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: prenom),
+                const SizedBox(width: 10),
+                Expanded(child: nom),
+              ],
+            );
+          }),
+          const SizedBox(height: 20),
 
-            // ── Corps scrollable ─────────────────────────
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSizes.xl, 0, AppSizes.xl, AppSizes.xl),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Prénom + Nom
-                    _field(_prenomCtrl, 'Prénom',
-                        Icons.badge_outlined, () => setState(() {})),
-                    const SizedBox(height: AppSizes.sm),
-                    _field(_nomCtrl, 'Nom',
-                        Icons.person_outline_rounded, () => setState(() {})),
-                    const SizedBox(height: AppSizes.md),
+          // ── 2. Appartement ─────────────────────────────
+          const _Etape(numero: 2, titre: 'Appartement'),
+          const SizedBox(height: 10),
+          if (_selectedAptId != null)
+            _AptSelectionnee(
+              numero: _selectedAptNumero ?? '—',
+              taille: _selectedAptTaille,
+              onReinit: _reinitialiserApt,
+            )
+          else ...[
+            _AptSearchField(
+              ctrl: _searchCtrl,
+              isLoading: _searchLoading,
+              onChanged: _onSearchChanged,
+            ),
+            if (_aptResults.isNotEmpty)
+              _AptResultats(results: _aptResults, onSelect: _selectionnerApt)
+            else if (_rechercheFaite && !_searchLoading)
+              const Padding(
+                padding: EdgeInsets.only(top: 8, left: 4),
+                child: Text(
+                  'Aucun appartement ne correspond à ce numéro.',
+                  style: TextStyle(fontSize: 12.5, color: AppColors.grisText),
+                ),
+              ),
+          ],
+          const SizedBox(height: 20),
 
-                    // ── Appartement ─────────────────────
-                    const _SectionLabel(label: 'Appartement'),
-                    const SizedBox(height: AppSizes.xs),
+          // ── 3. Accès à l'application ───────────────────
+          const _Etape(numero: 3, titre: 'Accès à l’application'),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _ChoixAcces(
+                  icone: Icons.phonelink_erase_rounded,
+                  titre: 'Sans application',
+                  description: 'Pas de code. La Réception le prévient.',
+                  selectionne: !_aApplication,
+                  onTap: () => setState(() => _aApplication = false),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ChoixAcces(
+                  icone: Icons.phone_iphone_rounded,
+                  titre: 'Avec l’application',
+                  description: 'Se connecte avec un PIN.',
+                  selectionne: _aApplication,
+                  onTap: () => setState(() => _aApplication = true),
+                ),
+              ),
+            ],
+          ),
 
-                    if (_selectedAptId != null)
-                      _AptSelectionnee(
-                        numero: _selectedAptNumero ?? '—',
-                        taille: _selectedAptTaille,
-                        onReinit: _reinitialiserApt,
-                      )
-                    else ...[
-                      _AptSearchField(
-                        ctrl: _searchCtrl,
-                        isLoading: _searchLoading,
-                        onChanged: _onSearchChanged,
-                      ),
-                      if (_aptResults.isNotEmpty)
-                        _AptResultats(
-                          results: _aptResults,
-                          onSelect: _selectionnerApt,
-                        ),
-                    ],
-
-                    const SizedBox(height: AppSizes.md),
-
-                    // ── Accès app ────────────────────────
-                    const _SectionLabel(label: 'Accès application'),
-                    const SizedBox(height: AppSizes.xs),
-                    _AppToggle(
-                      value: _aApplication,
-                      onChanged: (v) => setState(() => _aApplication = v),
-                    ),
-
-                    const SizedBox(height: AppSizes.lg),
-
-                    // ── PIN ──────────────────────────────
-                    const _SectionLabel(label: 'PIN — 4 chiffres'),
-                    const SizedBox(height: AppSizes.xs),
-                    _PinWarning(aptNumero: _selectedAptNumero),
-                    const SizedBox(height: AppSizes.sm),
-
-                    PinInputWidget(
-                      slug: '',
-                      pinLength: 4,
-                      isLoading: _loading,
-                      error: _pinError,
-                      onPinComplete: (pin) {
-                        final invalide = _selectedAptNumero != null &&
-                            pin == _selectedAptNumero;
-                        setState(() {
-                          _pin = pin;
-                          _pinError = invalide
-                              ? 'PIN identique au numéro d\'appartement'
-                              : null;
-                        });
-                      },
-                    ),
-
-                    // Erreur globale
-                    if (_erreurGlobal != null) ...[
-                      const SizedBox(height: AppSizes.sm),
-                      _ErreurBaniere(message: _erreurGlobal!),
-                    ],
-
-                    const SizedBox(height: AppSizes.lg),
-
-                    // ── Actions ──────────────────────────
-                    Row(
+          // ── 4. PIN (seulement avec l'application) ──────
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _aApplication
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _loading
-                                ? null
-                                : () => Navigator.pop(context, false),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.grisDark,
-                              side: const BorderSide(
-                                  color: AppColors.grisMedium),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 13),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppSizes.radiusMd),
-                              ),
-                            ),
-                            child: const Text('Annuler'),
-                          ),
-                        ),
-                        const SizedBox(width: AppSizes.sm),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton.icon(
-                            onPressed:
-                                (_loading || !_peutSoumettre) ? null : _soumettre,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.rouge,
-                              disabledBackgroundColor:
-                                  AppColors.rouge.withValues(alpha: 0.4),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 13),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppSizes.radiusMd),
-                              ),
-                            ),
-                            icon: _loading
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.arrow_forward_rounded,
-                                    size: 18),
-                            label: const Text(
-                              'Créer',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
+                        const _Etape(numero: 4, titre: 'Code PIN'),
+                        const SizedBox(height: 10),
+                        _champPin(),
                       ],
                     ),
-                  ],
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+
+          // ── Récapitulatif / erreur ─────────────────────
+          const SizedBox(height: 18),
+          if (_erreurGlobal != null)
+            _ErreurBaniere(message: _erreurGlobal!)
+          else if (manquant != null)
+            Row(
+              children: [
+                const Icon(Icons.info_outline_rounded,
+                    size: 15, color: AppColors.grisText),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(manquant,
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.grisText)),
                 ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    size: 16, color: AppColors.fait),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _aApplication
+                        ? 'Prêt : ${_prenomCtrl.text.trim()} pourra se '
+                            'connecter avec son PIN.'
+                        : 'Prêt à enregistrer ${_prenomCtrl.text.trim()} '
+                            '(sans application).',
+                    style:
+                        const TextStyle(fontSize: 12.5, color: AppColors.fait),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _champ(
+    TextEditingController ctrl,
+    String label,
+    IconData icone, {
+    bool autofocus = false,
+  }) {
+    return TextField(
+      controller: ctrl,
+      autofocus: autofocus,
+      textCapitalization: TextCapitalization.words,
+      textInputAction: TextInputAction.next,
+      onChanged: (_) => setState(() {}),
+      decoration: _decoration(label, icone),
+    );
+  }
+
+  Widget _champPin() {
+    final erreur = _erreurPin;
+    final valide = _pinValide;
+    return TextField(
+      controller: _pinCtrl,
+      keyboardType: TextInputType.number,
+      obscureText: !_pinVisible,
+      maxLength: 4,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      textInputAction: TextInputAction.done,
+      onChanged: (_) => setState(() {}),
+      onSubmitted: (_) => _soumettre(),
+      style: const TextStyle(
+          fontSize: 18, letterSpacing: 8, fontWeight: FontWeight.w700),
+      decoration: _decoration('PIN à 4 chiffres', Icons.key_rounded).copyWith(
+        counterText: '',
+        errorText: erreur,
+        helperText: erreur == null
+            ? (_selectedAptNumero != null
+                ? 'Jamais le numéro d’appartement ($_selectedAptNumero).'
+                : 'Jamais le numéro d’appartement.')
+            : null,
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (valide)
+              const Icon(Icons.check_circle_rounded,
+                  size: 20, color: AppColors.fait),
+            IconButton(
+              tooltip: _pinVisible ? 'Masquer le PIN' : 'Afficher le PIN',
+              onPressed: () => setState(() => _pinVisible = !_pinVisible),
+              icon: Icon(
+                _pinVisible
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                size: 20,
               ),
             ),
           ],
@@ -324,21 +396,12 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
     );
   }
 
-  Widget _field(
-    TextEditingController ctrl,
-    String label,
-    IconData icon,
-    VoidCallback onChange,
-  ) {
-    return TextField(
-      controller: ctrl,
-      textCapitalization: TextCapitalization.words,
-      onChanged: (_) => onChange(),
-      decoration: InputDecoration(
+  InputDecoration _decoration(String label, IconData icone) => InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, size: 20, color: AppColors.grisText),
+        prefixIcon: Icon(icone, size: 20, color: AppColors.grisText),
         filled: true,
         fillColor: const Color(0xFFF7F7F8),
+        isDense: true,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           borderSide: const BorderSide(color: Color(0xFFE8E8E8)),
@@ -349,68 +412,53 @@ class _CreerResidentDialogState extends State<CreerResidentDialog> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide:
-              const BorderSide(color: AppColors.rouge, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.rouge, width: 1.5),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      ),
-    );
-  }
+      );
 }
 
 // ══════════════════════════════════════════════════════════
 // SOUS-WIDGETS
 // ══════════════════════════════════════════════════════════
 
-class _DialogHeader extends StatelessWidget {
-  final VoidCallback onClose;
-  const _DialogHeader({required this.onClose});
+class _Etape extends StatelessWidget {
+  final int numero;
+  final String titre;
+  const _Etape({required this.numero, required this.titre});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSizes.xl, AppSizes.lg, AppSizes.md, AppSizes.md),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Nouveau résident',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppColors.noir,
-              ),
+    return Row(
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: AppColors.rouge,
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '$numero',
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
             ),
           ),
-          IconButton(
-            onPressed: onClose,
-            icon: const Icon(Icons.close_rounded, size: 20),
-            color: AppColors.grisText,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          titre,
+          style: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.noir,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        color: AppColors.grisDark,
-        letterSpacing: 0.4,
-      ),
+        ),
+      ],
     );
   }
 }
@@ -432,12 +480,10 @@ class _AptSearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: ctrl,
-      keyboardType: TextInputType.number,
       onChanged: onChanged,
       decoration: InputDecoration(
-        hintText: 'Numéro d\'appartement...',
-        hintStyle:
-            const TextStyle(fontSize: 14, color: AppColors.grisText),
+        hintText: 'Rechercher le numéro d’appartement…',
+        hintStyle: const TextStyle(fontSize: 14, color: AppColors.grisText),
         prefixIcon: const Icon(Icons.search_rounded,
             size: 20, color: AppColors.grisText),
         suffixIcon: isLoading
@@ -453,6 +499,7 @@ class _AptSearchField extends StatelessWidget {
             : null,
         filled: true,
         fillColor: const Color(0xFFF7F7F8),
+        isDense: true,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
           borderSide: const BorderSide(color: Color(0xFFE8E8E8)),
@@ -463,8 +510,7 @@ class _AptSearchField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          borderSide:
-              const BorderSide(color: AppColors.rouge, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.rouge, width: 1.5),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -482,64 +528,55 @@ class _AptResultats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 4),
+      margin: const EdgeInsets.only(top: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(color: const Color(0xFFE8E8E8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: AppColors.grisMedium),
       ),
-      child: Column(
-        children: results.asMap().entries.map((e) {
-          final apt = e.value;
-          final numero = apt['numero'] as String? ?? '—';
-          final taille = apt['taille']?.toString();
-          final label =
-              taille != null ? 'Apt $numero ($taille)' : 'Apt $numero';
-          final isLast = e.key == results.length - 1;
-          return InkWell(
-            onTap: () => onSelect(apt),
-            borderRadius: BorderRadius.vertical(
-              top: e.key == 0
-                  ? const Radius.circular(AppSizes.radiusMd)
-                  : Radius.zero,
-              bottom: isLast
-                  ? const Radius.circular(AppSizes.radiusMd)
-                  : Radius.zero,
-            ),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                border: isLast
-                    ? null
-                    : const Border(
-                        bottom: BorderSide(color: Color(0xFFF0F0F0))),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.apartment_rounded,
-                      size: 16, color: AppColors.grisText),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.noir,
-                    ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          children: [
+            for (final (i, apt) in results.indexed) ...[
+              if (i > 0) const Divider(height: 1, color: AppColors.grisMedium),
+              InkWell(
+                onTap: () => onSelect(apt),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.apartment_rounded,
+                          size: 17, color: AppColors.rouge),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Apt ${apt['numero'] ?? '—'}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.noir,
+                          ),
+                        ),
+                      ),
+                      if (apt['taille'] != null)
+                        Text(
+                          '${apt['taille']}',
+                          style: const TextStyle(
+                              fontSize: 12.5, color: AppColors.grisText),
+                        ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 18, color: AppColors.grisText),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          );
-        }).toList(),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -558,16 +595,12 @@ class _AptSelectionnee extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label =
-        taille != null ? 'Apt $numero ($taille)' : 'Apt $numero';
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 6, 4, 6),
       decoration: BoxDecoration(
         color: AppColors.rouge.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(
-            color: AppColors.rouge.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.rouge.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -576,18 +609,18 @@ class _AptSelectionnee extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              label,
+              taille != null ? 'Apt $numero · $taille' : 'Apt $numero',
               style: const TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: AppColors.rouge,
               ),
             ),
           ),
-          GestureDetector(
-            onTap: onReinit,
-            child: const Icon(Icons.close_rounded,
-                size: 18, color: AppColors.rouge),
+          TextButton(
+            onPressed: onReinit,
+            style: TextButton.styleFrom(foregroundColor: AppColors.rouge),
+            child: const Text('Changer'),
           ),
         ],
       ),
@@ -595,133 +628,80 @@ class _AptSelectionnee extends StatelessWidget {
   }
 }
 
-// ── Toggle accès app ───────────────────────────────────────
-
-class _AppToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _AppToggle({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _ToggleBtn(
-            icon: Icons.phone_android_rounded,
-            label: 'Oui',
-            selected: value,
-            onTap: () => onChanged(true),
-          ),
-        ),
-        const SizedBox(width: AppSizes.sm),
-        Expanded(
-          child: _ToggleBtn(
-            icon: Icons.description_rounded,
-            label: 'Non',
-            selected: !value,
-            onTap: () => onChanged(false),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ToggleBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
+class _ChoixAcces extends StatelessWidget {
+  final IconData icone;
+  final String titre;
+  final String description;
+  final bool selectionne;
   final VoidCallback onTap;
 
-  const _ToggleBtn({
-    required this.icon,
-    required this.label,
-    required this.selected,
+  const _ChoixAcces({
+    required this.icone,
+    required this.titre,
+    required this.description,
+    required this.selectionne,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.rouge.withValues(alpha: 0.08)
-              : const Color(0xFFF5F5F5),
-          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-          border: Border.all(
-            color: selected ? AppColors.rouge : Colors.transparent,
-            width: 1.5,
-          ),
+    return Material(
+      color: selectionne
+          ? AppColors.rouge.withValues(alpha: 0.07)
+          : const Color(0xFFF7F7F8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        side: BorderSide(
+          color: selectionne ? AppColors.rouge : const Color(0xFFE8E8E8),
+          width: selectionne ? 1.5 : 1,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon,
-                size: 17,
-                color: selected ? AppColors.rouge : AppColors.grisDark),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight:
-                    selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? AppColors.rouge : AppColors.grisDark,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icone,
+                      size: 20,
+                      color:
+                          selectionne ? AppColors.rouge : AppColors.grisDark),
+                  const Spacer(),
+                  Icon(
+                    selectionne
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    size: 18,
+                    color: selectionne ? AppColors.rouge : AppColors.grisText,
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                titre,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: selectionne ? AppColors.rouge : AppColors.noir,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: const TextStyle(
+                    fontSize: 12, height: 1.3, color: AppColors.grisText),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-// ── Avertissement PIN ──────────────────────────────────────
-
-class _PinWarning extends StatelessWidget {
-  final String? aptNumero;
-  const _PinWarning({this.aptNumero});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-        border: Border.all(color: const Color(0xFFFFE082)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber_rounded,
-              size: 15, color: Color(0xFFF57C00)),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              aptNumero != null
-                  ? 'Jamais le numéro d\'appartement ($aptNumero)'
-                  : 'Jamais le numéro d\'appartement',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFFF57C00),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Bannière erreur ────────────────────────────────────────
 
 class _ErreurBaniere extends StatelessWidget {
   final String message;
@@ -730,25 +710,23 @@ class _ErreurBaniere extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: AppColors.rouge.withValues(alpha: 0.07),
+        color: AppColors.refus.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-        border:
-            Border.all(color: AppColors.rouge.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.refus.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
           const Icon(Icons.error_outline_rounded,
-              size: 15, color: AppColors.rouge),
+              size: 15, color: AppColors.refus),
           const SizedBox(width: 7),
           Expanded(
             child: Text(
               message,
               style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.rouge,
+                fontSize: 12.5,
+                color: AppColors.refus,
                 fontWeight: FontWeight.w500,
               ),
             ),

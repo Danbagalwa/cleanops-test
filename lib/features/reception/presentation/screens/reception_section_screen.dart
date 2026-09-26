@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../reception_sections.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 /// Page provisoire d'une section de la vue Réception.
 ///
@@ -28,7 +29,7 @@ class ReceptionSectionScreen extends StatelessWidget {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSizes.lg),
+          padding: const EdgeInsets.all(AppSizes.lg).plusBarre(context),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Column(
@@ -45,8 +46,8 @@ class ReceptionSectionScreen extends StatelessWidget {
                 Text(
                   section.description,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      height: 1.45, color: AppColors.grisDark),
+                  style:
+                      const TextStyle(height: 1.45, color: AppColors.grisDark),
                 ),
               ],
             ),

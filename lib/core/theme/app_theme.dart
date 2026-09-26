@@ -179,6 +179,15 @@ class AppTheme {
       type: BottomNavigationBarType.fixed,
     ),
 
+    // ── SnackBar (filet de sécurité : l'app passe par NotificationApp) ──
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.noir,
+      contentTextStyle: GoogleFonts.inter(fontSize: 13, color: Colors.white),
+      actionTextColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+
     // ── Divider ───────────────────────────────────────────
     dividerTheme: const DividerThemeData(
       color: AppColors.grisMedium,

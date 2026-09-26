@@ -1,12 +1,42 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/helpers/date_helper.dart';
 import '../../domain/entities/appartement.dart';
 
+const taillesAppartement = ['2 1/2', '3 1/2', '4 1/2', '5 1/2'];
+
+/// Couleur associée à une taille (la même partout : planning, listes).
+Color couleurTaille(String taille) => switch (taille) {
+      '2 1/2' => AppColors.jourVert,
+      '3 1/2' => AppColors.absent,
+      '4 1/2' => AppColors.rouge,
+      '5 1/2' => AppColors.aVerifier,
+      _ => AppColors.grisDark,
+    };
+
+/// « 3 1/2 » → « 3½ ».
+String tailleCourte(String taille) => taille.replaceAll(' 1/2', '½');
+
+/// Tri naturel des numéros : « 2 » avant « 10 », « 101 » avant « 1001 ».
+int comparerNumeros(String a, String b) {
+  final chiffres = RegExp(r'\d+');
+  final na = chiffres.firstMatch(a);
+  final nb = chiffres.firstMatch(b);
+  if (na != null && nb != null) {
+    final c = int.parse(na[0]!).compareTo(int.parse(nb[0]!));
+    if (c != 0) return c;
+  }
+  return a.toLowerCase().compareTo(b.toLowerCase());
+}
+
+/// Carte d'un appartement (vue grille de la page Appartements).
 class AppartementListItem extends StatelessWidget {
   final Appartement appartement;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// Conservé pour compatibilité (ancienne liste à lignes alternées).
   final bool isAlternate;
 
   const AppartementListItem({
@@ -17,275 +47,222 @@ class AppartementListItem extends StatelessWidget {
     this.isAlternate = false,
   });
 
-  Color get _tailleColor {
-    switch (appartement.taille) {
-      case '2 1/2':
-        return AppColors.jourVert;
-      case '3 1/2':
-        return AppColors.absent;
-      case '4 1/2':
-        return AppColors.rouge;
-      case '5 1/2':
-        return AppColors.aVerifier;
-      default:
-        return AppColors.grisDark;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    return isDesktop ? _buildRow(context) : _buildCard(context);
-  }
-
-  // ── Desktop : row fine type table ────────────────────────
-  Widget _buildRow(BuildContext context) {
-    return Material(
-      color: isAlternate
-          ? AppColors.grisLight.withValues(alpha: 0.4)
-          : Colors.white,
-      child: InkWell(
-        onTap: onEdit,
-        hoverColor: AppColors.rouge.withValues(alpha: 0.04),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.md,
-            vertical: 8,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: AppColors.rouge.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.apartment_rounded,
-                  size: 16,
-                  color: AppColors.rouge,
-                ),
-              ),
-              const SizedBox(width: AppSizes.sm),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  'Apt. ${appartement.numero}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.noir,
+    final a = appartement;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.grisMedium),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onEdit,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(AppSizes.md, 12, 4, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconeAppartement(taille: a.taille, dimension: 44),
+                const SizedBox(width: AppSizes.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Appartement ${a.numero}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.noir,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          BadgeTaille(taille: a.taille),
+                          DureeAppartement(minutes: a.minutesBase),
+                          if (a.hasAnimal) AnimalAppartement(appartement: a),
+                        ],
+                      ),
+                      if (a.notes != null && a.notes!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.sticky_note_2_outlined,
+                                size: 14, color: AppColors.grisText),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                a.notes!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.35,
+                                  color: AppColors.grisDark,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ),
-              Expanded(
-                child: _TailleBadge(
-                  taille: appartement.taille,
-                  color: _tailleColor,
-                ),
-              ),
-              Expanded(
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.schedule_rounded,
-                      size: 13,
-                      color: AppColors.grisText,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${appartement.minutesBase} min',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.grisText,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: 96,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _IconBtn(
-                      icon: Icons.edit_outlined,
-                      color: AppColors.absent,
-                      tooltip: 'Modifier',
-                      onTap: onEdit,
-                    ),
-                    _IconBtn(
-                      icon: Icons.delete_outline_rounded,
-                      color: AppColors.rouge,
-                      tooltip: 'Supprimer',
-                      onTap: onDelete,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                MenuAppartement(onEdit: onEdit, onDelete: onDelete),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
 
-  // ── Mobile : card compacte ───────────────────────────────
-  Widget _buildCard(BuildContext context) {
+class IconeAppartement extends StatelessWidget {
+  final String taille;
+  final double dimension;
+  const IconeAppartement(
+      {super.key, required this.taille, this.dimension = 32});
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = couleurTaille(taille);
     return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 4,
-      ),
+      width: dimension,
+      height: dimension,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+        color: couleur.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(dimension * 0.28),
+      ),
+      child:
+          Icon(Icons.apartment_rounded, color: couleur, size: dimension * 0.55),
+    );
+  }
+}
+
+class BadgeTaille extends StatelessWidget {
+  final String taille;
+  const BadgeTaille({super.key, required this.taille});
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = couleurTaille(taille);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: couleur.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        tailleCourte(taille),
+        style: TextStyle(
+            fontSize: 12, fontWeight: FontWeight.w700, color: couleur),
+      ),
+    );
+  }
+}
+
+class DureeAppartement extends StatelessWidget {
+  final int minutes;
+  const DureeAppartement({super.key, required this.minutes});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.schedule_rounded, size: 14, color: AppColors.grisText),
+        const SizedBox(width: 3),
+        Text(
+          DateHelper.minutesEnHeures(minutes),
+          style: const TextStyle(fontSize: 12.5, color: AppColors.grisDark),
+        ),
+      ],
+    );
+  }
+}
+
+class AnimalAppartement extends StatelessWidget {
+  final Appartement appartement;
+  const AnimalAppartement({super.key, required this.appartement});
+
+  @override
+  Widget build(BuildContext context) {
+    final type = appartement.typeAnimal?.trim();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.aVerifier.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.pets_rounded, size: 13, color: AppColors.aVerifier),
+          const SizedBox(width: 4),
+          Text(
+            type == null || type.isEmpty ? 'Animal' : type,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.aVerifier,
+            ),
           ),
         ],
       ),
-      child: InkWell(
-        onTap: onEdit,
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.md,
-            vertical: 10,
-          ),
+    );
+  }
+}
+
+enum _ActionAppartement { modifier, supprimer }
+
+/// Actions d'un appartement (⋮) : modifier, supprimer.
+class MenuAppartement extends StatelessWidget {
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const MenuAppartement(
+      {super.key, required this.onEdit, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    PopupMenuItem<_ActionAppartement> item(
+            _ActionAppartement a, IconData icone, String texte, Color c) =>
+        PopupMenuItem(
+          value: a,
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppColors.rouge.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.apartment_rounded,
-                  size: 20,
-                  color: AppColors.rouge,
-                ),
-              ),
-              const SizedBox(width: AppSizes.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Apt. ${appartement.numero}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.noir,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        _TailleBadge(
-                          taille: appartement.taille,
-                          color: _tailleColor,
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.schedule_rounded,
-                          size: 12,
-                          color: AppColors.grisText,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${appartement.minutesBase} min',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.grisText,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                color: AppColors.absent,
-                onPressed: onEdit,
-                tooltip: 'Modifier',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                color: AppColors.rouge,
-                onPressed: onDelete,
-                tooltip: 'Supprimer',
-                visualDensity: VisualDensity.compact,
-              ),
+              Icon(icone, size: 18, color: c),
+              const SizedBox(width: 10),
+              Text(texte),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
+        );
 
-class _TailleBadge extends StatelessWidget {
-  final String taille;
-  final Color color;
-
-  const _TailleBadge({required this.taille, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        taille,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  const _IconBtn({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: color),
-        ),
-      ),
+    return PopupMenuButton<_ActionAppartement>(
+      tooltip: 'Actions',
+      icon: const Icon(Icons.more_vert_rounded, color: AppColors.rouge),
+      onSelected: (a) => switch (a) {
+        _ActionAppartement.modifier => onEdit(),
+        _ActionAppartement.supprimer => onDelete(),
+      },
+      itemBuilder: (_) => [
+        item(_ActionAppartement.modifier, Icons.edit_outlined, 'Modifier',
+            AppColors.absent),
+        item(_ActionAppartement.supprimer, Icons.delete_outline_rounded,
+            'Supprimer', AppColors.refus),
+      ],
     );
   }
 }

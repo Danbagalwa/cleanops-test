@@ -21,10 +21,12 @@ abstract class DemandeEquipeRepository {
 
   Future<Either<Failure, List<DemandeEquipe>>> getAllDemandes();
 
+  /// `approuve` null : la demande est seulement marquée comme vue (cas des
+  /// demandes de type "Autre", qui ne s'approuvent ni ne se refusent).
   Future<Either<Failure, DemandeEquipe>> traiterDemande({
     required String demandeId,
     required String traiteParId,
-    required bool approuve,
+    required bool? approuve,
     String? note,
   });
 

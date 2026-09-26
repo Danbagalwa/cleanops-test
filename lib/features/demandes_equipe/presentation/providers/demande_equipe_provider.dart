@@ -5,6 +5,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/demande_equipe_datasource.dart';
 import '../../data/repositories/demande_equipe_repository_impl.dart';
 import '../../data/selecteur_document_file_picker.dart';
+import '../../data/transfert_document_demande.dart';
 import '../../domain/entities/demande_equipe.dart';
 import '../../domain/entities/document_demande.dart';
 import '../../domain/repositories/demande_equipe_repository.dart';
@@ -31,6 +32,12 @@ class MesDemandesEquipeState {
   final List<DemandeEquipe> demandes;
   final bool isLoading;
   final bool isSending;
+
+  /// `true` pendant l'envoi du document joint — phase distincte de
+  /// [isSending] (la demande elle-même est déjà créée à ce stade), pour que
+  /// l'écran puisse afficher un libellé propre à cette étape.
+  final bool isUploadingDocument;
+
   final String? error;
 
   /// Un avertissement post-envoi (la demande a été créée, mais le document
@@ -41,6 +48,7 @@ class MesDemandesEquipeState {
     this.demandes = const [],
     this.isLoading = false,
     this.isSending = false,
+    this.isUploadingDocument = false,
     this.error,
     this.avertissement,
   });
@@ -49,6 +57,7 @@ class MesDemandesEquipeState {
     List<DemandeEquipe>? demandes,
     bool? isLoading,
     bool? isSending,
+    bool? isUploadingDocument,
     String? error,
     bool clearError = false,
     String? avertissement,
@@ -58,6 +67,7 @@ class MesDemandesEquipeState {
         demandes: demandes ?? this.demandes,
         isLoading: isLoading ?? this.isLoading,
         isSending: isSending ?? this.isSending,
+        isUploadingDocument: isUploadingDocument ?? this.isUploadingDocument,
         error: clearError ? null : error ?? this.error,
         avertissement:
             clearAvertissement ? null : avertissement ?? this.avertissement,
@@ -118,13 +128,14 @@ class MesDemandesEquipeNotifier extends StateNotifier<MesDemandesEquipeState> {
         return false;
       },
       (demande) async {
-        state = state.copyWith(
-          isSending: false,
-          demandes: [demande, ...state.demandes],
-        );
+        state = state.copyWith(demandes: [demande, ...state.demandes]);
         // La demande est créée : le document, s'il y en a un, est un
-        // ajout optionnel — son échec ne remet pas en cause l'envoi.
+        // ajout optionnel — son échec ne remet pas en cause l'envoi. On
+        // garde isSending actif (avec isUploadingDocument pour le libellé)
+        // le temps de cet envoi, pour que l'écran reste occupé jusqu'à ce
+        // que tout soit vraiment terminé.
         if (documentOctets != null) {
+          state = state.copyWith(isUploadingDocument: true);
           await _joindreDocument(
             demande,
             octets: documentOctets,
@@ -132,6 +143,7 @@ class MesDemandesEquipeNotifier extends StateNotifier<MesDemandesEquipeState> {
             typeMime: documentTypeMime!,
           );
         }
+        state = state.copyWith(isSending: false, isUploadingDocument: false);
         return true;
       },
     );
@@ -202,8 +214,7 @@ class DemandesEquipeResponsableState {
 
   List<DemandeEquipe> get enAttente =>
       demandes.where((d) => d.enAttente).toList();
-  List<DemandeEquipe> get resolues =>
-      demandes.where((d) => d.resolue).toList();
+  List<DemandeEquipe> get resolues => demandes.where((d) => d.resolue).toList();
   int get badgeEnAttente => enAttente.length;
 
   DemandesEquipeResponsableState copyWith({
@@ -241,9 +252,11 @@ class DemandesEquipeResponsableNotifier
     );
   }
 
+  /// `approuve` null : marque seulement la demande comme vue (demandes de
+  /// type "Autre", qui ne s'approuvent ni ne se refusent).
   Future<bool> traiter({
     required String demandeId,
-    required bool approuve,
+    required bool? approuve,
     String? note,
   }) async {
     state = state.copyWith(isSending: true, clearError: true);
@@ -269,6 +282,23 @@ class DemandesEquipeResponsableNotifier
       },
     );
   }
+
+  /// Met à jour localement une demande après l'envoi de sa preuve de
+  /// traitement (sans recharger toute la liste).
+  void marquerPreuve(
+    String demandeId, {
+    required String nom,
+    required String typeMime,
+    required int taille,
+  }) {
+    state = state.copyWith(
+      demandes: state.demandes
+          .map((d) => d.id == demandeId
+              ? d.avecPreuve(nom: nom, typeMime: typeMime, taille: taille)
+              : d)
+          .toList(),
+    );
+  }
 }
 
 final demandesEquipeResponsableProvider = StateNotifierProvider.autoDispose<
@@ -288,3 +318,8 @@ final documentDemandeProvider = FutureProvider.autoDispose
       await ref.watch(demandeEquipeRepositoryProvider).lireDocument(demandeId);
   return result.fold((f) => throw Exception(f.message), (doc) => doc);
 });
+
+// ── Preuve de traitement — lue à la demande (bouton « voir ») ─
+final preuveDemandeProvider = FutureProvider.autoDispose
+    .family<DocumentDemande, DemandeEquipe>((ref, demande) =>
+        ref.watch(transfertDocumentDemandeProvider).lirePreuve(demande));

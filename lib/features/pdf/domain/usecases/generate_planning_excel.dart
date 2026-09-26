@@ -32,7 +32,9 @@ class GeneratePlanningExcel {
       TextCellValue('Total minutes'),
     ]);
 
-    final activeEmployees = employees.where((employee) => employee.isActif).toList()
+    final activeEmployees = employees
+        .where((employee) => employee.isActif)
+        .toList()
       ..sort((a, b) => a.nomComplet.compareTo(b.nomComplet));
 
     for (final employee in activeEmployees) {
@@ -91,9 +93,8 @@ class GeneratePlanningExcel {
       ]);
 
       for (final day in _jours) {
-        final dayTemplates = weekTemplates
-            .where((template) => template.jour == day)
-            .toList();
+        final dayTemplates =
+            weekTemplates.where((template) => template.jour == day).toList();
         final morning = dayTemplates
             .where((template) => template.periode == PeriodeType.am)
             .toList()
@@ -194,8 +195,7 @@ class GeneratePlanningExcel {
     if (templates.isEmpty) return '—';
     return templates
         .map(
-          (template) =>
-              '${template.numeroTache}. Appartement '
+          (template) => '${template.numeroTache}. Appartement '
               '${_apartmentNumber(template)} '
               '(${template.minutesEstimees} min)',
         )

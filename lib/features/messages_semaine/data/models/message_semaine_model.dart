@@ -8,6 +8,7 @@ class MessageSemaineModel extends MessageSemaine {
     required super.isActif,
     required super.creePar,
     super.prenomCreePar,
+    super.nomCreePar,
     required super.dateCreation,
     super.dateDesactivation,
   });
@@ -21,6 +22,7 @@ class MessageSemaineModel extends MessageSemaine {
       isActif: json['is_actif'] as bool? ?? false,
       creePar: json['créé_par'] as String,
       prenomCreePar: auteurMap?['prenom'] as String?,
+      nomCreePar: auteurMap?['nom'] as String?,
       dateCreation: DateTime.parse(json['date_creation'] as String),
       dateDesactivation: json['date_desactivation'] != null
           ? DateTime.parse(json['date_desactivation'] as String)
@@ -30,7 +32,7 @@ class MessageSemaineModel extends MessageSemaine {
 
   static MessageType _parseType(String v) => switch (v) {
         'Automatique' => MessageType.automatique,
-        'Fete'        => MessageType.fete,
-        _             => MessageType.personnalise,
+        'Fete' => MessageType.fete,
+        _ => MessageType.personnalise,
       };
 }

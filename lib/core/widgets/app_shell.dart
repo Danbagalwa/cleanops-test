@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
+import 'app_top_bar.dart';
 import '../../features/auth/domain/entities/employee.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/photo_profil/domain/photo_profil_models.dart';
@@ -11,7 +13,7 @@ import '../../features/reception/presentation/reception_sections.dart';
 import '../../features/resident_espace/presentation/providers/resident_espace_provider.dart';
 
 // ── Dimensions sidebar ────────────────────────────────────
-const double _kSidebarExpanded = 264;
+const double _kSidebarExpanded = 280;
 const double _kSidebarCollapsed = 68;
 const Duration _kSidebarDuration = Duration(milliseconds: 220);
 
@@ -38,13 +40,18 @@ class _NavItem {
 }
 
 /// Groupe de destinations. [label] nul → liste à plat, sans en-tête ni pli.
+/// Sinon, section repliable du menu latéral (une seule ouverte à la fois).
 class _NavGroup {
   final String? label;
+  final IconData? icon;
   final List<_NavItem> items;
-  final bool startOpen;
 
-  const _NavGroup({this.label, required this.items, this.startOpen = true});
+  const _NavGroup({this.label, this.icon, required this.items});
 }
+
+/// Section « Accueil » du menu latéral : elle porte le tableau de bord quand le
+/// menu est organisé en sections.
+const String _kAccueil = 'Accueil';
 
 // ─────────────────────────────────────────────────────────
 // Préposée — famille "Mon travail" / "Équipe"
@@ -59,7 +66,7 @@ const _NavItem _preposeeDashboard = _NavItem(
 );
 
 const List<_NavGroup> _preposeeGroups = [
-  _NavGroup(label: 'Mon travail', items: [
+  _NavGroup(label: 'Mon travail', icon: Icons.work_rounded, items: [
     _NavItem(
       icon: Icons.today_outlined,
       activeIcon: Icons.today_rounded,
@@ -91,7 +98,7 @@ const List<_NavGroup> _preposeeGroups = [
       route: '/aire-commune',
     ),
   ]),
-  _NavGroup(label: 'Équipe', items: [
+  _NavGroup(label: 'Équipe', icon: Icons.groups_rounded, items: [
     _NavItem(
       icon: Icons.chat_bubble_outline_rounded,
       activeIcon: Icons.chat_bubble_rounded,
@@ -130,7 +137,7 @@ const _NavItem _responsableDashboard = _NavItem(
 );
 
 const List<_NavGroup> _responsableGroups = [
-  _NavGroup(label: 'Opérations', items: [
+  _NavGroup(label: 'Opérations', icon: Icons.fact_check_rounded, items: [
     _NavItem(
       icon: Icons.checklist_rounded,
       activeIcon: Icons.checklist_rounded,
@@ -161,7 +168,7 @@ const List<_NavGroup> _responsableGroups = [
       route: '/aire-commune',
     ),
   ]),
-  _NavGroup(label: 'Équipe', items: [
+  _NavGroup(label: 'Équipe', icon: Icons.groups_rounded, items: [
     _NavItem(
       icon: Icons.group_outlined,
       activeIcon: Icons.group_rounded,
@@ -193,7 +200,7 @@ const List<_NavGroup> _responsableGroups = [
       route: '/demandes/equipe',
     ),
   ]),
-  _NavGroup(label: 'Résidence', startOpen: false, items: [
+  _NavGroup(label: 'Résidence', icon: Icons.apartment_rounded, items: [
     _NavItem(
       icon: Icons.apartment_outlined,
       activeIcon: Icons.apartment_rounded,
@@ -247,6 +254,14 @@ const _NavItem _residentDashboard = _NavItem(
 
 const List<_NavGroup> _residentGroups = [
   _NavGroup(items: [
+    _NavItem(
+      icon: Icons.calendar_month_outlined,
+      activeIcon: Icons.calendar_month_rounded,
+      label: 'Mon calendrier',
+      shortLabel: 'Calendrier',
+      route: '/resident/calendrier',
+      mobilePrimary: true,
+    ),
     _NavItem(
       icon: Icons.inbox_outlined,
       activeIcon: Icons.inbox_rounded,
@@ -308,8 +323,7 @@ List<_NavItem> _mobilePrimary(_NavItem dashboard, List<_NavGroup> groups) => [
 
 List<_NavGroup> _mobileOverflowGroups(List<_NavGroup> groups) => groups
     .map((g) => _NavGroup(
-        label: g.label,
-        items: g.items.where((i) => !i.mobilePrimary).toList()))
+        label: g.label, items: g.items.where((i) => !i.mobilePrimary).toList()))
     .where((g) => g.items.isNotEmpty)
     .toList();
 
@@ -361,23 +375,33 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _expanded = true;
-  final Set<String> _closedGroups = {};
 
-  bool _groupOpen(_NavGroup group) {
-    if (group.label == null) return true;
-    return !_closedGroups.contains(group.label);
-  }
+  /// Seule section ouverte du menu latéral (`null` : toutes fermées).
+  String? _sectionOuverte;
 
-  void _toggleGroup(_NavGroup group) {
-    if (group.label == null) return;
-    setState(() {
-      if (_closedGroups.contains(group.label)) {
-        _closedGroups.remove(group.label);
-      } else {
-        _closedGroups.add(group.label!);
-      }
-    });
+  /// Dernière page vue : à chaque changement de page, sa section s'ouvre.
+  String? _routeVue;
+
+  void _basculerSection(String section) => setState(
+      () => _sectionOuverte = _sectionOuverte == section ? null : section);
+
+  void _suivrePageActive(
+    String activeRoute,
+    _NavItem dashboard,
+    List<_NavGroup> groups,
+  ) {
+    if (activeRoute == _routeVue) return;
+    _routeVue = activeRoute;
+    final section = activeRoute == dashboard.route
+        ? _kAccueil
+        : groups
+            .where((g) => g.label != null)
+            .where((g) => g.items.any((i) => i.route == activeRoute))
+            .map((g) => g.label)
+            .firstOrNull;
+    if (section != null) _sectionOuverte = section;
   }
 
   /// Route active — correspondance exacte d'abord, puis le préfixe le plus
@@ -430,6 +454,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
 
     final activeRoute = _computeActiveRoute(dashboard, groups);
+    _suivrePageActive(activeRoute, dashboard, groups);
 
     final notifBadge = ref.watch(badgeNotifResidentProvider);
     final badgeMap = notifBadge > 0
@@ -441,31 +466,70 @@ class _AppShellState extends ConsumerState<AppShell> {
       context.go('/');
     }
 
+    _Sidebar sidebar({required bool isExpanded}) => _Sidebar(
+          dashboard: dashboard,
+          groups: groups,
+          activeRoute: activeRoute,
+          employee: employee,
+          onLogout: onLogout,
+          isExpanded: isExpanded,
+          badgeMap: badgeMap,
+          sectionOuverte: _sectionOuverte,
+          onBasculerSection: _basculerSection,
+        );
+
+    // La barre du haut occupe déjà la zone d'état (heure, batterie) : la page
+    // ne doit pas la réserver une seconde fois.
     if (isDesktop) {
+      // La page passe SOUS le pied de page en verre : on lui déclare sa
+      // hauteur dans le padding du bas (lu par `plusBarre`).
+      final mq = MediaQuery.of(context);
+      final page = MediaQuery(
+        data: mq.copyWith(
+          padding: mq.padding.copyWith(top: 0, bottom: _kHauteurPied),
+        ),
+        child: widget.child,
+      );
+      final largeurSidebar = _expanded ? _kSidebarExpanded : _kSidebarCollapsed;
       return Scaffold(
         backgroundColor: AppColors.grisLight,
-        body: Row(
+        body: Column(
           children: [
-            AnimatedContainer(
-              width: _expanded ? _kSidebarExpanded : _kSidebarCollapsed,
-              duration: _kSidebarDuration,
-              curve: Curves.easeInOut,
-              child: ClipRect(
-                child: _Sidebar(
-                  dashboard: dashboard,
-                  groups: groups,
-                  activeRoute: activeRoute,
-                  employee: employee,
-                  onLogout: onLogout,
-                  isExpanded: _expanded,
-                  onToggle: () => setState(() => _expanded = !_expanded),
-                  badgeMap: badgeMap,
-                  groupOpen: _groupOpen,
-                  onToggleGroup: _toggleGroup,
-                ),
+            AppTopBar(onMenu: () => setState(() => _expanded = !_expanded)),
+            Expanded(
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    width: largeurSidebar,
+                    duration: _kSidebarDuration,
+                    curve: Curves.easeInOut,
+                    // Dessinée à sa largeur finale et rognée pendant
+                    // l'animation : les libellés ne débordent jamais.
+                    child: ClipRect(
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        minWidth: largeurSidebar,
+                        maxWidth: largeurSidebar,
+                        child: sidebar(isExpanded: _expanded),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(child: page),
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _PiedDePage(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            Expanded(child: widget.child),
           ],
         ),
       );
@@ -476,18 +540,48 @@ class _AppShellState extends ConsumerState<AppShell> {
     final overflowGroups = _mobileOverflowGroups(groups);
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.grisLight,
-      body: widget.child,
+      drawer: Drawer(
+        width: _kSidebarExpanded + 16,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(child: sidebar(isExpanded: true)),
+              // Sur mobile, le pied de page vit dans le tiroir : la barre du
+              // bas occupe déjà le bas de l'écran.
+              const _PiedDePage(compact: true),
+            ],
+          ),
+        ),
+      ),
+      // La page passe SOUS la barre d'onglets en verre, qui la réfracte. Le
+      // Scaffold déclare alors la hauteur de la barre dans le padding du bas
+      // (lu par `plusBarre`) : d'où le Builder, pour lire CE MediaQuery-là.
+      extendBody: true,
+      body: Builder(
+        builder: (context) => Column(
+          children: [
+            AppTopBar(onMenu: () => _scaffoldKey.currentState?.openDrawer()),
+            Expanded(
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: widget.child,
+              ),
+            ),
+          ],
+        ),
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          child: _MobileBottomBar(
-            items: mobilePrimary,
-            activeRoute: activeRoute,
-            badgeMap: badgeMap,
-            overflowGroups: overflowGroups,
-          ),
+        child: _MobileBottomBar(
+          items: mobilePrimary,
+          activeRoute: activeRoute,
+          badgeMap: badgeMap,
+          overflowGroups: overflowGroups,
         ),
       ),
     );
@@ -498,6 +592,15 @@ class _AppShellState extends ConsumerState<AppShell> {
 // Barre mobile flottante + tiroir "Plus"
 // ─────────────────────────────────────────────────────────
 
+/// Verre de la barre du bas : un blanc laiteux, lisible sur le fond gris.
+final _verreBarre = LiquidGlassSettings(
+  glassColor: Colors.white.withValues(alpha: 0.72),
+  thickness: 22,
+  blur: 8,
+);
+
+/// Barre d'onglets en verre liquide (style iOS 26) : l'indicateur de verre
+/// glisse d'un onglet à l'autre ; « Plus » est le bouton de verre séparé.
 class _MobileBottomBar extends StatelessWidget {
   final List<_NavItem> items;
   final String activeRoute;
@@ -514,49 +617,51 @@ class _MobileBottomBar extends StatelessWidget {
   bool get _isOverflowActive =>
       overflowGroups.any((g) => g.items.any((i) => i.route == activeRoute));
 
+  Widget _icone(IconData icone, int badge) {
+    final widget = Icon(icone);
+    if (badge == 0) return widget;
+    return Badge(label: Text('$badge'), child: widget);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
+    final actif = items.indexWhere((i) => i.route == activeRoute);
+
+    return GlassTabBar.bottom(
+      tabs: [
+        for (final item in items)
+          GlassTab(
+            icon: _icone(item.icon, badgeMap[item.route] ?? 0),
+            activeIcon: _icone(item.activeIcon, badgeMap[item.route] ?? 0),
+            label: item.shortLabel,
+            semanticLabel: item.label,
           ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (final item in items)
-            Expanded(
-              child: _BarButton(
-                icon: item.route == activeRoute ? item.activeIcon : item.icon,
-                label: item.shortLabel,
-                active: item.route == activeRoute,
-                badge: badgeMap[item.route] ?? 0,
-                onTap: () => context.go(item.route),
-              ),
+      ],
+      // Page du tiroir « Plus » : aucun onglet n'est en surbrillance.
+      selectedIndex: actif < 0 ? 0 : actif,
+      showIndicator: actif >= 0,
+      onTabSelected: (i) => context.go(items[i].route),
+      extraButton: overflowGroups.isEmpty
+          ? null
+          : GlassTabBarExtraButton(
+              icon: const Icon(Icons.grid_view_rounded),
+              label: 'Plus',
+              size: 56,
+              iconColor:
+                  _isOverflowActive ? AppColors.rouge : AppColors.grisDark,
+              onTap: () => _openPlusSheet(context),
             ),
-          if (overflowGroups.isNotEmpty)
-            Expanded(
-              child: _BarButton(
-                icon: Icons.grid_view_rounded,
-                label: 'Plus',
-                active: _isOverflowActive,
-                onTap: () => _openPlusSheet(context),
-              ),
-            ),
-        ],
-      ),
+      settings: _verreBarre,
+      indicatorColor: AppColors.rouge.withValues(alpha: 0.12),
+      selectedIconColor: AppColors.rouge,
+      unselectedIconColor: AppColors.grisDark,
+      selectedLabelColor: AppColors.rouge,
+      unselectedLabelColor: AppColors.grisDark,
+      horizontalPadding: 12,
+      verticalPadding: 8,
+      barHeight: 64,
+      iconSize: 22,
+      labelFontSize: 10.5,
     );
   }
 
@@ -576,69 +681,6 @@ class _MobileBottomBar extends StatelessWidget {
           Navigator.of(sheetContext).pop();
           context.go(route);
         },
-      ),
-    );
-  }
-}
-
-class _BarButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final int badge;
-  final VoidCallback onTap;
-
-  const _BarButton({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.badge = 0,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    Widget iconWidget = Icon(
-      icon,
-      size: 24,
-      color: active ? AppColors.rouge : AppColors.grisDark,
-    );
-    if (badge > 0) {
-      iconWidget = Badge(label: Text('$badge'), child: iconWidget);
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-          decoration: BoxDecoration(
-            color: active
-                ? AppColors.rouge.withValues(alpha: 0.10)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              iconWidget,
-              const SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                  color: active ? AppColors.rouge : AppColors.grisDark,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -741,9 +783,7 @@ class _PlusSheet extends StatelessWidget {
                                         isLabelVisible: badge > 0,
                                         label: Text('$badge'),
                                         child: Icon(
-                                          active
-                                              ? item.activeIcon
-                                              : item.icon,
+                                          active ? item.activeIcon : item.icon,
                                           color: active
                                               ? AppColors.rouge
                                               : AppColors.grisDark,
@@ -788,7 +828,7 @@ class _PlusSheet extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-// Sidebar (desktop)
+// Menu latéral (bureau, et tiroir sur mobile)
 // ─────────────────────────────────────────────────────────
 
 class _Sidebar extends StatelessWidget {
@@ -798,10 +838,9 @@ class _Sidebar extends StatelessWidget {
   final Employee? employee;
   final VoidCallback onLogout;
   final bool isExpanded;
-  final VoidCallback onToggle;
   final Map<String, int> badgeMap;
-  final bool Function(_NavGroup) groupOpen;
-  final void Function(_NavGroup) onToggleGroup;
+  final String? sectionOuverte;
+  final ValueChanged<String> onBasculerSection;
 
   const _Sidebar({
     required this.dashboard,
@@ -810,14 +849,58 @@ class _Sidebar extends StatelessWidget {
     required this.employee,
     required this.onLogout,
     required this.isExpanded,
-    required this.onToggle,
-    required this.groupOpen,
-    required this.onToggleGroup,
+    required this.sectionOuverte,
+    required this.onBasculerSection,
     this.badgeMap = const {},
   });
 
+  bool get _enSections => groups.any((g) => g.label != null);
+
+  _SidebarItem _item(_NavItem item) => _SidebarItem(
+        item: item,
+        isActive: item.route == activeRoute,
+        isExpanded: isExpanded,
+        badge: badgeMap[item.route] ?? 0,
+      );
+
+  _Section _section(String libelle, IconData icone, List<_NavItem> items) =>
+      _Section(
+        libelle: libelle,
+        icone: icone,
+        ouverte: sectionOuverte == libelle,
+        onTap: () => onBasculerSection(libelle),
+        items: [for (final i in items) _item(i)],
+      );
+
+  List<Widget> _deplie() {
+    if (!_enSections) {
+      return [
+        _item(dashboard),
+        for (final g in groups) ...g.items.map(_item),
+      ];
+    }
+    return [
+      _section(_kAccueil, Icons.home_rounded, [dashboard]),
+      for (final g in groups)
+        if (g.label != null)
+          _section(g.label!, g.icon ?? Icons.folder_rounded, g.items)
+        else
+          ...g.items.map(_item),
+    ];
+  }
+
+  // Menu replié : les icônes seules, groupe par groupe.
+  List<Widget> _replie() => [
+        _item(dashboard),
+        for (final g in groups) ...[
+          const Divider(height: 17, indent: 12, endIndent: 12),
+          ...g.items.map(_item),
+        ],
+      ];
+
   @override
   Widget build(BuildContext context) {
+    final aPlat = !isExpanded || !_enSections;
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -825,51 +908,16 @@ class _Sidebar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _SidebarHeader(isExpanded: isExpanded, onToggle: onToggle),
+          _SidebarProfil(employee: employee, isExpanded: isExpanded),
           Expanded(
             child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: isExpanded ? 12 : 8,
-                vertical: 14,
-              ),
+              padding: aPlat
+                  ? EdgeInsets.symmetric(
+                      horizontal: isExpanded ? 12 : 8, vertical: 12)
+                  : const EdgeInsets.only(bottom: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _SidebarItem(
-                    item: dashboard,
-                    isActive: dashboard.route == activeRoute,
-                    isExpanded: isExpanded,
-                    badge: badgeMap[dashboard.route] ?? 0,
-                  ),
-                  for (final group in groups) ...[
-                    const SizedBox(height: 4),
-                    if (group.label != null)
-                      _GroupHeader(
-                        label: group.label!,
-                        isExpanded: isExpanded,
-                        open: groupOpen(group),
-                        onTap: () => onToggleGroup(group),
-                      ),
-                    AnimatedSize(
-                      duration: _kSidebarDuration,
-                      curve: Curves.easeInOut,
-                      alignment: Alignment.topCenter,
-                      child: (!isExpanded || groupOpen(group))
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: group.items
-                                  .map((item) => _SidebarItem(
-                                        item: item,
-                                        isActive: item.route == activeRoute,
-                                        isExpanded: isExpanded,
-                                        badge: badgeMap[item.route] ?? 0,
-                                      ))
-                                  .toList(),
-                            )
-                          : const SizedBox(width: double.infinity),
-                    ),
-                  ],
-                ],
+                children: isExpanded ? _deplie() : _replie(),
               ),
             ),
           ),
@@ -884,163 +932,149 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-// ── En-tête de groupe (dépliable) ─────────────────────────
-class _GroupHeader extends StatelessWidget {
-  final String label;
+// ── Bloc profil (haut du menu) ────────────────────────────
+class _SidebarProfil extends StatelessWidget {
+  final Employee? employee;
   final bool isExpanded;
-  final bool open;
-  final VoidCallback onTap;
 
-  const _GroupHeader({
-    required this.label,
-    required this.isExpanded,
-    required this.open,
-    required this.onTap,
-  });
+  const _SidebarProfil({required this.employee, required this.isExpanded});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
-      opacity: isExpanded ? 1.0 : 0.0,
-      duration: _kSidebarDuration,
-      child: IgnorePointer(
-        ignoring: !isExpanded,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 14, 4, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label.toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.grisText,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                AnimatedRotation(
-                  turns: open ? 0.5 : 0,
-                  duration: _kSidebarDuration,
-                  child: const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: AppColors.grisText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    final e = employee;
+    // La photo de la personne ; à défaut, une silhouette (comme le modèle).
+    final avatar = AvatarProfil(
+      proprietaire: e == null ? null : ProprietairePhoto.de(e),
+      initiales: '',
+      icone: Icons.person_rounded,
+      rayon: isExpanded ? 24 : 18,
+      couleurFond: Colors.transparent,
+      couleurTexte: AppColors.noir,
     );
-  }
-}
 
-// ── Header sidebar ────────────────────────────────────────
-class _SidebarHeader extends StatelessWidget {
-  final bool isExpanded;
-  final VoidCallback onToggle;
+    if (!isExpanded) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.grisMedium)),
+        ),
+        child: Center(
+          child: Tooltip(message: e?.nomComplet ?? '', child: avatar),
+        ),
+      );
+    }
 
-  const _SidebarHeader({required this.isExpanded, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      height: 64,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.grisMedium)),
       ),
-      child: isExpanded ? _buildExpanded() : _buildCollapsed(),
-    );
-  }
-
-  Widget _buildExpanded() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(
-              color: AppColors.rouge.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.apartment_rounded,
-              color: AppColors.rouge,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'CleanOps',
-                  style: TextStyle(
-                    color: AppColors.noir,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Résidence',
-                  style: TextStyle(color: AppColors.grisText, fontSize: 11),
-                ),
-              ],
+          avatar,
+          const SizedBox(height: 8),
+          Text(
+            e?.nomComplet ?? '',
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.noir,
             ),
           ),
-          Tooltip(
-            message: 'Réduire le menu',
-            child: InkWell(
-              onTap: onToggle,
-              borderRadius: BorderRadius.circular(8),
-              child: const Padding(
-                padding: EdgeInsets.all(6),
-                child: Icon(
-                  Icons.chevron_left_rounded,
-                  color: AppColors.grisText,
-                  size: 22,
-                ),
-              ),
-            ),
+          const SizedBox(height: 2),
+          Text(
+            (e?.role ?? RoleType.employe).intitule,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 11.5, color: AppColors.grisDark),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildCollapsed() {
-    return Center(
-      child: Tooltip(
-        message: 'Développer le menu',
-        child: InkWell(
-          onTap: onToggle,
-          borderRadius: BorderRadius.circular(8),
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.grisText,
-              size: 22,
+// ── Section repliable ─────────────────────────────────────
+class _Section extends StatelessWidget {
+  final String libelle;
+  final IconData icone;
+  final bool ouverte;
+  final VoidCallback onTap;
+  final List<Widget> items;
+
+  const _Section({
+    required this.libelle,
+    required this.icone,
+    required this.ouverte,
+    required this.onTap,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.grisMedium)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onTap,
+            hoverColor: AppColors.grisLight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              child: Row(
+                children: [
+                  Icon(icone, size: 19, color: AppColors.rouge),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      libelle,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.noir,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: ouverte ? 0.5 : 0,
+                    duration: _kSidebarDuration,
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: AppColors.grisDark,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
+          AnimatedSize(
+            duration: _kSidebarDuration,
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: ouverte
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: items,
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Item de navigation sidebar ────────────────────────────
+// ── Entrée du menu ────────────────────────────────────────
 class _SidebarItem extends StatelessWidget {
   final _NavItem item;
   final bool isActive;
@@ -1056,10 +1090,11 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final couleur = isActive ? Colors.white : AppColors.rouge;
     Widget icon = Icon(
       isActive ? item.activeIcon : item.icon,
-      size: 19,
-      color: isActive ? AppColors.rouge : AppColors.grisDark,
+      size: 18,
+      color: couleur,
     );
     if (badge > 0) {
       icon = Badge(label: Text('$badge'), child: icon);
@@ -1072,24 +1107,20 @@ class _SidebarItem extends StatelessWidget {
         preferBelow: false,
         waitDuration: const Duration(milliseconds: 300),
         child: Material(
-          color: Colors.transparent,
+          color: isActive ? AppColors.rouge : Colors.transparent,
           borderRadius: BorderRadius.circular(AppSizes.radiusPill),
           child: InkWell(
-            onTap: () => context.go(item.route),
+            onTap: () {
+              // Sans effet sur bureau ; referme le tiroir sur mobile.
+              Scaffold.maybeOf(context)?.closeDrawer();
+              context.go(item.route);
+            },
             borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-            hoverColor: AppColors.grisLight,
-            child: AnimatedContainer(
-              duration: _kSidebarDuration,
-              curve: Curves.easeInOut,
+            hoverColor: isActive ? null : AppColors.grisLight,
+            child: Padding(
               padding: EdgeInsets.symmetric(
-                horizontal: isExpanded ? 14 : 0,
+                horizontal: isExpanded ? 16 : 0,
                 vertical: 10,
-              ),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? AppColors.rouge.withValues(alpha: 0.08)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppSizes.radiusPill),
               ),
               child: isExpanded
                   ? Row(
@@ -1099,14 +1130,13 @@ class _SidebarItem extends StatelessWidget {
                         Expanded(
                           child: Text(
                             item.label,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 13.5,
+                              fontSize: 13,
                               fontWeight:
                                   isActive ? FontWeight.w700 : FontWeight.w500,
-                              color:
-                                  isActive ? AppColors.rouge : AppColors.noir,
+                              color: isActive ? Colors.white : AppColors.noir,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -1120,7 +1150,7 @@ class _SidebarItem extends StatelessWidget {
   }
 }
 
-// ── Footer sidebar ────────────────────────────────────────
+// ── Zone de déconnexion (bas du menu) ─────────────────────
 class _SidebarFooter extends StatelessWidget {
   final Employee? employee;
   final VoidCallback onLogout;
@@ -1139,32 +1169,15 @@ class _SidebarFooter extends StatelessWidget {
         .toUpperCase();
   }
 
-  String get _roleLabel {
-    switch (employee?.role) {
-      case RoleType.superviseurMenage:
-        return 'Superviseur';
-      case RoleType.direction:
-        return 'Direction';
-      case RoleType.reception:
-        return 'Réception';
-      case RoleType.admin:
-        return 'Admin';
-      case RoleType.resident:
-        return 'Résident';
-      default:
-        return 'Préposée';
-    }
-  }
-
-  Widget _buildAvatar() {
+  Widget _avatar() {
     final e = employee;
     return AvatarProfil(
       proprietaire: e == null ? null : ProprietairePhoto.de(e),
       initiales: _initiales,
-      rayon: 18,
+      rayon: 16,
       couleurFond: AppColors.rouge.withValues(alpha: 0.12),
       couleurTexte: AppColors.rouge,
-      tailleTexte: 13,
+      tailleTexte: 12,
       poidsTexte: FontWeight.bold,
     );
   }
@@ -1172,72 +1185,130 @@ class _SidebarFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(isExpanded ? AppSizes.md : 12),
+      padding: EdgeInsets.all(isExpanded ? 12 : 10),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.grisMedium)),
       ),
-      child: isExpanded ? _buildExpanded() : _buildCollapsed(),
-    );
-  }
-
-  Widget _buildExpanded() {
-    return Row(
-      children: [
-        _buildAvatar(),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${employee?.prenom ?? ''} ${employee?.nom ?? ''}',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.noir,
+      child: isExpanded
+          ? Row(
+              children: [
+                _avatar(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        employee?.nomComplet ?? '',
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.noir,
+                        ),
+                      ),
+                      Text(
+                        (employee?.role ?? RoleType.employe).intitule,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: AppColors.grisText,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                _roleLabel,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.grisText,
+                Tooltip(
+                  message: 'Déconnexion',
+                  child: InkWell(
+                    onTap: onLogout,
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.logout_rounded,
+                        size: 18,
+                        color: AppColors.grisText,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Tooltip(
-          message: 'Déconnexion',
-          child: InkWell(
-            onTap: onLogout,
-            borderRadius: BorderRadius.circular(8),
-            child: const Padding(
-              padding: EdgeInsets.all(6),
-              child: Icon(
-                Icons.logout_rounded,
-                size: 18,
-                color: AppColors.grisText,
+              ],
+            )
+          : Center(
+              child: Tooltip(
+                message: 'Déconnexion',
+                preferBelow: false,
+                child: InkWell(
+                  onTap: onLogout,
+                  borderRadius: BorderRadius.circular(20),
+                  child: _avatar(),
+                ),
               ),
             ),
-          ),
-        ),
-      ],
     );
   }
+}
 
-  Widget _buildCollapsed() {
-    return Center(
-      child: Tooltip(
-        message: 'Déconnexion',
-        preferBelow: false,
-        child: InkWell(
-          onTap: onLogout,
-          borderRadius: BorderRadius.circular(20),
-          child: _buildAvatar(),
+// ── Pied de page ──────────────────────────────────────────
+class _PiedDePage extends StatelessWidget {
+  final bool compact;
+
+  const _PiedDePage({this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final annee = DateTime.now().year;
+    const style = TextStyle(fontSize: 12, color: AppColors.grisText);
+
+    if (compact) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.grisMedium)),
+        ),
+        child: Text(
+          '© $annee CleanOpss',
+          textAlign: TextAlign.center,
+          style: style,
+        ),
+      );
+    }
+
+    // Verre : la page défile dessous et transparaît, floutée.
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: AppColors.grisMedium.withValues(alpha: 0.7)),
+        ),
+      ),
+      child: GlassContainer(
+        useOwnLayer: true,
+        settings: _verrePied,
+        shape: const LiquidRoundedSuperellipse(borderRadius: 0),
+        width: double.infinity,
+        height: _kHauteurPied,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        alignment: Alignment.center,
+        child: Text(
+          '© $annee CleanOps. Tous droits réservés.',
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: style.copyWith(color: AppColors.grisDark),
         ),
       ),
     );
   }
 }
+
+/// Hauteur du pied de page (bureau). La page la réserve en bas de son
+/// défilement pour que son dernier élément ne reste pas caché dessous.
+const double _kHauteurPied = 44;
+
+/// Verre du pied de page : blanc laiteux, assez opaque pour le texte.
+final _verrePied = LiquidGlassSettings(
+  glassColor: Colors.white.withValues(alpha: 0.65),
+  thickness: 14,
+  blur: 10,
+);

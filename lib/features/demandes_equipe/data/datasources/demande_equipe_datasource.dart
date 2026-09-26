@@ -27,7 +27,7 @@ abstract class DemandeEquipeDatasource {
   Future<DemandeEquipeModel> traiterDemande({
     required String demandeId,
     required String traiteParId,
-    required bool approuve,
+    required bool? approuve,
     String? note,
   });
 
@@ -50,6 +50,20 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
       'traite_par_employee:employees!demandes_equipe_traite_par_fkey(id, nom, prenom, slug, role, is_actif), '
       'demandes_equipe_documents(nom, type_mime, taille)';
 
+  /// Avec la preuve de traitement du responsable (migration 202609240038).
+  static const _joinAvecPreuve =
+      '$_join, demandes_equipe_preuves(nom, type_mime, taille)';
+
+  /// Passe à false si la table des preuves n'existe pas encore (migration non
+  /// appliquée) : la liste reste lisible, sans preuve.
+  static bool _preuvesDisponibles = true;
+
+  String get _selection => _preuvesDisponibles ? _joinAvecPreuve : _join;
+
+  /// Relation inconnue de PostgREST (table des preuves absente).
+  bool _preuvesAbsentes(Object e) =>
+      _preuvesDisponibles && e is PostgrestException && e.code == 'PGRST200';
+
   /// Les refus métier du serveur (code P0001) sont déjà rédigés pour
   /// l'utilisateur ; toute autre erreur reçoit un message générique.
   String _message(PostgrestException e, String parDefaut) =>
@@ -61,6 +75,7 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
   String _typeLabel(TypeDemandeEquipe t) => switch (t) {
         TypeDemandeEquipe.conge => 'un congé',
         TypeDemandeEquipe.absencePlanifiee => 'une absence planifiée',
+        TypeDemandeEquipe.autre => 'une demande',
       };
 
   @override
@@ -68,13 +83,17 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
     try {
       final data = await SupabaseService.client
           .from(SupabaseService.demandesEquipe)
-          .select(_join)
+          .select(_selection)
           .eq('employee_id', employeeId)
           .order('date_creation', ascending: false);
       return (data as List)
           .map((j) => DemandeEquipeModel.fromJson(j as Map<String, dynamic>))
           .toList();
     } catch (e) {
+      if (_preuvesAbsentes(e)) {
+        _preuvesDisponibles = false;
+        return getMesDemandes(employeeId);
+      }
       throw ServerException('Erreur chargement demandes : $e');
     }
   }
@@ -100,7 +119,7 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
             'motif': motif.trim(),
             'statut': 'EnAttente',
           })
-          .select(_join)
+          .select(_selection)
           .single();
       final demande = DemandeEquipeModel.fromJson(data);
 
@@ -122,12 +141,16 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
     try {
       final data = await SupabaseService.client
           .from(SupabaseService.demandesEquipe)
-          .select(_join)
+          .select(_selection)
           .order('date_creation', ascending: false);
       return (data as List)
           .map((j) => DemandeEquipeModel.fromJson(j as Map<String, dynamic>))
           .toList();
     } catch (e) {
+      if (_preuvesAbsentes(e)) {
+        _preuvesDisponibles = false;
+        return getAllDemandes();
+      }
       throw ServerException('Erreur chargement toutes demandes : $e');
     }
   }
@@ -136,7 +159,7 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
   Future<DemandeEquipeModel> traiterDemande({
     required String demandeId,
     required String traiteParId,
-    required bool approuve,
+    required bool? approuve,
     String? note,
   }) async {
     try {
@@ -150,13 +173,15 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
             'date_traitement': DateTime.now().toIso8601String(),
           })
           .eq('id', demandeId)
-          .select(_join)
+          .select(_selection)
           .single();
       final demande = DemandeEquipeModel.fromJson(data);
 
-      final message = approuve
-          ? 'Votre demande de ${_typeLabel(demande.type)} a été approuvée.'
-          : 'Votre demande de ${_typeLabel(demande.type)} a été refusée.';
+      final message = switch (approuve) {
+        true => 'Votre demande de ${_typeLabel(demande.type)} a été approuvée.',
+        false => 'Votre demande de ${_typeLabel(demande.type)} a été refusée.',
+        null => 'Votre demande a été vue par le responsable.',
+      };
 
       await _notifierEmploye(
         demande.employeeId,
@@ -190,7 +215,9 @@ class DemandeEquipeDatasourceImpl implements DemandeEquipeDatasource {
           );
     } on StorageException catch (e) {
       throw ServerException(
-        e.message.isNotEmpty ? e.message : "Le document n'a pas pu être envoyé.",
+        e.message.isNotEmpty
+            ? e.message
+            : "Le document n'a pas pu être envoyé.",
       );
     } catch (_) {
       throw const ServerException("Le document n'a pas pu être envoyé.");

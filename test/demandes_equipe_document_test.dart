@@ -92,7 +92,7 @@ class _FakeRepo implements DemandeEquipeRepository {
   Future<Either<Failure, DemandeEquipe>> traiterDemande({
     required String demandeId,
     required String traiteParId,
-    required bool approuve,
+    required bool? approuve,
     String? note,
   }) async =>
       throw UnimplementedError();

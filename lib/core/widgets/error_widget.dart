@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import '../constants/app_sizes.dart';
 import '../errors/user_friendly_error.dart';
+import 'notification_app.dart';
 
 class AppErrorNotice extends StatelessWidget {
   final Object? error;
   final VoidCallback? onRetry;
   final String retryLabel;
-  final bool compact;
 
   const AppErrorNotice({
     super.key,
     required this.error,
     this.onRetry,
     this.retryLabel = 'Réessayer',
-    this.compact = false,
   });
 
   @override
@@ -28,32 +27,30 @@ class AppErrorNotice extends StatelessWidget {
       child: Container(
         width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 560),
-        padding: EdgeInsets.all(compact ? AppSizes.md : AppSizes.lg),
+        padding: const EdgeInsets.all(AppSizes.lg),
         decoration: BoxDecoration(
           color: colors.background,
           borderRadius: BorderRadius.circular(AppSizes.radiusLg),
           border: Border.all(color: colors.border),
-          boxShadow: compact
-              ? null
-              : [
-                  BoxShadow(
-                    color: colors.foreground.withValues(alpha: 0.08),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: colors.foreground.withValues(alpha: 0.08),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: compact ? 40 : 48,
-              height: compact ? 40 : 48,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: colors.foreground.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               ),
-              child: Icon(icon, color: colors.foreground, size: compact ? 22 : 26),
+              child: Icon(icon, color: colors.foreground, size: 26),
             ),
             const SizedBox(width: AppSizes.md),
             Expanded(
@@ -65,7 +62,7 @@ class AppErrorNotice extends StatelessWidget {
                     content.title,
                     style: TextStyle(
                       color: colors.title,
-                      fontSize: compact ? 14 : 16,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -75,7 +72,7 @@ class AppErrorNotice extends StatelessWidget {
                     style: TextStyle(
                       color: colors.title.withValues(alpha: 0.78),
                       height: 1.4,
-                      fontSize: compact ? 13 : 14,
+                      fontSize: 14,
                     ),
                   ),
                   if (onRetry != null) ...[
@@ -108,22 +105,8 @@ class AppErrorNotice extends StatelessWidget {
 class AppFeedback {
   AppFeedback._();
 
-  static void showError(BuildContext context, Object? error) {
-    final messenger = ScaffoldMessenger.of(context);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          margin: const EdgeInsets.all(AppSizes.md),
-          padding: EdgeInsets.zero,
-          duration: const Duration(seconds: 5),
-          content: AppErrorNotice(error: error, compact: true),
-        ),
-      );
-  }
+  static void showError(BuildContext context, Object? error) =>
+      NotificationApp.depuisErreur(context, error);
 }
 
 ({Color background, Color border, Color foreground, Color title}) _colorsFor(

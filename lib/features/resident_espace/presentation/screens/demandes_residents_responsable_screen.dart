@@ -1,25 +1,37 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/dialogue_app.dart';
+import '../../../../core/widgets/error_widget.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/export_menu_button.dart'
+    show showExportSuccess;
+import '../../../../core/widgets/mise_en_page.dart';
+import '../../../../core/widgets/notification_app.dart';
+import '../../../appartements/presentation/widgets/appartement_list_item.dart'
+    show comparerNumeros;
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../messages_reception_responsable/presentation/providers/messages_reception_responsable_provider.dart';
 import '../../../messages_reception_responsable/presentation/widgets/messages_reception_section.dart';
+import '../../../pdf/domain/usecases/generate_demandes_residents_export.dart';
+import '../../../pdf/presentation/screens/demandes_residents_pdf_preview_screen.dart';
+import '../../../photo_profil/domain/photo_profil_models.dart';
+import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/demande_resident.dart';
 import '../providers/demandes_responsable_provider.dart';
+import '../widgets/demande_resident_elements.dart';
 
-enum _StatutFiltre { tous, enAttente, repondues, resolues }
+enum _Statut { toutes, aTraiter, attenteResident, resolues }
+
+enum _Tri { priorite, envoi, resident, appartement, etat }
 
 /// Les deux listes de l'écran : les demandes venues du portail des résidents et
 /// les messages que la Réception transmet au responsable.
 enum _Onglet { demandes, messages }
-
-String _typeLabelFor(TypeDemande t) => switch (t) {
-      TypeDemande.reprogrammer => 'Reprogrammer',
-      TypeDemande.annuler => 'Annuler',
-      TypeDemande.commentaire => 'Commentaire',
-      TypeDemande.infoAppartement => 'Infos appartement',
-    };
 
 class DemandesResidentsResponsableScreen extends ConsumerStatefulWidget {
   /// Ouvre directement l'onglet « Messages de la réception » (par exemple depuis
@@ -40,147 +52,354 @@ class _DemandesResidentsResponsableScreenState
     extends ConsumerState<DemandesResidentsResponsableScreen> {
   late _Onglet _onglet =
       widget.ouvrirMessages ? _Onglet.messages : _Onglet.demandes;
-  _StatutFiltre _statutFiltre = _StatutFiltre.tous;
-  TypeDemande? _typeFiltre;
+  _Statut _statut = _Statut.toutes;
+  TypeDemande? _type;
+  String _recherche = '';
+  _Tri _tri = _Tri.priorite;
+  bool _croissant = false;
+  int _page = 0;
+  int _parPage = 10;
 
-  List<DemandeResident> _filtrer(List<DemandeResident> demandes) {
-    return demandes.where((d) {
-      final matchStatut = switch (_statutFiltre) {
-        _StatutFiltre.tous => true,
-        _StatutFiltre.enAttente => d.enAttente,
-        _StatutFiltre.repondues => d.repondue,
-        _StatutFiltre.resolues => d.resolue,
+  /// `null` : choisi selon la largeur (grille sur téléphone, tableau sinon).
+  ModeAffichage? _mode;
+
+  DemandesResponsableNotifier get _notifier =>
+      ref.read(demandesResponsableProvider.notifier);
+
+  Future<void> _charger() => _notifier.charger();
+
+  void _changer(VoidCallback maj) => setState(() {
+        maj();
+        _page = 0;
+      });
+
+  void _trier(_Tri tri) => _changer(() {
+        _croissant = _tri == tri
+            ? !_croissant
+            : (tri == _Tri.resident || tri == _Tri.appartement);
+        _tri = tri;
+      });
+
+  bool _duStatut(DemandeResident d) => switch (_statut) {
+        _Statut.toutes => true,
+        _Statut.aTraiter => aTraiterDemande(d),
+        _Statut.attenteResident => d.attendsReponseResident,
+        _Statut.resolues => d.resolue,
       };
-      final matchType = _typeFiltre == null || d.type == _typeFiltre;
-      return matchStatut && matchType;
-    }).toList();
+
+  /// Rang de l'état pour le tri : ce qui attend le responsable d'abord.
+  static int _rangEtat(DemandeResident d) => d.enAttente
+      ? 0
+      : refuseeParResident(d)
+          ? 1
+          : d.repondue
+              ? 2
+              : 3;
+
+  List<DemandeResident> _lignes(List<DemandeResident> toutes) {
+    final q = _recherche.trim().toLowerCase();
+    int parEnvoi(DemandeResident a, DemandeResident b) =>
+        a.createdAt.compareTo(b.createdAt);
+    int sens(int c) => _croissant ? c : -c;
+    return toutes.where((d) {
+      if (!_duStatut(d)) return false;
+      if (_type != null && d.type != _type) return false;
+      if (q.isEmpty) return true;
+      return nomResidentDemande(d).toLowerCase().contains(q) ||
+          (d.numeroAppartement?.toLowerCase().contains(q) ?? false) ||
+          d.motif.toLowerCase().contains(q) ||
+          (d.reponse?.toLowerCase().contains(q) ?? false);
+    }).toList()
+      ..sort((a, b) => switch (_tri) {
+            // À traiter d'abord (urgentes en tête), puis les plus récentes.
+            _Tri.priorite => aTraiterDemande(a) != aTraiterDemande(b)
+                ? (aTraiterDemande(a) ? -1 : 1)
+                : a.estUrgente != b.estUrgente
+                    ? (a.estUrgente ? -1 : 1)
+                    : -parEnvoi(a, b),
+            _Tri.envoi => sens(parEnvoi(a, b)),
+            _Tri.resident => sens(nomResidentDemande(a)
+                .toLowerCase()
+                .compareTo(nomResidentDemande(b).toLowerCase())),
+            _Tri.appartement => sens(comparerNumeros(
+                a.numeroAppartement ?? '', b.numeroAppartement ?? '')),
+            _Tri.etat => sens(_rangEtat(a).compareTo(_rangEtat(b))),
+          });
   }
+
+  String _descriptionFiltres() {
+    final f = <String>[
+      if (_statut == _Statut.aTraiter) 'À traiter',
+      if (_statut == _Statut.attenteResident) 'Attendent le résident',
+      if (_statut == _Statut.resolues) 'Résolues',
+      if (_type != null) libelleTypeDemandeResident(_type!),
+      if (_recherche.trim().isNotEmpty) '« ${_recherche.trim()} »',
+    ];
+    return f.isEmpty ? 'Toutes les demandes' : f.join(' · ');
+  }
+
+  // ── Actions ────────────────────────────────────────────
+
+  void _ouvrirDetail(DemandeResident d) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _DetailDemande(
+        demande: d,
+        onAgir: (action) {
+          Navigator.of(ctx).pop();
+          _agir(d, action);
+        },
+      ),
+    );
+  }
+
+  Future<void> _agir(DemandeResident d, _Action action) async {
+    final message = await showDialog<String>(
+      context: context,
+      builder: (_) => switch (action) {
+        _Action.repondre => _RepondreDialog(demande: d),
+        _Action.validerInfo => _ValiderInfoDialog(demande: d),
+        _Action.refuserInfo => _RefuserInfoDialog(demande: d),
+      },
+    );
+    if (message != null && mounted) NotificationApp.succes(context, message);
+  }
+
+  void _exporterPdf(List<DemandeResident> lignes) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DemandesResidentsPdfPreviewScreen(
+          demandes: lignes,
+          filtres: _descriptionFiltres(),
+          generatedBy:
+              ref.read(employeeCourantProvider)?.nomComplet ?? 'CleanOps',
+        ),
+      ),
+    );
+  }
+
+  void _exporterExcel(List<DemandeResident> lignes) {
+    try {
+      const GenerateDemandesResidentsExcel()(
+        demandes: lignes,
+        filtres: _descriptionFiltres(),
+      );
+      showExportSuccess(
+          context, 'Le suivi Excel des demandes a été téléchargé.');
+    } catch (error) {
+      AppFeedback.showError(context, error);
+    }
+  }
+
+  // ── Construction ───────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(demandesResponsableProvider);
-    final filtrees = _filtrer(state.demandes);
-    final filtresActifs =
-        _statutFiltre != _StatutFiltre.tous || _typeFiltre != null;
+    final aTraiter = state.demandes.where(aTraiterDemande).length;
+    final messagesEnAttente = ref.watch(messagesReceptionEnAttenteProvider);
+    final marge = estCompact(context) ? 12.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
-        backgroundColor: AppColors.rouge,
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            const Text(
-              'Demandes résidents',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-              ),
-            ),
-            if (state.badgeEnAttente > 0) ...[
-              const SizedBox(width: AppSizes.sm),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${state.badgeEnAttente}',
-                  style: const TextStyle(
-                    color: AppColors.rouge,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          if (state.isLoading && _onglet == _Onglet.demandes)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-              tooltip: 'Actualiser',
-              onPressed: () => _onglet == _Onglet.messages
-                  ? ref.invalidate(messagesReceptionResponsableProvider)
-                  : ref.read(demandesResponsableProvider.notifier).charger(),
-            ),
-        ],
+    final sousTitre = [
+      aTraiter == 0
+          ? 'Aucune demande à traiter'
+          : '$aTraiter demande${aTraiter > 1 ? 's' : ''} à traiter',
+      if (messagesEnAttente > 0)
+        '$messagesEnAttente message${messagesEnAttente > 1 ? 's' : ''} '
+            'de la réception',
+    ].join(' · ');
+
+    return PageAvecEnTete(
+      chargement: _onglet == _Onglet.demandes && state.isLoading,
+      enTete: EnTetePage(
+        icone: Icons.forum_rounded,
+        titre: 'Demandes résidents',
+        sousTitre: sousTitre,
       ),
-      body: Column(
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _OngletBar(
+          _Onglets(
             onglet: _onglet,
+            marge: marge,
+            aTraiter: aTraiter,
+            messages: messagesEnAttente,
             onChanged: (o) => setState(() => _onglet = o),
           ),
           Expanded(
             child: _onglet == _Onglet.messages
                 ? const MessagesReceptionSection()
-                : Column(
-        children: [
-          _FiltreBar(
-            statutFiltre: _statutFiltre,
-            typeFiltre: _typeFiltre,
-            onStatutChanged: (s) => setState(() => _statutFiltre = s),
-            onTypeChanged: (t) => setState(() => _typeFiltre = t),
+                : _contenuDemandes(state, marge),
           ),
-          if (state.isLoading && state.demandes.isEmpty)
-            const Expanded(child: AppSkeletonList())
-          else if (state.demandes.isEmpty)
-            Expanded(child: _Empty())
-          else if (filtrees.isEmpty)
-            Expanded(
-              child: _EmptyFiltre(
-                onReinitialiser: () => setState(() {
-                  _statutFiltre = _StatutFiltre.tous;
-                  _typeFiltre = null;
-                }),
-              ),
-            )
-          else
-            Expanded(
-              child: RefreshIndicator(
-                color: AppColors.rouge,
-                onRefresh: () => ref
-                    .read(demandesResponsableProvider.notifier)
-                    .charger(),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final hPad = constraints.maxWidth >= 900
-                        ? (constraints.maxWidth - 680) / 2
-                        : AppSizes.md.toDouble();
-                    return filtresActifs
-                        ? ListView.separated(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: hPad, vertical: AppSizes.md),
-                            itemCount: filtrees.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: AppSizes.sm),
-                            itemBuilder: (_, i) =>
-                                _DemandeCard(demande: filtrees[i]),
-                          )
-                        : _SectionsGroupees(
-                            demandes: filtrees, hPad: hPad);
-                  },
-                ),
-              ),
-            ),
         ],
       ),
+    );
+  }
+
+  Widget _contenuDemandes(DemandesResponsableState state, double marge) {
+    final compact = estCompact(context);
+    final mode =
+        compact ? ModeAffichage.grille : (_mode ?? ModeAffichage.tableau);
+    final toutes = state.demandes;
+    final lignes = _lignes(toutes);
+    final nbPages = lignes.isEmpty ? 1 : ((lignes.length - 1) ~/ _parPage) + 1;
+    final page = _page.clamp(0, nbPages - 1);
+    final visibles = lignes.skip(page * _parPage).take(_parPage).toList();
+    final aTraiter = toutes.where(aTraiterDemande).length;
+
+    FiltreSection filtre(_Statut s, IconData icone, String info,
+            {bool pastille = false}) =>
+        FiltreSection(
+          icone: icone,
+          infoBulle: info,
+          actif: _statut == s,
+          pastille: pastille,
+          onTap: () => _changer(() => _statut = s),
+        );
+
+    final recherche = ChampRecherche(
+      indice: 'Rechercher un résident, un appartement ou un motif',
+      onChanged: (v) => _changer(() => _recherche = v),
+    );
+
+    Widget corps;
+    if (state.isLoading && toutes.isEmpty) {
+      corps = const Padding(
+        padding: EdgeInsets.only(top: 60),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
+    } else if (state.error != null && toutes.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: AppErrorNotice(error: state.error!, onRetry: _charger),
+      );
+    } else if (toutes.isEmpty) {
+      corps = const _EtatVide(
+        titre: 'Aucune demande de résident',
+        texte: 'Les reprogrammations, annulations, commentaires et infos '
+            'd’appartement envoyés depuis l’espace résident apparaîtront ici.',
+      );
+    } else if (lignes.isEmpty) {
+      corps = _EtatVide(
+        titre: _statut == _Statut.aTraiter
+            ? 'Rien à traiter'
+            : 'Aucune demande ne correspond',
+        texte: _statut == _Statut.aTraiter
+            ? 'Toutes les demandes ont reçu une réponse.'
+            : 'Modifiez les filtres ou la recherche.',
+        onReinitialiser: _statut == _Statut.aTraiter
+            ? null
+            : () => _changer(() {
+                  _statut = _Statut.toutes;
+                  _type = null;
+                }),
+      );
+    } else {
+      corps = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mode == ModeAffichage.tableau)
+            _TableauDemandes(
+              lignes: visibles,
+              premierNumero: page * _parPage + 1,
+              tri: _tri,
+              croissant: _croissant,
+              onTrier: _trier,
+              onOuvrir: _ouvrirDetail,
+              onAgir: _agir,
+            )
+          else
+            _GrilleDemandes(
+              lignes: visibles,
+              onOuvrir: _ouvrirDetail,
+              onAgir: _agir,
+            ),
+          const SizedBox(height: AppSizes.md),
+          BarrePagination(
+            page: page,
+            parPage: _parPage,
+            total: lignes.length,
+            onPage: (p) => setState(() => _page = p),
+            onParPage: (n) => _changer(() => _parPage = n),
           ),
+        ],
+      );
+    }
+
+    return RefreshIndicator(
+      color: AppColors.rouge,
+      onRefresh: _charger,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+            .plusBarre(context),
+        children: [
+          BarreSection(
+            titre: 'Demandes (${lignes.length})',
+            onRetour: () => context.backOrHome(AppRoutes.employerDashboard),
+            filtres: [
+              filtre(_Statut.toutes, Icons.list_alt_rounded,
+                  'Toutes les demandes'),
+              filtre(_Statut.aTraiter, Icons.hourglass_top_rounded,
+                  'À traiter (en attente ou créneau refusé)',
+                  pastille: aTraiter > 0),
+              filtre(_Statut.attenteResident, Icons.schedule_rounded,
+                  'Attendent la réponse du résident'),
+              filtre(_Statut.resolues, Icons.task_alt_rounded, 'Résolues'),
+            ],
+            actions: [
+              ActionSection(
+                icone: Icons.print_rounded,
+                infoBulle: 'Imprimer ou exporter en PDF',
+                onPressed: lignes.isEmpty || state.isLoading
+                    ? null
+                    : () => _exporterPdf(lignes),
+              ),
+              ActionSection(
+                icone: Icons.download_rounded,
+                infoBulle: 'Télécharger en Excel',
+                onPressed: lignes.isEmpty || state.isLoading
+                    ? null
+                    : () => _exporterExcel(lignes),
+              ),
+              ActionSection(
+                icone: Icons.refresh_rounded,
+                infoBulle: 'Actualiser',
+                onPressed: state.isLoading ? null : _charger,
+              ),
+            ],
+          ),
+          if (toutes.isNotEmpty) ...[
+            const SizedBox(height: AppSizes.md),
+            _FiltreTypes(
+              demandes: toutes.where(_duStatut).toList(),
+              selection: _type,
+              onChanged: (t) => _changer(() => _type = t),
+            ),
+            const SizedBox(height: AppSizes.md),
+            if (compact)
+              recherche
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: recherche,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  BasculeAffichage(
+                    mode: mode,
+                    onChanged: (m) => setState(() => _mode = m),
+                  ),
+                ],
+              ),
+          ],
+          const SizedBox(height: AppSizes.md),
+          corps,
         ],
       ),
     );
@@ -189,32 +408,44 @@ class _DemandesResidentsResponsableScreenState
 
 // ── Onglets : demandes des résidents / messages de la réception ──
 
-class _OngletBar extends ConsumerWidget {
+class _Onglets extends StatelessWidget {
   final _Onglet onglet;
+  final double marge;
+  final int aTraiter;
+  final int messages;
   final ValueChanged<_Onglet> onChanged;
 
-  const _OngletBar({required this.onglet, required this.onChanged});
+  const _Onglets({
+    required this.onglet,
+    required this.marge,
+    required this.aTraiter,
+    required this.messages,
+    required this.onChanged,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final enAttente = ref.watch(messagesReceptionEnAttenteProvider);
-
+  Widget build(BuildContext context) {
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(
-          AppSizes.md, AppSizes.sm, AppSizes.md, 0),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.grisMedium)),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: marge),
       child: Row(
         children: [
-          _OngletTab(
-            label: 'Demandes des résidents',
-            selected: onglet == _Onglet.demandes,
+          _Onglet1(
+            icone: Icons.forum_outlined,
+            libelle: 'Demandes des résidents',
+            compteur: aTraiter,
+            actif: onglet == _Onglet.demandes,
             onTap: () => onChanged(_Onglet.demandes),
           ),
-          const SizedBox(width: AppSizes.sm),
-          _OngletTab(
-            label: 'Messages de la réception',
-            compteur: enAttente,
-            selected: onglet == _Onglet.messages,
+          const SizedBox(width: AppSizes.md),
+          _Onglet1(
+            icone: Icons.support_agent_rounded,
+            libelle: 'Messages de la réception',
+            compteur: messages,
+            actif: onglet == _Onglet.messages,
             onTap: () => onChanged(_Onglet.messages),
           ),
         ],
@@ -223,30 +454,33 @@ class _OngletBar extends ConsumerWidget {
   }
 }
 
-class _OngletTab extends StatelessWidget {
-  final String label;
+class _Onglet1 extends StatelessWidget {
+  final IconData icone;
+  final String libelle;
   final int compteur;
-  final bool selected;
+  final bool actif;
   final VoidCallback onTap;
 
-  const _OngletTab({
-    required this.label,
-    required this.selected,
+  const _Onglet1({
+    required this.icone,
+    required this.libelle,
+    required this.compteur,
+    required this.actif,
     required this.onTap,
-    this.compteur = 0,
   });
 
   @override
   Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.rouge : AppColors.grisDark;
     return Flexible(
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: selected ? AppColors.rouge : Colors.transparent,
+                color: actif ? AppColors.rouge : Colors.transparent,
                 width: 2.5,
               ),
             ),
@@ -254,14 +488,18 @@ class _OngletTab extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!estCompact(context)) ...[
+                Icon(icone, size: 18, color: couleur),
+                const SizedBox(width: 8),
+              ],
               Flexible(
                 child: Text(
-                  label,
+                  libelle,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    color: selected ? AppColors.rouge : AppColors.grisDark,
+                    fontSize: 13.5,
+                    fontWeight: actif ? FontWeight.w700 : FontWeight.w500,
+                    color: couleur,
                   ),
                 ),
               ),
@@ -271,7 +509,7 @@ class _OngletTab extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.rouge,
+                    color: actif ? AppColors.rouge : AppColors.grisDark,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -292,162 +530,625 @@ class _OngletTab extends StatelessWidget {
   }
 }
 
-// ── Sections groupées par statut (vue par défaut, sans filtre) ──
+// ── Filtre par type (avec effectifs) ───────────────────────
 
-class _SectionsGroupees extends StatelessWidget {
+class _FiltreTypes extends StatelessWidget {
   final List<DemandeResident> demandes;
-  final double hPad;
-  const _SectionsGroupees({required this.demandes, required this.hPad});
+  final TypeDemande? selection;
+  final ValueChanged<TypeDemande?> onChanged;
+
+  const _FiltreTypes({
+    required this.demandes,
+    required this.selection,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final enAttente = demandes.where((d) => d.enAttente).toList();
-    final repondues = demandes.where((d) => d.repondue).toList();
-    final resolues = demandes.where((d) => d.resolue).toList();
+    _TuileType tuile(TypeDemande? t) {
+      final dans =
+          t == null ? demandes : demandes.where((d) => d.type == t).toList();
+      return _TuileType(
+        icone: t == null ? Icons.apps_rounded : iconeTypeDemandeResident(t),
+        couleur: t == null ? AppColors.rouge : couleurTypeDemandeResident(t),
+        libelle: t == null ? 'Tous les types' : libelleTypeDemandeResident(t),
+        nombre: dans.length,
+        aTraiter: dans.where(aTraiterDemande).length,
+        actif: selection == t,
+        onTap: () => onChanged(selection == t ? null : t),
+      );
+    }
 
-    return ListView(
-      padding:
-          EdgeInsets.symmetric(horizontal: hPad, vertical: AppSizes.md),
+    final tuiles = [tuile(null), for (final t in TypeDemande.values) tuile(t)];
+
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      const minimum = 170.0;
+      final tiennent =
+          c.maxWidth >= tuiles.length * minimum + ecart * (tuiles.length - 1);
+      if (tiennent) {
+        return Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              Expanded(child: t),
+            ],
+          ],
+        );
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              SizedBox(width: minimum, child: t),
+            ],
+          ],
+        ),
+      );
+    });
+  }
+}
+
+class _TuileType extends StatelessWidget {
+  final IconData icone;
+  final Color couleur;
+  final String libelle;
+  final int nombre;
+  final int aTraiter;
+  final bool actif;
+  final VoidCallback onTap;
+
+  const _TuileType({
+    required this.icone,
+    required this.couleur,
+    required this.libelle,
+    required this.nombre,
+    required this.aTraiter,
+    required this.actif,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: actif ? AppColors.rouge.withValues(alpha: 0.06) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: actif ? AppColors.rouge : AppColors.grisMedium,
+          width: actif ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: couleur.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icone, size: 17, color: couleur),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '$nombre',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.noir,
+                            height: 1.1,
+                          ),
+                        ),
+                        if (aTraiter > 0) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.aVerifier.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$aTraiter à traiter',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.aVerifier,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      libelle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: actif ? FontWeight.w700 : FontWeight.w500,
+                        color: actif ? AppColors.rouge : AppColors.grisDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Éléments communs ───────────────────────────────────────
+
+/// Ce que le responsable peut faire d'une demande à traiter.
+enum _Action { repondre, validerInfo, refuserInfo }
+
+class _Resident extends StatelessWidget {
+  final DemandeResident demande;
+  final double rayon;
+
+  /// Affiche l'appartement sous le nom.
+  final bool avecAppartement;
+
+  const _Resident(this.demande, {this.rayon = 15, this.avecAppartement = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final nom = nomResidentDemande(demande);
+    final apt = appartementDemande(demande);
+    final initiales = nom
+        .split(' ')
+        .where((p) => p.isNotEmpty)
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
+    return Row(
       children: [
-        if (enAttente.isNotEmpty) ...[
-          _SectionHeader('En attente (${enAttente.length})'),
-          const SizedBox(height: AppSizes.sm),
-          ...enAttente.map((d) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                child: _DemandeCard(demande: d),
-              )),
-          const SizedBox(height: AppSizes.md),
-        ],
-        if (repondues.isNotEmpty) ...[
-          const _SectionHeader('En attente de réponse résident'),
-          const SizedBox(height: AppSizes.sm),
-          ...repondues.map((d) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                child: _DemandeCard(demande: d),
-              )),
-          const SizedBox(height: AppSizes.md),
-        ],
-        if (resolues.isNotEmpty) ...[
-          const _SectionHeader('Résolues'),
-          const SizedBox(height: AppSizes.sm),
-          ...resolues.map((d) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                child: _DemandeCard(demande: d),
-              )),
-        ],
+        AvatarProfil(
+          proprietaire: ProprietairePhoto(
+              TypeProprietairePhoto.resident, demande.residentId),
+          initiales: initiales.isEmpty ? '?' : initiales,
+          rayon: rayon,
+          couleurFond: AppColors.rouge.withValues(alpha: 0.12),
+          couleurTexte: AppColors.rouge,
+          tailleTexte: rayon * 0.7,
+          poidsTexte: FontWeight.bold,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                nom,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: rayon > 16 ? 14.5 : 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.noir,
+                ),
+              ),
+              if (avecAppartement && apt != null)
+                Text(
+                  demande.tailleAppartement == null
+                      ? apt
+                      : '$apt · ${demande.tailleAppartement}',
+                  style:
+                      const TextStyle(fontSize: 12, color: AppColors.grisDark),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-// ── Barre de filtres ──────────────────────────────────────
+/// Boutons d'action d'une demande à traiter.
+class _BoutonsAction extends StatelessWidget {
+  final DemandeResident demande;
+  final ValueChanged<_Action> onAgir;
+  final bool compacts;
 
-class _FiltreBar extends StatelessWidget {
-  final _StatutFiltre statutFiltre;
-  final TypeDemande? typeFiltre;
-  final ValueChanged<_StatutFiltre> onStatutChanged;
-  final ValueChanged<TypeDemande?> onTypeChanged;
-
-  const _FiltreBar({
-    required this.statutFiltre,
-    required this.typeFiltre,
-    required this.onStatutChanged,
-    required this.onTypeChanged,
+  const _BoutonsAction({
+    required this.demande,
+    required this.onAgir,
+    this.compacts = false,
   });
-
-  static const _statuts = [
-    (_StatutFiltre.tous, 'Tous'),
-    (_StatutFiltre.enAttente, 'En attente'),
-    (_StatutFiltre.repondues, 'Répondues'),
-    (_StatutFiltre.resolues, 'Résolues'),
-  ];
 
   @override
   Widget build(BuildContext context) {
+    final info = demande.type == TypeDemande.infoAppartement;
+    final libelleRepondre =
+        refuseeParResident(demande) ? 'Nouvelle proposition' : 'Répondre';
+
+    if (compacts) {
+      if (info) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Refuser',
+              onPressed: () => onAgir(_Action.refuserInfo),
+              icon: const Icon(Icons.close_rounded, color: AppColors.refus),
+            ),
+            IconButton(
+              tooltip: 'Valider et appliquer',
+              onPressed: () => onAgir(_Action.validerInfo),
+              icon: const Icon(Icons.check_rounded, color: AppColors.fait),
+            ),
+          ],
+        );
+      }
+      return IconButton(
+        tooltip: libelleRepondre,
+        onPressed: () => onAgir(_Action.repondre),
+        icon: const Icon(Icons.reply_rounded, color: AppColors.rouge),
+      );
+    }
+
+    const forme = StadiumBorder();
+    if (info) {
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => onAgir(_Action.refuserInfo),
+              icon: const Icon(Icons.close_rounded, size: 17),
+              label: const Text('Refuser'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.refus,
+                side: const BorderSide(color: AppColors.refus),
+                shape: forme,
+                minimumSize: const Size(0, 42),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSizes.sm),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () => onAgir(_Action.validerInfo),
+              icon: const Icon(Icons.check_rounded, size: 17),
+              label: const Text('Valider'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.fait,
+                shape: forme,
+                minimumSize: const Size(0, 42),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: () => onAgir(_Action.repondre),
+        icon: const Icon(Icons.reply_rounded, size: 17),
+        label: Text(libelleRepondre),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.rouge,
+          shape: forme,
+          minimumSize: const Size(0, 42),
+        ),
+      ),
+    );
+  }
+}
+
+/// Proposition d'infos appartement faite par le résident (animal, notes).
+class _PropositionInfo extends StatelessWidget {
+  final DemandeResident demande;
+  const _PropositionInfo({required this.demande});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = demande;
+    final animal = d.propositionHasAnimal;
+    final notes = d.propositionNotes?.trim() ?? '';
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.md, vertical: AppSizes.sm),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.aVerifier.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.aVerifier.withValues(alpha: 0.3)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _statuts
-                  .map((s) => _ChipFiltre(
-                        label: s.$2,
-                        selected: statutFiltre == s.$1,
-                        onTap: () => onStatutChanged(s.$1),
-                      ))
-                  .toList(),
-            ),
+          const Text(
+            'Proposé par le résident',
+            style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.grisDark),
           ),
-          const SizedBox(height: AppSizes.xs),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _ChipFiltre(
-                  label: 'Tous types',
-                  selected: typeFiltre == null,
-                  outlined: true,
-                  onTap: () => onTypeChanged(null),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(animal == true ? Icons.pets_rounded : Icons.block_rounded,
+                  size: 15,
+                  color: animal == true
+                      ? AppColors.aVerifier
+                      : AppColors.grisText),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  animal == true
+                      ? ((d.propositionTypeAnimal?.isNotEmpty ?? false)
+                          ? 'Animal : ${d.propositionTypeAnimal}'
+                          : 'Animal présent')
+                      : 'Pas d’animal',
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.noir),
                 ),
-                ...TypeDemande.values.map((t) => _ChipFiltre(
-                      label: _typeLabelFor(t),
-                      selected: typeFiltre == t,
-                      outlined: true,
-                      onTap: () => onTypeChanged(typeFiltre == t ? null : t),
-                    )),
+              ),
+            ],
+          ),
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.notes_rounded,
+                    size: 15, color: AppColors.grisDark),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(notes,
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.grisDark)),
+                ),
               ],
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _ChipFiltre extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final bool outlined;
-  final VoidCallback onTap;
+/// Réponse du responsable, créneau proposé et retour du résident.
+class _BlocReponse extends StatelessWidget {
+  final DemandeResident demande;
+  const _BlocReponse({required this.demande});
 
-  const _ChipFiltre({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.outlined = false,
+  @override
+  Widget build(BuildContext context) {
+    final d = demande;
+    final proposition = propositionDemande(d);
+    final accepte = d.residentAccepte;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.rouge.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.rouge.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.reply_rounded, size: 15, color: AppColors.rouge),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  d.dateReponse == null
+                      ? 'Votre réponse'
+                      : 'Votre réponse · ${dateCourteDemande(d.dateReponse!)}',
+                  style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.rouge),
+                ),
+              ),
+            ],
+          ),
+          if (d.reponse?.trim().isNotEmpty ?? false) ...[
+            const SizedBox(height: 4),
+            Text(d.reponse!,
+                style: const TextStyle(
+                    fontSize: 12.5, height: 1.35, color: AppColors.noir)),
+          ],
+          if (proposition != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.event_available_rounded,
+                    size: 15, color: AppColors.grisDark),
+                const SizedBox(width: 6),
+                Text('Créneau proposé : $proposition',
+                    style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.grisDark)),
+              ],
+            ),
+          ],
+          // Accepté / refusé n'a de sens que pour un créneau proposé.
+          if (accepte != null && proposition != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(
+                    accepte ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                    size: 15,
+                    color: accepte ? AppColors.fait : AppColors.refus),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    accepte
+                        ? 'Le résident a accepté.'
+                        : 'Le résident a refusé — nouvelle proposition requise.',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: accepte ? AppColors.fait : AppColors.refus),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Vide extends StatelessWidget {
+  const _Vide();
+
+  @override
+  Widget build(BuildContext context) => const Text('—',
+      style: TextStyle(fontSize: 13, color: AppColors.grisText));
+}
+
+// ── Tableau ────────────────────────────────────────────────
+
+const _styleEnTete = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+  color: AppColors.grisDark,
+);
+
+class _TableauDemandes extends StatelessWidget {
+  final List<DemandeResident> lignes;
+  final int premierNumero;
+  final _Tri tri;
+  final bool croissant;
+  final ValueChanged<_Tri> onTrier;
+  final ValueChanged<DemandeResident> onOuvrir;
+  final void Function(DemandeResident, _Action) onAgir;
+
+  const _TableauDemandes({
+    required this.lignes,
+    required this.premierNumero,
+    required this.tri,
+    required this.croissant,
+    required this.onTrier,
+    required this.onOuvrir,
+    required this.onAgir,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.rouge.withValues(alpha: 0.1)
-                : (outlined ? Colors.white : AppColors.grisLight),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? AppColors.rouge : AppColors.grisMedium,
+    Widget entete(String libelle, _Tri t) => _EnTeteTri(
+          libelle: libelle,
+          actif: tri == t,
+          croissant: croissant,
+          onTap: () => onTrier(t),
+        );
+
+    return CarteContenu(
+      child: Column(
+        children: [
+          Container(
+            color: const Color(0xFFF7F8FA),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const SizedBox(
+                    width: 36, child: Text('N°', style: _styleEnTete)),
+                Expanded(flex: 3, child: entete('Résident', _Tri.resident)),
+                Expanded(flex: 1, child: entete('Apt', _Tri.appartement)),
+                const Expanded(
+                    flex: 2, child: Text('Type', style: _styleEnTete)),
+                const Expanded(
+                    flex: 2, child: Text('Ménage visé', style: _styleEnTete)),
+                const Expanded(
+                    flex: 4, child: Text('Motif', style: _styleEnTete)),
+                Expanded(flex: 2, child: entete('Envoyée le', _Tri.envoi)),
+                Expanded(flex: 2, child: entete('État', _Tri.etat)),
+                const SizedBox(
+                  width: 104,
+                  child: Text('Actions',
+                      textAlign: TextAlign.center, style: _styleEnTete),
+                ),
+              ],
             ),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? AppColors.rouge : AppColors.grisDark,
+          for (final (i, d) in lignes.indexed) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
+            _LigneDemande(
+              demande: d,
+              numero: premierNumero + i,
+              onOuvrir: () => onOuvrir(d),
+              onAgir: (a) => onAgir(d, a),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EnTeteTri extends StatelessWidget {
+  final String libelle;
+  final bool actif;
+  final bool croissant;
+  final VoidCallback onTap;
+
+  const _EnTeteTri({
+    required this.libelle,
+    required this.actif,
+    required this.croissant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.rouge : AppColors.grisDark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(libelle,
+                    overflow: TextOverflow.ellipsis,
+                    style: _styleEnTete.copyWith(color: couleur)),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                !actif
+                    ? Icons.swap_vert_rounded
+                    : croissant
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                size: 14,
+                color: couleur,
+              ),
+            ],
           ),
         ),
       ),
@@ -455,216 +1156,450 @@ class _ChipFiltre extends StatelessWidget {
   }
 }
 
-// ── Carte demande (vue responsable) ──────────────────────
-
-class _DemandeCard extends ConsumerWidget {
+class _LigneDemande extends StatelessWidget {
   final DemandeResident demande;
-  const _DemandeCard({required this.demande});
+  final int numero;
+  final VoidCallback onOuvrir;
+  final ValueChanged<_Action> onAgir;
 
-  static const _jours = [
-    'lundi', 'mardi', 'mercredi', 'jeudi',
-    'vendredi', 'samedi', 'dimanche',
-  ];
-  static const _mois = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-  ];
-
-  String _fmt(DateTime d) =>
-      '${_jours[d.weekday - 1]} ${d.day} ${_mois[d.month - 1]}';
+  const _LigneDemande({
+    required this.demande,
+    required this.numero,
+    required this.onOuvrir,
+    required this.onAgir,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.md),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(
-          color: demande.enAttente
-              ? AppColors.aVerifier.withValues(alpha: 0.5)
-              : AppColors.grisMedium,
-          width: demande.enAttente ? 2 : 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // En-tête
-          Row(
+  Widget build(BuildContext context) {
+    final d = demande;
+    const style = TextStyle(fontSize: 13, color: AppColors.grisDark);
+    final menage = menageDemande(d);
+    final aTraiter = aTraiterDemande(d);
+    return Material(
+      color: aTraiter
+          ? AppColors.aVerifier.withValues(alpha: 0.04)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onOuvrir,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
             children: [
-              _TypeIcon(demande.type),
-              const SizedBox(width: AppSizes.sm),
+              SizedBox(
+                  width: 36,
+                  child: Text('$numero',
+                      style: style.copyWith(color: AppColors.noir))),
+              Expanded(flex: 3, child: _Resident(d, avecAppartement: false)),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                flex: 1,
+                child: d.numeroAppartement == null
+                    ? const _Vide()
+                    : Text(d.numeroAppartement!,
+                        style: style.copyWith(
+                            color: AppColors.noir,
+                            fontWeight: FontWeight.w600)),
+              ),
+              Expanded(
+                flex: 2,
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(
-                      _typeLabel(demande.type),
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: AppColors.noir),
-                    ),
-                    Text(
-                      _fmt(demande.createdAt.toLocal()),
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.grisDark),
-                    ),
+                    BadgeTypeDemandeResident(type: d.type),
+                    if (d.estUrgente)
+                      const Tooltip(
+                        message: 'Urgent',
+                        child: Icon(Icons.priority_high_rounded,
+                            size: 16, color: AppColors.nonAutorise),
+                      ),
                   ],
                 ),
               ),
-              _StatutBadge(demande.statut),
-              if (demande.estUrgente) ...[
-                const SizedBox(width: AppSizes.sm),
-                const _UrgenceBadge(),
-              ],
+              Expanded(
+                flex: 2,
+                child:
+                    menage == null ? const _Vide() : Text(menage, style: style),
+              ),
+              Expanded(
+                flex: 4,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    d.motif,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: style,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(dateEnvoiDemandeResident(d), style: style),
+              ),
+              Expanded(
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: BadgeEtatDemandeResident(demande: d),
+                ),
+              ),
+              SizedBox(
+                width: 104,
+                child: Center(
+                  child: aTraiter
+                      ? _BoutonsAction(
+                          demande: d, onAgir: onAgir, compacts: true)
+                      : IconButton(
+                          tooltip: 'Voir le détail',
+                          onPressed: onOuvrir,
+                          icon: const Icon(Icons.visibility_outlined,
+                              color: AppColors.rouge),
+                        ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: AppSizes.sm),
+        ),
+      ),
+    );
+  }
+}
 
-          // Motif
-          Text(demande.motif,
-              style: const TextStyle(fontSize: 13, color: AppColors.grisDark)),
+// ── Grille ─────────────────────────────────────────────────
 
-          // Réponse résident
-          if (demande.repondue && demande.residentAccepte != null) ...[
-            const SizedBox(height: AppSizes.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSizes.sm),
-              decoration: BoxDecoration(
-                color: demande.residentAccepte!
-                    ? AppColors.faitBg
-                    : AppColors.grisLight,
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+class _GrilleDemandes extends StatelessWidget {
+  final List<DemandeResident> lignes;
+  final ValueChanged<DemandeResident> onOuvrir;
+  final void Function(DemandeResident, _Action) onAgir;
+
+  const _GrilleDemandes({
+    required this.lignes,
+    required this.onOuvrir,
+    required this.onAgir,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      final colonnes = math.max(1, (c.maxWidth + ecart) ~/ (340 + ecart));
+      final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+      return Wrap(
+        spacing: ecart,
+        runSpacing: ecart,
+        children: [
+          for (final d in lignes)
+            SizedBox(
+              width: largeur,
+              child: _CarteDemande(
+                demande: d,
+                onOuvrir: () => onOuvrir(d),
+                onAgir: (a) => onAgir(d, a),
               ),
-              child: Row(
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _CarteDemande extends StatelessWidget {
+  final DemandeResident demande;
+  final VoidCallback onOuvrir;
+  final ValueChanged<_Action> onAgir;
+
+  const _CarteDemande({
+    required this.demande,
+    required this.onOuvrir,
+    required this.onAgir,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final d = demande;
+    final menage = menageDemande(d);
+    final aTraiter = aTraiterDemande(d);
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: aTraiter
+              ? AppColors.aVerifier.withValues(alpha: 0.6)
+              : AppColors.grisMedium,
+          width: aTraiter ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onOuvrir,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSizes.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: _Resident(d, rayon: 18)),
+                    const SizedBox(width: 8),
+                    BadgeEtatDemandeResident(demande: d),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    BadgeTypeDemandeResident(type: d.type),
+                    if (d.estUrgente) const BadgeUrgente(),
+                    if (menage != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cleaning_services_outlined,
+                              size: 14, color: AppColors.grisText),
+                          const SizedBox(width: 4),
+                          Text(menage,
+                              style: const TextStyle(
+                                  fontSize: 12.5, color: AppColors.grisDark)),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  d.motif,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 13, height: 1.35, color: AppColors.noir),
+                ),
+                if (d.type == TypeDemande.infoAppartement && d.enAttente) ...[
+                  const SizedBox(height: 8),
+                  _PropositionInfo(demande: d),
+                ],
+                if (!d.enAttente &&
+                    ((d.reponse?.isNotEmpty ?? false) ||
+                        d.propositionDate != null)) ...[
+                  const SizedBox(height: 8),
+                  _BlocReponse(demande: d),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  d.resolue && d.dateResolution != null
+                      ? 'Envoyée le ${dateEnvoiDemandeResident(d)} · '
+                          'résolue le ${dateCourteDemande(d.dateResolution!)}'
+                      : 'Envoyée le ${dateEnvoiDemandeResident(d)}',
+                  style: const TextStyle(
+                      fontSize: 11.5, color: AppColors.grisText),
+                ),
+                if (aTraiter) ...[
+                  const SizedBox(height: AppSizes.md),
+                  _BoutonsAction(demande: d, onAgir: onAgir),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Détail d'une demande ───────────────────────────────────
+
+class _DetailDemande extends StatelessWidget {
+  final DemandeResident demande;
+  final ValueChanged<_Action> onAgir;
+
+  const _DetailDemande({required this.demande, required this.onAgir});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = demande;
+    final menage = menageDemande(d);
+    final apt = appartementDemande(d);
+
+    Widget info(IconData icone, String libelle, Widget valeur) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icone, size: 17, color: AppColors.grisText),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 104,
+                child: Text(libelle,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.grisText)),
+              ),
+              Expanded(child: valeur),
+            ],
+          ),
+        );
+    const style = TextStyle(fontSize: 13.5, color: AppColors.noir);
+
+    return DialogueApp(
+      titre: 'Demande de ${nomResidentDemande(d)}',
+      largeur: 560,
+      libelleAction: 'Fermer',
+      onAction: () => Navigator.of(context).pop(),
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (apt != null)
+            info(
+              Icons.apartment_rounded,
+              'Appartement',
+              Text(
+                d.tailleAppartement == null
+                    ? apt
+                    : '$apt · ${d.tailleAppartement}',
+                style: style.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          info(
+            Icons.category_outlined,
+            'Type',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
                 children: [
-                  Icon(
-                    demande.residentAccepte!
-                        ? Icons.check_circle_rounded
-                        : Icons.cancel_rounded,
-                    size: 16,
-                    color: demande.residentAccepte!
-                        ? AppColors.fait
-                        : AppColors.grisDark,
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  Text(
-                    demande.residentAccepte!
-                        ? 'Résident·e a accepté'
-                        : 'Résident·e a refusé — nouvelle proposition requise',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: demande.residentAccepte!
-                          ? AppColors.fait
-                          : AppColors.grisDark,
-                    ),
-                  ),
+                  BadgeTypeDemandeResident(type: d.type),
+                  if (d.estUrgente) const BadgeUrgente(),
                 ],
               ),
             ),
+          ),
+          info(
+            Icons.flag_outlined,
+            'État',
+            Align(
+              alignment: Alignment.centerLeft,
+              child: BadgeEtatDemandeResident(demande: d),
+            ),
+          ),
+          if (menage != null)
+            info(Icons.cleaning_services_outlined, 'Ménage visé',
+                Text(menage, style: style)),
+          info(Icons.send_outlined, 'Envoyée le',
+              Text(dateEnvoiDemandeResident(d), style: style)),
+          if (d.dateReponse != null)
+            info(Icons.reply_rounded, 'Répondue le',
+                Text(dateHeureDemande(d.dateReponse!), style: style)),
+          if (d.resolue && d.dateResolution != null)
+            info(Icons.task_alt_rounded, 'Résolue le',
+                Text(dateHeureDemande(d.dateResolution!), style: style)),
+          const SizedBox(height: 4),
+          const Text('Motif',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.grisDark)),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.grisLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.grisMedium),
+            ),
+            child: Text(d.motif, style: style.copyWith(height: 1.4)),
+          ),
+          if (d.type == TypeDemande.infoAppartement) ...[
+            const SizedBox(height: 12),
+            _PropositionInfo(demande: d),
           ],
-
-          // ── Infos appartement : bloc dédié valider/refuser ──
-          if (demande.type == TypeDemande.infoAppartement &&
-              demande.enAttente) ...[
-            const SizedBox(height: AppSizes.sm),
-            _PropositionInfoBox(demande: demande),
-            const SizedBox(height: AppSizes.md),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _refuserInfo(context, ref),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.grisDark,
-                      side: const BorderSide(color: AppColors.grisMedium),
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppSizes.radiusSm)),
-                    ),
-                    child: const Text('Refuser'),
-                  ),
-                ),
-                const SizedBox(width: AppSizes.sm),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => _validerInfo(context, ref),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.fait,
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppSizes.radiusSm)),
-                    ),
-                    child: const Text('Valider et appliquer'),
-                  ),
-                ),
-              ],
-            ),
-          ]
-          // Bouton répondre (autres types — EnAttente ou refus)
-          else if (demande.enAttente ||
-              (demande.repondue && demande.residentAccepte == false)) ...[
-            const SizedBox(height: AppSizes.md),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => _ouvrirReponse(context),
-                icon: const Icon(Icons.reply_rounded, size: 18),
-                label: Text(demande.enAttente ? 'Répondre' : 'Nouvelle proposition'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.rouge,
-                  shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.radiusSm)),
-                ),
-              ),
-            ),
+          if (!d.enAttente &&
+              ((d.reponse?.isNotEmpty ?? false) ||
+                  d.propositionDate != null)) ...[
+            const SizedBox(height: 12),
+            _BlocReponse(demande: d),
+          ],
+          if (aTraiterDemande(d)) ...[
+            const SizedBox(height: 18),
+            _BoutonsAction(demande: d, onAgir: onAgir),
           ],
         ],
       ),
     );
   }
-
-  void _ouvrirReponse(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => _RepondreDialog(demande: demande),
-    );
-  }
-
-  Future<void> _validerInfo(BuildContext context, WidgetRef ref) async {
-    final ok = await ref
-        .read(demandesResponsableProvider.notifier)
-        .validerInfoAppartement(demande.id);
-    if (!ok && context.mounted) {
-      final error = ref.read(demandesResponsableProvider).error;
-      if (error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error), backgroundColor: AppColors.rouge),
-        );
-      }
-    }
-  }
-
-  void _refuserInfo(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (_) => _RefuserInfoDialog(demandeId: demande.id),
-    );
-  }
-
-  String _typeLabel(TypeDemande t) => switch (t) {
-        TypeDemande.reprogrammer => 'Reprogrammer un ménage',
-        TypeDemande.annuler => 'Annuler un ménage',
-        TypeDemande.commentaire => 'Commentaire',
-        TypeDemande.infoAppartement => _typeLabelFor(t),
-      };
 }
 
-// ── Dialog réponse responsable ────────────────────────────
+// ── Rappel de la demande dans les dialogues d'action ───────
+
+class _RappelDemande extends StatelessWidget {
+  final DemandeResident demande;
+  const _RappelDemande({required this.demande});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = demande;
+    final menage = menageDemande(d);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.grisLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.grisMedium),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Resident(d, rayon: 16),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              BadgeTypeDemandeResident(type: d.type),
+              if (d.estUrgente) const BadgeUrgente(),
+              if (menage != null)
+                Text(menage,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AppColors.grisDark)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            d.motif,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, color: AppColors.noir),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+InputDecoration _decorationChamp(String label, {String? erreur}) =>
+    InputDecoration(
+      labelText: label,
+      alignLabelWithHint: true,
+      errorText: erreur,
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusSm)),
+      contentPadding: const EdgeInsets.all(12),
+    );
+
+void _signalerErreur(BuildContext context, WidgetRef ref) {
+  NotificationApp.erreur(
+    context,
+    ref.read(demandesResponsableProvider).error ??
+        'L’opération n’a pas abouti. Réessayez.',
+  );
+}
+
+// ── Répondre (avec créneau proposé pour reprogrammer / annuler) ──
 
 class _RepondreDialog extends ConsumerStatefulWidget {
   final DemandeResident demande;
@@ -676,13 +1611,26 @@ class _RepondreDialog extends ConsumerStatefulWidget {
 
 class _RepondreDialogState extends ConsumerState<_RepondreDialog> {
   final _reponseCtrl = TextEditingController();
-  DateTime? _propDate;
-  String _propPeriode = 'AM';
-  String? _reponseError;
+  DateTime? _date;
+  String _periode = 'AM';
 
   bool get _avecProposition =>
       widget.demande.type == TypeDemande.reprogrammer ||
       widget.demande.type == TypeDemande.annuler;
+
+  bool get _valide =>
+      _reponseCtrl.text.trim().isNotEmpty &&
+      (!_avecProposition || _date != null);
+
+  @override
+  void initState() {
+    super.initState();
+    // Nouvelle proposition : on repart du créneau précédent.
+    final d = widget.demande;
+    if (refuseeParResident(d)) {
+      _periode = d.propositionPeriode ?? 'AM';
+    }
+  }
 
   @override
   void dispose() {
@@ -690,242 +1638,198 @@ class _RepondreDialogState extends ConsumerState<_RepondreDialog> {
     super.dispose();
   }
 
-  Future<void> _envoyer() async {
-    final reponse = _reponseCtrl.text.trim();
-    if (reponse.isEmpty) {
-      setState(() => _reponseError = 'Veuillez saisir un message');
-      return;
-    }
-    if (_avecProposition && _propDate == null) {
-      setState(() => _reponseError = 'Veuillez choisir une date proposée');
-      return;
-    }
-    setState(() => _reponseError = null);
+  Future<void> _choisirDate() async {
+    final demain = DateTime.now().add(const Duration(days: 1));
+    final choisie = await showDatePicker(
+      context: context,
+      initialDate: _date ?? widget.demande.menageDate ?? demain,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('fr', 'CA'),
+    );
+    if (choisie != null) setState(() => _date = choisie);
+  }
 
+  Future<void> _envoyer() async {
+    if (!_valide) return;
     final ok = await ref.read(demandesResponsableProvider.notifier).repondre(
           demandeId: widget.demande.id,
-          reponse: reponse,
-          propositionDate: _avecProposition ? _propDate : null,
-          propositionPeriode: _avecProposition ? _propPeriode : null,
+          reponse: _reponseCtrl.text.trim(),
+          propositionDate: _avecProposition ? _date : null,
+          propositionPeriode: _avecProposition ? _periode : null,
         );
-
-    if (ok && mounted) Navigator.of(context).pop();
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop(_avecProposition
+          ? 'Réponse envoyée : le résident doit accepter le créneau proposé.'
+          : 'Réponse envoyée au résident.');
+    } else {
+      _signalerErreur(context, ref);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSending =
-        ref.watch(demandesResponsableProvider).isSending;
+    final isSending = ref.watch(demandesResponsableProvider).isSending;
+    final nouvelle = refuseeParResident(widget.demande);
 
-    return AlertDialog(
-      title: const Text('Répondre à la demande'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Motif original
-            Container(
-              padding: const EdgeInsets.all(AppSizes.sm),
-              decoration: BoxDecoration(
-                color: AppColors.grisLight,
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-              ),
-              child: Text(widget.demande.motif,
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.grisDark)),
-            ),
-            const SizedBox(height: AppSizes.md),
-
-            // Réponse
-            const Text('Votre réponse',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.grisDark)),
-            const SizedBox(height: AppSizes.sm),
-            TextField(
-              controller: _reponseCtrl,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Expliquez votre décision…',
-                errorText: _reponseError,
-                border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.radiusSm)),
-                contentPadding: const EdgeInsets.all(AppSizes.sm),
-              ),
-              onChanged: (_) {
-                if (_reponseError != null) {
-                  setState(() => _reponseError = null);
-                }
-              },
-            ),
-
-            // Proposition date (reprogrammer / annuler)
-            if (_avecProposition) ...[
-              const SizedBox(height: AppSizes.md),
-              const Text('Date proposée',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.grisDark)),
-              const SizedBox(height: AppSizes.sm),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now()
-                              .add(const Duration(days: 1)),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now()
-                              .add(const Duration(days: 365)),
-                          locale: const Locale('fr', 'CA'),
-                        );
-                        if (picked != null) {
-                          setState(() => _propDate = picked);
-                        }
-                      },
-                      icon: const Icon(Icons.calendar_today_rounded,
-                          size: 16),
-                      label: Text(
-                        _propDate == null
-                            ? 'Choisir'
-                            : '${_propDate!.day}/${_propDate!.month}/${_propDate!.year}',
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.rouge,
-                        side: const BorderSide(color: AppColors.rouge),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSizes.sm),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'AM', label: Text('Matin')),
-                      ButtonSegment(value: 'PM', label: Text('PM')),
-                    ],
-                    selected: {_propPeriode},
-                    onSelectionChanged: (s) =>
-                        setState(() => _propPeriode = s.first),
-                    style: ButtonStyle(
-                      foregroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? Colors.white
-                            : AppColors.grisDark,
-                      ),
-                      backgroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? AppColors.rouge
-                            : null,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: isSending ? null : _envoyer,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
-          child: isSending
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Envoyer'),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Bloc proposition infos appartement ────────────────────
-
-class _PropositionInfoBox extends StatelessWidget {
-  final DemandeResident demande;
-  const _PropositionInfoBox({required this.demande});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.sm),
-      decoration: BoxDecoration(
-        color: AppColors.aVerifier.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-        border: Border.all(color: AppColors.aVerifier.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return DialogueApp(
+      titre: nouvelle ? 'Nouvelle proposition' : 'Répondre à la demande',
+      largeur: 500,
+      libelleAction: 'Envoyer',
+      libelleSecondaire: 'Annuler',
+      enCours: isSending,
+      onAction: _valide ? _envoyer : null,
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (demande.propositionHasAnimal == true)
-            Row(
+          _RappelDemande(demande: widget.demande),
+          if (nouvelle) ...[
+            const SizedBox(height: 10),
+            const Row(
               children: [
-                const Icon(Icons.pets_rounded,
-                    size: 15, color: AppColors.aVerifier),
-                const SizedBox(width: 6),
-                Text(
-                  (demande.propositionTypeAnimal?.isNotEmpty ?? false)
-                      ? 'Animal : ${demande.propositionTypeAnimal}'
-                      : 'Animal présent',
-                  style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.noir),
-                ),
-              ],
-            ),
-          if (demande.propositionHasAnimal == true &&
-              (demande.propositionNotes?.isNotEmpty ?? false))
-            const SizedBox(height: 4),
-          if (demande.propositionNotes?.isNotEmpty ?? false)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.notes_rounded,
-                    size: 15, color: AppColors.grisDark),
-                const SizedBox(width: 6),
+                Icon(Icons.info_outline_rounded,
+                    size: 15, color: AppColors.refus),
+                SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    demande.propositionNotes!,
-                    style: const TextStyle(
-                        fontSize: 12.5, color: AppColors.grisDark),
+                    'Le résident a refusé le créneau précédent.',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.refus),
                   ),
                 ),
               ],
             ),
+          ],
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reponseCtrl,
+            maxLines: 3,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
+            decoration: _decorationChamp('Votre réponse').copyWith(
+              hintText: 'Expliquez votre décision…',
+            ),
+          ),
+          if (_avecProposition) ...[
+            const SizedBox(height: 16),
+            const Text('Créneau proposé',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.grisDark)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: AppSizes.sm,
+              runSpacing: AppSizes.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _choisirDate,
+                  icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                  label: Text(_date == null
+                      ? 'Choisir la date'
+                      : dateCourteDemande(_date!)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.rouge,
+                    side: const BorderSide(color: AppColors.rouge),
+                    shape: const StadiumBorder(),
+                    minimumSize: const Size(0, 40),
+                  ),
+                ),
+                for (final (p, libelle) in const [
+                  ('AM', 'Matin'),
+                  ('PM', 'Après-midi'),
+                ])
+                  ChoiceChip(
+                    label: Text(libelle),
+                    selected: _periode == p,
+                    onSelected: (_) => setState(() => _periode = p),
+                    selectedColor: AppColors.rouge.withValues(alpha: 0.12),
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color:
+                          _periode == p ? AppColors.rouge : AppColors.grisDark,
+                    ),
+                    side: BorderSide(
+                        color: _periode == p
+                            ? AppColors.rouge
+                            : AppColors.grisMedium),
+                    showCheckmark: false,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Le résident recevra une notification pour accepter ou refuser '
+              'ce créneau.',
+              style: TextStyle(fontSize: 12, color: AppColors.grisText),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-// ── Dialog refus infos appartement ────────────────────────
+// ── Valider les infos d'appartement ───────────────────────
 
-class _RefuserInfoDialog extends ConsumerStatefulWidget {
-  final String demandeId;
-  const _RefuserInfoDialog({required this.demandeId});
+class _ValiderInfoDialog extends ConsumerWidget {
+  final DemandeResident demande;
+  const _ValiderInfoDialog({required this.demande});
 
   @override
-  ConsumerState<_RefuserInfoDialog> createState() =>
-      _RefuserInfoDialogState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSending = ref.watch(demandesResponsableProvider).isSending;
+    final apt = appartementDemande(demande) ?? 'l’appartement';
+
+    return DialogueApp(
+      titre: 'Valider les infos',
+      largeur: 460,
+      libelleAction: 'Valider et appliquer',
+      libelleSecondaire: 'Annuler',
+      enCours: isSending,
+      onAction: () async {
+        final ok = await ref
+            .read(demandesResponsableProvider.notifier)
+            .validerInfoAppartement(demande.id);
+        if (!context.mounted) return;
+        if (ok) {
+          Navigator.of(context).pop('Infos appliquées à $apt.');
+        } else {
+          _signalerErreur(context, ref);
+        }
+      },
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PropositionInfo(demande: demande),
+          const SizedBox(height: 12),
+          Text(
+            'Ces informations remplaceront celles de la fiche de $apt, '
+            'et la demande sera résolue.',
+            style: const TextStyle(fontSize: 13, color: AppColors.grisDark),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Refuser les infos d'appartement ───────────────────────
+
+class _RefuserInfoDialog extends ConsumerStatefulWidget {
+  final DemandeResident demande;
+  const _RefuserInfoDialog({required this.demande});
+
+  @override
+  ConsumerState<_RefuserInfoDialog> createState() => _RefuserInfoDialogState();
 }
 
 class _RefuserInfoDialogState extends ConsumerState<_RefuserInfoDialog> {
   final _reponseCtrl = TextEditingController();
-  String? _error;
 
   @override
   void dispose() {
@@ -935,190 +1839,108 @@ class _RefuserInfoDialogState extends ConsumerState<_RefuserInfoDialog> {
 
   Future<void> _envoyer() async {
     final reponse = _reponseCtrl.text.trim();
-    if (reponse.isEmpty) {
-      setState(() => _error = 'Veuillez expliquer le refus');
-      return;
-    }
-    setState(() => _error = null);
-
+    if (reponse.isEmpty) return;
     final ok = await ref
         .read(demandesResponsableProvider.notifier)
-        .refuserInfoAppartement(demandeId: widget.demandeId, reponse: reponse);
-
-    if (ok && mounted) Navigator.of(context).pop();
+        .refuserInfoAppartement(demandeId: widget.demande.id, reponse: reponse);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context)
+          .pop('Proposition refusée. Le résident est prévenu.');
+    } else {
+      _signalerErreur(context, ref);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isSending = ref.watch(demandesResponsableProvider).isSending;
-
-    return AlertDialog(
-      title: const Text('Refuser la proposition ?'),
-      content: TextField(
-        controller: _reponseCtrl,
-        maxLines: 3,
-        autofocus: true,
-        decoration: InputDecoration(
-          hintText: 'Expliquez pourquoi vous refusez…',
-          errorText: _error,
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppSizes.radiusSm)),
-          contentPadding: const EdgeInsets.all(AppSizes.sm),
-        ),
-        onChanged: (_) {
-          if (_error != null) setState(() => _error = null);
-        },
+    return DialogueApp(
+      titre: 'Refuser la proposition',
+      largeur: 480,
+      libelleAction: 'Confirmer le refus',
+      libelleSecondaire: 'Annuler',
+      enCours: isSending,
+      onAction: _reponseCtrl.text.trim().isEmpty ? null : _envoyer,
+      contenu: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PropositionInfo(demande: widget.demande),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reponseCtrl,
+            maxLines: 3,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            onChanged: (_) => setState(() {}),
+            decoration: _decorationChamp('Motif du refus').copyWith(
+              hintText: 'Expliquez pourquoi vous refusez…',
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: isSending ? null : _envoyer,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
-          child: isSending
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Confirmer le refus'),
-        ),
-      ],
     );
   }
 }
 
-// ── Sub-widgets ────────────────────────────────────────────
+// ── État vide ──────────────────────────────────────────────
 
-class _SectionHeader extends StatelessWidget {
-  final String text;
-  const _SectionHeader(this.text);
+class _EtatVide extends StatelessWidget {
+  final String titre;
+  final String texte;
+  final VoidCallback? onReinitialiser;
 
-  @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: AppColors.grisDark,
-          letterSpacing: 0.3,
-        ),
-      );
-}
-
-class _TypeIcon extends StatelessWidget {
-  final TypeDemande type;
-  const _TypeIcon(this.type);
+  const _EtatVide({
+    required this.titre,
+    required this.texte,
+    this.onReinitialiser,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = switch (type) {
-      TypeDemande.reprogrammer => (Icons.calendar_month_rounded, AppColors.rouge),
-      TypeDemande.annuler => (Icons.cancel_rounded, AppColors.refus),
-      TypeDemande.commentaire => (Icons.chat_bubble_rounded, AppColors.absent),
-      TypeDemande.infoAppartement => (
-          Icons.info_outline_rounded,
-          AppColors.aVerifier
-        ),
-    };
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(icon, size: 16, color: color),
-    );
-  }
-}
-
-class _StatutBadge extends StatelessWidget {
-  final StatutDemande statut;
-  const _StatutBadge(this.statut);
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, bg, fg) = switch (statut) {
-      StatutDemande.enAttente => ('En attente', AppColors.aVerifier.withValues(alpha: 0.15), AppColors.aVerifier),
-      StatutDemande.repondue => ('Répondue', AppColors.absentBg, AppColors.absent),
-      StatutDemande.resolue => ('Résolue', AppColors.faitBg, AppColors.fait),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
-    );
-  }
-}
-
-class _UrgenceBadge extends StatelessWidget {
-  const _UrgenceBadge();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: AppColors.aVerifier.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: const Text('Urgent',
-            style: TextStyle(
-                fontSize: 10,
+    return CarteContenu(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSizes.lg),
+            decoration: BoxDecoration(
+              color: AppColors.rouge.withValues(alpha: 0.06),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.forum_rounded,
+                size: 44, color: AppColors.rouge),
+          ),
+          const SizedBox(height: AppSizes.md),
+          Text(
+            titre,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.aVerifier)),
-      );
-}
-
-class _Empty extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox_rounded, size: 56, color: AppColors.grisText),
-            SizedBox(height: AppSizes.md),
-            Text('Aucune demande en cours',
-                style: TextStyle(fontSize: 16, color: AppColors.grisDark)),
-          ],
-        ),
-      );
-}
-
-class _EmptyFiltre extends StatelessWidget {
-  final VoidCallback onReinitialiser;
-  const _EmptyFiltre({required this.onReinitialiser});
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.search_off_rounded,
-                size: 48, color: AppColors.grisText),
-            const SizedBox(height: AppSizes.md),
-            const Text('Aucun résultat',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.noir)),
-            const SizedBox(height: AppSizes.xs),
-            const Text('Aucune demande ne correspond à ces filtres.',
-                style: TextStyle(fontSize: 13, color: AppColors.grisDark)),
+                color: AppColors.noir),
+          ),
+          const SizedBox(height: AppSizes.xs),
+          Text(
+            texte,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.grisText, fontSize: 13),
+          ),
+          if (onReinitialiser != null) ...[
             const SizedBox(height: AppSizes.md),
             OutlinedButton.icon(
               onPressed: onReinitialiser,
-              icon: const Icon(Icons.clear_rounded, size: 16),
+              icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
               label: const Text('Réinitialiser les filtres'),
-              style: OutlinedButton.styleFrom(foregroundColor: AppColors.rouge),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.rouge,
+                shape: const StadiumBorder(),
+              ),
             ),
           ],
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }

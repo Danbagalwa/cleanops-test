@@ -6,6 +6,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/reception_models.dart';
 import '../../domain/reception_residents_repository.dart';
 import '../providers/reception_residents_provider.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 /// Formulaire de message vers l'administration, depuis la fiche d'un
 /// appartement, avec la case facultative « Transmettre aussi à l'employé ».
@@ -68,9 +69,7 @@ class _MessageFormCardState extends ConsumerState<MessageFormCard> {
         _transmettre = false;
         _nature = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Message transmis à l\'administration.')),
-      );
+      NotificationApp.succes(context, 'Message transmis à l\'administration.');
       widget.onEnvoye?.call();
     } on ReceptionErreur catch (e) {
       if (!mounted) return;

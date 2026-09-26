@@ -37,11 +37,12 @@ class PresenceModel extends Presence {
     );
   }
 
-  Map<String, dynamic> toInsert(String employeeId, DateTime date,
-      StatutPresence statut) {
+  Map<String, dynamic> toInsert(
+      String employeeId, DateTime date, StatutPresence statut) {
     return {
       'employee_id': employeeId,
-      'date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+      'date':
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
       'statut': statut.label,
       'confirme_le': DateTime.now().toIso8601String(),
     };

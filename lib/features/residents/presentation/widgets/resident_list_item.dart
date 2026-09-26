@@ -5,12 +5,18 @@ import '../../../photo_profil/domain/photo_profil_models.dart';
 import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 import '../../domain/entities/resident.dart';
 
+/// Carte d'un résident (vue grille de la page Résidents).
 class ResidentListItem extends StatelessWidget {
   final Resident resident;
-  final bool isAlternate;
   final VoidCallback onPin;
   final VoidCallback onDesactiver;
   final VoidCallback onActiver;
+
+  /// Bascule « Inscrit à l'app » / « Sans app » (facultatif).
+  final VoidCallback? onBasculerApplication;
+
+  /// Conservé pour compatibilité (ancienne liste à lignes alternées).
+  final bool isAlternate;
 
   const ResidentListItem({
     super.key,
@@ -18,299 +24,240 @@ class ResidentListItem extends StatelessWidget {
     required this.onPin,
     required this.onDesactiver,
     required this.onActiver,
+    this.onBasculerApplication,
     this.isAlternate = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    return isDesktop ? _buildRow() : _buildCard();
-  }
-
-  // ── Desktop : ligne type table ───────────────────────────
-
-  Widget _buildRow() {
-    final dimmed = !resident.isActif;
-    return Material(
-      color: isAlternate
-          ? AppColors.grisLight.withValues(alpha: 0.4)
-          : Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.md,
-          vertical: 9,
-        ),
-        child: Row(
-          children: [
-            _AvatarCircle(
-              residentId: resident.id,
-              initiales: resident.initiales,
-              isActif: resident.isActif,
-              size: 30,
-              fontSize: 11,
-            ),
-            const SizedBox(width: AppSizes.sm),
-
-            Expanded(
-              flex: 2,
-              child: Text(
-                resident.nomComplet,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: dimmed ? AppColors.grisDark : AppColors.noir,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-
-            Expanded(
-              child: Text(
-                resident.numeroAppartement != null
-                    ? 'Apt ${resident.numeroAppartement}'
-                    : '—',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.grisText,
-                ),
-              ),
-            ),
-
-            Expanded(
-              child: _StatutBadge(statut: resident.statut),
-            ),
-
-            SizedBox(
-              width: 56,
-              child: Icon(
-                resident.aPin ? Icons.key_rounded : Icons.key_off_rounded,
-                size: 16,
-                color: resident.aPin ? AppColors.fait : AppColors.grisMedium,
-              ),
-            ),
-
-            SizedBox(
-              width: 80,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: resident.isActif
-                    ? [
-                        _IconBtn(
-                          icon: Icons.key_rounded,
-                          color: AppColors.aVerifier,
-                          tooltip: resident.aPin ? 'Modifier PIN' : 'Attribuer PIN',
-                          onTap: onPin,
-                        ),
-                        _IconBtn(
-                          icon: Icons.block_rounded,
-                          color: AppColors.rouge,
-                          tooltip: 'Désactiver',
-                          onTap: onDesactiver,
-                        ),
-                      ]
-                    : [
-                        _IconBtn(
-                          icon: Icons.check_circle_outline_rounded,
-                          color: AppColors.fait,
-                          tooltip: 'Réactiver',
-                          onTap: onActiver,
-                        ),
-                      ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Mobile : card ─────────────────────────────────────────
-
-  Widget _buildCard() {
-    final dimmed = !resident.isActif;
+    final r = resident;
     return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 4,
-      ),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
+        color: r.isActif ? Colors.white : AppColors.grisLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.grisMedium),
+      ),
+      padding: const EdgeInsets.fromLTRB(AppSizes.md, 12, 4, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AvatarResident(resident: r, rayon: 22),
+          const SizedBox(width: AppSizes.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  r.nomComplet,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: r.isActif ? AppColors.noir : AppColors.grisDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(Icons.apartment_rounded,
+                        size: 14, color: AppColors.grisText),
+                    const SizedBox(width: 4),
+                    Text(
+                      r.numeroAppartement != null
+                          ? 'Apt ${r.numeroAppartement}'
+                              '${r.tailleAppartement != null ? ' · ${r.tailleAppartement}' : ''}'
+                          : 'Sans appartement',
+                      style: const TextStyle(
+                          fontSize: 12.5, color: AppColors.grisDark),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    BadgeApplicationResident(resident: r),
+                    BadgePinResident(resident: r),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          MenuResident(
+            resident: r,
+            onPin: onPin,
+            onDesactiver: onDesactiver,
+            onActiver: onActiver,
+            onBasculerApplication: onBasculerApplication,
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.md,
-          vertical: 10,
-        ),
-        child: Row(
-          children: [
-            _AvatarCircle(
-              residentId: resident.id,
-              initiales: resident.initiales,
-              isActif: resident.isActif,
-              size: 42,
-              fontSize: 14,
-            ),
-            const SizedBox(width: AppSizes.md),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    resident.nomComplet,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: dimmed ? AppColors.grisDark : AppColors.noir,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      if (resident.numeroAppartement != null) ...[
-                        Text(
-                          'Apt ${resident.numeroAppartement}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.grisText,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      _StatutBadge(statut: resident.statut),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            if (resident.isActif) ...[
-              IconButton(
-                icon: const Icon(Icons.key_rounded, size: 18),
-                color: AppColors.aVerifier,
-                onPressed: onPin,
-                tooltip: resident.aPin ? 'Modifier PIN' : 'Attribuer PIN',
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                icon: const Icon(Icons.block_rounded, size: 18),
-                color: AppColors.rouge,
-                onPressed: onDesactiver,
-                tooltip: 'Désactiver',
-                visualDensity: VisualDensity.compact,
-              ),
-            ] else
-              IconButton(
-                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                color: AppColors.fait,
-                onPressed: onActiver,
-                tooltip: 'Réactiver',
-                visualDensity: VisualDensity.compact,
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
 
-// ── Sous-widgets ──────────────────────────────────────────
+// ── Éléments partagés (grille et tableau) ──────────────────
 
-class _AvatarCircle extends StatelessWidget {
-  final String residentId;
-  final String initiales;
-  final bool isActif;
-  final double size;
-  final double fontSize;
-
-  const _AvatarCircle({
-    required this.residentId,
-    required this.initiales,
-    required this.isActif,
-    required this.size,
-    required this.fontSize,
-  });
+class AvatarResident extends StatelessWidget {
+  final Resident resident;
+  final double rayon;
+  const AvatarResident({super.key, required this.resident, this.rayon = 16});
 
   @override
   Widget build(BuildContext context) {
-    final color = isActif ? AppColors.rouge : AppColors.grisMedium;
+    final couleur = resident.isActif ? AppColors.rouge : AppColors.grisDark;
     return AvatarProfil(
       proprietaire:
-          ProprietairePhoto(TypeProprietairePhoto.resident, residentId),
-      initiales: initiales,
-      rayon: size / 2,
-      couleurFond: color.withValues(alpha: 0.12),
-      couleurTexte: color,
-      tailleTexte: fontSize,
+          ProprietairePhoto(TypeProprietairePhoto.resident, resident.id),
+      initiales: resident.initiales,
+      rayon: rayon,
+      couleurFond: couleur.withValues(alpha: 0.12),
+      couleurTexte: couleur,
+      tailleTexte: rayon * 0.7,
+      poidsTexte: FontWeight.bold,
     );
   }
 }
 
-class _StatutBadge extends StatelessWidget {
-  final String statut;
-  const _StatutBadge({required this.statut});
-
-  Color get _color => switch (statut) {
-        'Inscrit' => AppColors.fait,
-        'Sans app' => AppColors.aVerifier,
-        _ => AppColors.grisDark,
-      };
+/// Inscrit à l'application / Sans app / Inactif.
+class BadgeApplicationResident extends StatelessWidget {
+  final Resident resident;
+  const BadgeApplicationResident({super.key, required this.resident});
 
   @override
   Widget build(BuildContext context) {
+    final r = resident;
+    final (couleur, icone, texte) = !r.isActif
+        ? (AppColors.grisDark, Icons.block_rounded, 'Inactif')
+        : r.aApplication
+            ? (AppColors.fait, Icons.phone_iphone_rounded, 'Inscrit')
+            : (AppColors.aVerifier, Icons.phonelink_erase_rounded, 'Sans app');
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _color.withValues(alpha: 0.25)),
+        color: couleur.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        statut,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: _color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icone, size: 13, color: couleur),
+          const SizedBox(width: 4),
+          Text(
+            texte,
+            style: TextStyle(
+                fontSize: 11.5, fontWeight: FontWeight.w600, color: couleur),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
+/// PIN attribué ou non (seulement utile pour un résident inscrit à l'app).
+class BadgePinResident extends StatelessWidget {
+  final Resident resident;
+  const BadgePinResident({super.key, required this.resident});
 
-  const _IconBtn({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
+  @override
+  Widget build(BuildContext context) {
+    final a = resident.aPin;
+    final couleur = a
+        ? AppColors.fait
+        : (resident.isActif && resident.aApplication
+            ? AppColors.refus
+            : AppColors.grisText);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: couleur.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(a ? Icons.key_rounded : Icons.key_off_rounded,
+              size: 13, color: couleur),
+          const SizedBox(width: 4),
+          Text(
+            a ? 'PIN attribué' : 'Sans PIN',
+            style: TextStyle(
+                fontSize: 11.5, fontWeight: FontWeight.w600, color: couleur),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _ActionResident { pin, application, desactiver, activer }
+
+/// Actions d'un résident (⋮) : PIN, accès à l'application, (dés)activation.
+class MenuResident extends StatelessWidget {
+  final Resident resident;
+  final VoidCallback onPin;
+  final VoidCallback onDesactiver;
+  final VoidCallback onActiver;
+  final VoidCallback? onBasculerApplication;
+
+  const MenuResident({
+    super.key,
+    required this.resident,
+    required this.onPin,
+    required this.onDesactiver,
+    required this.onActiver,
+    this.onBasculerApplication,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.all(6),
-          child: Icon(icon, size: 16, color: color),
-        ),
-      ),
+    final r = resident;
+    PopupMenuItem<_ActionResident> item(
+            _ActionResident a, IconData icone, String texte, Color c) =>
+        PopupMenuItem(
+          value: a,
+          child: Row(
+            children: [
+              Icon(icone, size: 18, color: c),
+              const SizedBox(width: 10),
+              Text(texte),
+            ],
+          ),
+        );
+
+    return PopupMenuButton<_ActionResident>(
+      tooltip: 'Actions',
+      icon: const Icon(Icons.more_vert_rounded, color: AppColors.rouge),
+      onSelected: (a) => switch (a) {
+        _ActionResident.pin => onPin(),
+        _ActionResident.application => onBasculerApplication?.call(),
+        _ActionResident.desactiver => onDesactiver(),
+        _ActionResident.activer => onActiver(),
+      },
+      itemBuilder: (_) => [
+        if (r.isActif) ...[
+          item(
+              _ActionResident.pin,
+              Icons.key_rounded,
+              r.aPin ? 'Modifier le PIN' : 'Attribuer un PIN',
+              AppColors.aVerifier),
+          if (onBasculerApplication != null)
+            r.aApplication
+                ? item(
+                    _ActionResident.application,
+                    Icons.phonelink_erase_rounded,
+                    'Passer en « Sans app »',
+                    AppColors.grisDark)
+                : item(_ActionResident.application, Icons.phone_iphone_rounded,
+                    'Marquer inscrit à l’app', AppColors.fait),
+          item(_ActionResident.desactiver, Icons.block_rounded, 'Désactiver',
+              AppColors.refus),
+        ] else
+          item(_ActionResident.activer, Icons.check_circle_outline_rounded,
+              'Réactiver', AppColors.fait),
+      ],
     );
   }
 }

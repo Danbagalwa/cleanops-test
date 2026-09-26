@@ -66,7 +66,8 @@ class MessageSemaineState {
     bool clearError = false,
   }) {
     return MessageSemaineState(
-      messageActif: clearMessageActif ? null : messageActif ?? this.messageActif,
+      messageActif:
+          clearMessageActif ? null : messageActif ?? this.messageActif,
       historique: historique ?? this.historique,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : error ?? this.error,
@@ -114,11 +115,12 @@ class MessageSemaineNotifier extends StateNotifier<MessageSemaineState> {
       state = state.copyWith(error: 'Utilisateur non identifié');
       return false;
     }
-    // Résolution du contenu selon le type
-    final resolvedContenu = switch (type) {
-      MessageType.automatique => getMessageAutomatique(),
-      _ => contenu,
-    };
+    // Un message suggéré sans texte reçoit la suggestion du jour ; un texte
+    // fourni (republication) est gardé tel quel.
+    final resolvedContenu =
+        type == MessageType.automatique && contenu.trim().isEmpty
+            ? getMessageAutomatique()
+            : contenu;
     state = state.copyWith(isLoading: true, clearError: true);
     final result =
         await _repo.creerMessage(resolvedContenu, type, _currentEmployeeId);
@@ -128,8 +130,13 @@ class MessageSemaineNotifier extends StateNotifier<MessageSemaineState> {
         return false;
       },
       (msg) {
-        // Remplace le message actif + insert en tête d'historique
-        final updated = [msg, ...state.historique.where((m) => !m.isActif)];
+        // Le nouveau message devient l'actif ; l'ancien passe en archivé
+        // (le serveur le désactive au même moment).
+        final updated = [
+          msg,
+          for (final m in state.historique)
+            if (m.id != msg.id) m.isActif ? m.archive(msg.dateCreation) : m,
+        ];
         state = state.copyWith(
           isLoading: false,
           messageActif: msg,
@@ -149,15 +156,13 @@ class MessageSemaineNotifier extends StateNotifier<MessageSemaineState> {
         return false;
       },
       (_) {
-        final updatedHistorique = state.historique
-            .map((m) => m.id == id ? _withIsActifFalse(m) : m)
-            .toList();
+        final updatedHistorique =
+            state.historique.map((m) => m.id == id ? m.archive() : m).toList();
         state = state.copyWith(
           isLoading: false,
           clearMessageActif: state.messageActif?.id == id,
-          messageActif: state.messageActif?.id == id
-              ? null
-              : state.messageActif,
+          messageActif:
+              state.messageActif?.id == id ? null : state.messageActif,
           historique: updatedHistorique,
         );
         return true;
@@ -165,18 +170,6 @@ class MessageSemaineNotifier extends StateNotifier<MessageSemaineState> {
     );
   }
 }
-
-// Crée une copie du message avec isActif=false sans dépendance sur fromJson
-MessageSemaine _withIsActifFalse(MessageSemaine m) => MessageSemaine(
-      id: m.id,
-      contenu: m.contenu,
-      type: m.type,
-      isActif: false,
-      creePar: m.creePar,
-      prenomCreePar: m.prenomCreePar,
-      dateCreation: m.dateCreation,
-      dateDesactivation: m.dateDesactivation ?? DateTime.now().toUtc(),
-    );
 
 // ── Provider ───────────────────────────────────────────────
 

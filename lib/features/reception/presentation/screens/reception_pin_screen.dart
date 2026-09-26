@@ -11,6 +11,8 @@ import '../../domain/reception_pin_models.dart';
 import '../../domain/reception_residents_repository.dart' show ReceptionErreur;
 import '../providers/reception_pin_provider.dart';
 import '../widgets/pin_affichage_dialog.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 const _kPageSize = 10;
 
@@ -79,13 +81,10 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
     if (change != true || !mounted) return;
 
     ref.invalidate(receptionPinListeProvider);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${resident.nomComplet} est maintenant '
-          "${resident.aApplication ? 'Sans app' : 'Inscrit'}.",
-        ),
-      ),
+    NotificationApp.succes(
+      context,
+      '${resident.nomComplet} est maintenant '
+      "${resident.aApplication ? 'Sans app' : 'Inscrit'}.",
     );
   }
 
@@ -251,7 +250,8 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
                   ),
                 ),
               ),
-              if (paginationBar != null) paginationBar,
+              if (paginationBar != null)
+                AuDessusDeLaBarre(child: paginationBar),
             ],
           );
         }
@@ -261,15 +261,19 @@ class _ReceptionPinScreenState extends ConsumerState<ReceptionPinScreen> {
             Expanded(
               child: RefreshIndicator(
                 color: AppColors.rouge,
-                onRefresh: () async => ref.invalidate(receptionPinListeProvider),
+                onRefresh: () async =>
+                    ref.invalidate(receptionPinListeProvider),
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                  padding: paginationBar == null
+                      ? const EdgeInsets.symmetric(vertical: AppSizes.sm)
+                          .plusBarre(context)
+                      : const EdgeInsets.symmetric(vertical: AppSizes.sm),
                   itemCount: paginated.length,
                   itemBuilder: (_, i) => ligne(i),
                 ),
               ),
             ),
-            if (paginationBar != null) paginationBar,
+            if (paginationBar != null) AuDessusDeLaBarre(child: paginationBar),
           ],
         );
       },

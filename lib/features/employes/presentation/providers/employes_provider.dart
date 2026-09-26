@@ -108,9 +108,8 @@ class EmployesNotifier extends StateNotifier<EmployesState> {
         return false;
       },
       (emp) {
-        final updated = state.employes
-            .map((e) => e.id == params.id ? emp : e)
-            .toList();
+        final updated =
+            state.employes.map((e) => e.id == params.id ? emp : e).toList();
         state = state.copyWith(isLoading: false, employes: updated);
         return true;
       },

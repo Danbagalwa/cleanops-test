@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/helpers/semaine_helper.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../employes/presentation/providers/employes_provider.dart';
 import '../../domain/entities/presence.dart';
 import '../providers/presence_provider.dart';
 
@@ -19,12 +19,15 @@ class PresenceCardWidget extends ConsumerStatefulWidget {
 class _PresenceCardWidgetState extends ConsumerState<PresenceCardWidget> {
   bool _editing = false;
 
+  /// Samedi et dimanche : pas de travail, donc rien à confirmer.
+  bool get _jourDeTravail => SemaineHelper.estJourDeTravail(widget.date);
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
       final employee = ref.read(employeeCourantProvider);
-      if (employee != null) {
+      if (employee != null && _jourDeTravail) {
         ref
             .read(maPresenceNotifierProvider(employee.id).notifier)
             .charger(widget.date);
@@ -36,12 +39,16 @@ class _PresenceCardWidgetState extends ConsumerState<PresenceCardWidget> {
   Widget build(BuildContext context) {
     final employee = ref.watch(employeeCourantProvider);
     if (employee == null) return const SizedBox.shrink();
+    if (!_jourDeTravail) return const _JourNonTravaille();
 
     final state = ref.watch(maPresenceNotifierProvider(employee.id));
 
     // Quitter le mode édition dès qu'une nouvelle présence est confirmée
     ref.listen(maPresenceNotifierProvider(employee.id), (prev, next) {
-      if (_editing && !next.isLoading && next.maPresence != null && next.error == null) {
+      if (_editing &&
+          !next.isLoading &&
+          next.maPresence != null &&
+          next.error == null) {
         if (mounted) setState(() => _editing = false);
       }
     });
@@ -107,9 +114,8 @@ class _PresenceCardWidgetState extends ConsumerState<PresenceCardWidget> {
               date: widget.date,
               employeeId: employee.id,
               isEditing: _editing,
-              onCancel: _editing
-                  ? () => setState(() => _editing = false)
-                  : null,
+              onCancel:
+                  _editing ? () => setState(() => _editing = false) : null,
             )
           else
             _PresenceConfirmee(
@@ -130,6 +136,62 @@ class _PresenceCardWidgetState extends ConsumerState<PresenceCardWidget> {
   }
 }
 
+// ── Week-end : pas de présence à confirmer ─────────────────
+class _JourNonTravaille extends StatelessWidget {
+  const _JourNonTravaille();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSizes.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.grisMedium.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.weekend_outlined,
+                color: AppColors.grisDark, size: 18),
+          ),
+          const SizedBox(width: AppSizes.sm),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ma présence',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.noir,
+                  ),
+                ),
+                Text(
+                  'Jour non travaillé : aucune présence à confirmer.',
+                  style: TextStyle(fontSize: 12, color: AppColors.grisDark),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── Boutons de confirmation / modification ─────────────────
 class _ConfirmButtons extends ConsumerWidget {
   final DateTime date;
@@ -144,25 +206,14 @@ class _ConfirmButtons extends ConsumerWidget {
     this.onCancel,
   });
 
-  Future<List<String>> _getResponsableIds(WidgetRef ref) async {
-    return ref
-        .read(employesNotifierProvider)
-        .employes
-        .where((e) => e.isResponsable)
-        .map((e) => e.id)
-        .toList();
-  }
-
   Future<void> _confirmer(
     BuildContext context,
     WidgetRef ref,
     StatutPresence statut,
   ) async {
-    final ids = await _getResponsableIds(ref);
+    final ids = await idsResponsablesAPrevenir(ref);
     if (!context.mounted) return;
-    await ref
-        .read(maPresenceNotifierProvider(employeeId).notifier)
-        .confirmer(
+    await ref.read(maPresenceNotifierProvider(employeeId).notifier).confirmer(
           date: date,
           statut: statut,
           responsableIds: ids,
@@ -201,8 +252,7 @@ class _ConfirmButtons extends ConsumerWidget {
               label: 'Absente matin',
               icon: Icons.wb_sunny_outlined,
               color: AppColors.aVerifier,
-              onTap: () =>
-                  _confirmer(context, ref, StatutPresence.absentMatin),
+              onTap: () => _confirmer(context, ref, StatutPresence.absentMatin),
             ),
             _Chip(
               label: 'Absente après-midi',
@@ -218,8 +268,7 @@ class _ConfirmButtons extends ConsumerWidget {
           TextButton(
             onPressed: onCancel,
             style: TextButton.styleFrom(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               foregroundColor: AppColors.grisDark,
@@ -250,9 +299,7 @@ class _PresenceConfirmee extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          isPresent
-              ? Icons.check_circle_outline
-              : Icons.warning_amber_outlined,
+          isPresent ? Icons.check_circle_outline : Icons.warning_amber_outlined,
           color: color,
           size: 18,
         ),
@@ -272,8 +319,8 @@ class _PresenceConfirmee extends StatelessWidget {
               if (presence.confirmedLe != null)
                 Text(
                   'Confirmé à ${_heure(presence.confirmedLe!)}',
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.grisText),
+                  style:
+                      const TextStyle(fontSize: 11, color: AppColors.grisText),
                 ),
             ],
           ),
@@ -281,8 +328,7 @@ class _PresenceConfirmee extends StatelessWidget {
         TextButton(
           onPressed: onModifier,
           style: TextButton.styleFrom(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
@@ -313,8 +359,8 @@ class _StatutBadge extends StatelessWidget {
       ),
       child: Text(
         statut == StatutPresence.present ? 'Présente' : 'Absente',
-        style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w600, color: color),
+        style:
+            TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color),
       ),
     );
   }
@@ -340,8 +386,7 @@ class _Chip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
@@ -355,9 +400,7 @@ class _Chip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: color),
+                  fontSize: 12, fontWeight: FontWeight.w600, color: color),
             ),
           ],
         ),

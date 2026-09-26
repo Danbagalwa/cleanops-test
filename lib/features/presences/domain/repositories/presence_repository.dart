@@ -16,11 +16,13 @@ abstract class PresenceRepository {
     required DateTime date,
   });
 
-  Future<Either<Failure, List<Presence>>> getAbsencesDuJour(DateTime date);
+  /// Absences du [debut] au [fin] inclus (plus récentes d'abord).
+  Future<Either<Failure, List<Presence>>> getAbsences(
+      DateTime debut, DateTime fin);
 
   /// Présences confirmées avec un horaire précisé (registre informatif).
   Future<Either<Failure, List<Presence>>> getPresencesAvecHeures(
-      DateTime date);
+      DateTime debut, DateTime fin);
 
   Future<void> envoyerAlerteResponsable({
     required String presenceId,

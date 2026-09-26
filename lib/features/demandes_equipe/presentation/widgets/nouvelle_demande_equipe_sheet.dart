@@ -53,8 +53,8 @@ Future<bool?> showNouvelleDemandeEquipeModal(BuildContext context) {
     return showDialog<bool>(
       context: context,
       builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.antiAlias,
         child: const SizedBox(
           width: 480,
           child: NouvelleDemandeEquipeSheet(showHandle: false),
@@ -109,9 +109,8 @@ class _NouvelleDemandeEquipeSheetState
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: debut
-          ? (_dateDebut ?? now)
-          : (_dateFin ?? _dateDebut ?? now),
+      initialDate:
+          debut ? (_dateDebut ?? now) : (_dateFin ?? _dateDebut ?? now),
       firstDate: debut ? now : (_dateDebut ?? now),
       lastDate: now.add(const Duration(days: 365)),
       locale: const Locale('fr', 'CA'),
@@ -176,8 +175,10 @@ class _NouvelleDemandeEquipeSheetState
     });
   }
 
+  bool get _dateRequise => _type != TypeDemandeEquipe.autre;
+
   Future<void> _soumettre() async {
-    if (_dateDebut == null) {
+    if (_dateRequise && _dateDebut == null) {
       setState(() => _error = 'Veuillez choisir une date de début');
       return;
     }
@@ -188,17 +189,20 @@ class _NouvelleDemandeEquipeSheetState
     }
     setState(() => _error = null);
 
-    final success = await ref
-        .read(mesDemandesEquipeNotifierProvider.notifier)
-        .creerDemande(
-          type: _type,
-          dateDebut: _dateDebut!,
-          dateFin: _plusieursJours ? _dateFin : null,
-          motif: motif,
-          documentOctets: _documentOctets,
-          documentNom: _documentNom,
-          documentTypeMime: _documentTypeMime,
-        );
+    final now = DateTime.now();
+
+    final success =
+        await ref.read(mesDemandesEquipeNotifierProvider.notifier).creerDemande(
+              type: _type,
+              dateDebut: _dateRequise
+                  ? _dateDebut!
+                  : DateTime(now.year, now.month, now.day),
+              dateFin: _dateRequise && _plusieursJours ? _dateFin : null,
+              motif: motif,
+              documentOctets: _documentOctets,
+              documentNom: _documentNom,
+              documentTypeMime: _documentTypeMime,
+            );
 
     if (!mounted) return;
     if (success) {
@@ -212,15 +216,27 @@ class _NouvelleDemandeEquipeSheetState
   String _fmt(DateTime? d) {
     if (d == null) return 'Choisir…';
     const mois = [
-      'jan', 'fév', 'mar', 'avr', 'mai', 'juin',
-      'juil', 'août', 'sep', 'oct', 'nov', 'déc',
+      'jan',
+      'fév',
+      'mar',
+      'avr',
+      'mai',
+      'juin',
+      'juil',
+      'août',
+      'sep',
+      'oct',
+      'nov',
+      'déc',
     ];
     return '${d.day} ${mois[d.month - 1]} ${d.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSending = ref.watch(mesDemandesEquipeNotifierProvider).isSending;
+    final envoiState = ref.watch(mesDemandesEquipeNotifierProvider);
+    final isSending = envoiState.isSending;
+    final isUploadingDocument = envoiState.isUploadingDocument;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -248,15 +264,16 @@ class _NouvelleDemandeEquipeSheetState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Nouvelle demande',
+                'NOUVELLE DEMANDE',
                 style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
                     color: AppColors.noir),
               ),
               IconButton(
                 icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: isSending ? null : () => Navigator.of(context).pop(),
               ),
             ],
           ),
@@ -295,69 +312,78 @@ class _NouvelleDemandeEquipeSheetState
                       child: _TypeCard(
                         icon: Icons.event_busy_rounded,
                         label: 'Absence planifiée',
-                        selected:
-                            _type == TypeDemandeEquipe.absencePlanifiee,
+                        selected: _type == TypeDemandeEquipe.absencePlanifiee,
                         onTap: () => setState(
                             () => _type = TypeDemandeEquipe.absencePlanifiee),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: AppSizes.lg),
-
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Date de début',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.grisDark)),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Plusieurs jours',
-                            style: TextStyle(
-                                fontSize: 12, color: AppColors.grisDark)),
-                        Switch(
-                          value: _plusieursJours,
-                          activeThumbColor: AppColors.rouge,
-                          onChanged: (v) =>
-                              setState(() => _plusieursJours = v),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
+                    const SizedBox(width: AppSizes.sm),
                     Expanded(
-                      child: _DateButton(
-                        label: _plusieursJours ? 'Du' : 'Date',
-                        value: _fmt(_dateDebut),
-                        onTap: () => _choisirDate(debut: true),
+                      child: _TypeCard(
+                        icon: Icons.more_horiz_rounded,
+                        label: 'Autre',
+                        selected: _type == TypeDemandeEquipe.autre,
+                        onTap: () =>
+                            setState(() => _type = TypeDemandeEquipe.autre),
                       ),
                     ),
-                    if (_plusieursJours) ...[
-                      const SizedBox(width: AppSizes.sm),
-                      const Icon(Icons.arrow_forward_rounded,
-                          size: 16, color: AppColors.grisText),
-                      const SizedBox(width: AppSizes.sm),
-                      Expanded(
-                        child: _DateButton(
-                          label: 'Au',
-                          value: _fmt(_dateFin),
-                          onTap: _dateDebut == null
-                              ? null
-                              : () => _choisirDate(debut: false),
-                        ),
+                  ],
+                ),
+                if (_dateRequise) ...[
+                  const SizedBox(height: AppSizes.lg),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Date de début',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.grisDark)),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Plusieurs jours',
+                              style: TextStyle(
+                                  fontSize: 12, color: AppColors.grisDark)),
+                          Switch(
+                            value: _plusieursJours,
+                            activeThumbColor: AppColors.rouge,
+                            onChanged: (v) =>
+                                setState(() => _plusieursJours = v),
+                          ),
+                        ],
                       ),
                     ],
-                  ],
-                ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DateButton(
+                          label: _plusieursJours ? 'Du' : 'Date',
+                          value: _fmt(_dateDebut),
+                          onTap: () => _choisirDate(debut: true),
+                        ),
+                      ),
+                      if (_plusieursJours) ...[
+                        const SizedBox(width: AppSizes.sm),
+                        const Icon(Icons.arrow_forward_rounded,
+                            size: 16, color: AppColors.grisText),
+                        const SizedBox(width: AppSizes.sm),
+                        Expanded(
+                          child: _DateButton(
+                            label: 'Au',
+                            value: _fmt(_dateFin),
+                            onTap: _dateDebut == null
+                                ? null
+                                : () => _choisirDate(debut: false),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
                 const SizedBox(height: AppSizes.lg),
-
                 const Text('Motif',
                     style: TextStyle(
                         fontSize: 13,
@@ -400,8 +426,7 @@ class _NouvelleDemandeEquipeSheetState
                         color: AppColors.grisText, fontSize: 14),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                      borderSide:
-                          const BorderSide(color: AppColors.grisMedium),
+                      borderSide: const BorderSide(color: AppColors.grisMedium),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -411,7 +436,6 @@ class _NouvelleDemandeEquipeSheetState
                   ),
                 ),
                 const SizedBox(height: AppSizes.lg),
-
                 const Text('Document (optionnel)',
                     style: TextStyle(
                         fontSize: 13,
@@ -443,7 +467,7 @@ class _NouvelleDemandeEquipeSheetState
                 ],
                 if (_documentNom == null)
                   OutlinedButton.icon(
-                    onPressed: _choisirDocument,
+                    onPressed: isSending ? null : _choisirDocument,
                     icon: const Icon(Icons.attach_file_rounded, size: 18),
                     label: const Text('Joindre un document (PDF ou image)'),
                     style: OutlinedButton.styleFrom(
@@ -478,18 +502,31 @@ class _NouvelleDemandeEquipeSheetState
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                       color: AppColors.noir)),
-                              Text(formaterTaille(_documentOctets!.length),
+                              Text(
+                                  isUploadingDocument
+                                      ? 'Envoi en cours…'
+                                      : formaterTaille(_documentOctets!.length),
                                   style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.grisDark)),
+                                      fontSize: 11, color: AppColors.grisDark)),
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                          tooltip: 'Retirer le document',
-                          onPressed: _retirerDocument,
-                        ),
+                        if (isUploadingDocument)
+                          const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.rouge),
+                            ),
+                          )
+                        else
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            tooltip: 'Retirer le document',
+                            onPressed: isSending ? null : _retirerDocument,
+                          ),
                       ],
                     ),
                   ),
@@ -500,17 +537,30 @@ class _NouvelleDemandeEquipeSheetState
                     onPressed: isSending ? null : _soumettre,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.rouge,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: const StadiumBorder(),
                     ),
                     child: isSending
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              ),
+                              const SizedBox(width: AppSizes.sm),
+                              Text(
+                                isUploadingDocument
+                                    ? 'Envoi du document…'
+                                    : 'Envoi…',
+                                style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white),
+                              ),
+                            ],
                           )
                         : const Text('Envoyer la demande',
                             style: TextStyle(
@@ -597,8 +647,7 @@ class _DateButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppSizes.radiusSm),
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.grisLight,
           borderRadius: BorderRadius.circular(AppSizes.radiusSm),

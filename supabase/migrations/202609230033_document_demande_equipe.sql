@@ -94,11 +94,14 @@ CREATE TABLE IF NOT EXISTS public.demandes_equipe_documents (
   ajoute_le timestamptz NOT NULL DEFAULT now()
 );
 
--- Les octets sont dans Storage ; ici, seules nom / type_mime / taille /
--- ajoute_le restent lisibles en lecture directe (droit de COLONNE), pour être
--- embarquées dans la liste des demandes.
+-- Les octets sont dans Storage ; ici, seules demande_id / nom / type_mime /
+-- taille / ajoute_le restent lisibles en lecture directe (droit de COLONNE),
+-- pour être embarquées dans la liste des demandes. demande_id doit être
+-- accordée elle aussi : PostgREST en a besoin pour faire la jointure avec
+-- demandes_equipe, sinon la requête embarquée échoue avec 42501 (permission
+-- denied) même si les colonnes affichées sont, elles, accordées.
 REVOKE ALL ON public.demandes_equipe_documents FROM PUBLIC, anon, authenticated;
-GRANT SELECT (nom, type_mime, taille, ajoute_le) ON public.demandes_equipe_documents
+GRANT SELECT (demande_id, nom, type_mime, taille, ajoute_le) ON public.demandes_equipe_documents
   TO anon, authenticated;
 
 

@@ -12,6 +12,7 @@ import '../providers/reception_residents_provider.dart';
 import '../reception_sections.dart';
 import '../widgets/inscription_resident_dialog.dart';
 import '../widgets/reception_actions.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 const _kPageSize = 10;
 
@@ -113,7 +114,8 @@ class _ReceptionResidentsScreenState
           ),
           child: Column(
             children: [
-              _SearchBar(controller: _searchCtrl, hasText: _searchQuery.isNotEmpty),
+              _SearchBar(
+                  controller: _searchCtrl, hasText: _searchQuery.isNotEmpty),
               if (liste.isLoading && liste.hasValue)
                 const LinearProgressIndicator(
                   color: AppColors.rouge,
@@ -219,7 +221,8 @@ class _ReceptionResidentsScreenState
                   ),
                 ),
               ),
-              if (paginationBar != null) paginationBar,
+              if (paginationBar != null)
+                AuDessusDeLaBarre(child: paginationBar),
             ],
           );
         }
@@ -232,13 +235,16 @@ class _ReceptionResidentsScreenState
                 onRefresh: () async =>
                     ref.invalidate(receptionResidentsListeProvider),
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                  padding: paginationBar == null
+                      ? const EdgeInsets.symmetric(vertical: AppSizes.sm)
+                          .plusBarre(context)
+                      : const EdgeInsets.symmetric(vertical: AppSizes.sm),
                   itemCount: paginated.length,
                   itemBuilder: (_, i) => ligne(i),
                 ),
               ),
             ),
-            if (paginationBar != null) paginationBar,
+            if (paginationBar != null) AuDessusDeLaBarre(child: paginationBar),
           ],
         );
       },
@@ -408,11 +414,11 @@ class _ResidentRow extends StatelessWidget {
           child: Row(
             children: [
               _AvatarCircle(
-                proprietaire: ProprietairePhoto(
-                    TypeProprietairePhoto.resident, ligne.residentId),
-                initiales: ligne.initiales,
-                size: 30,
-                fontSize: 11),
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.resident, ligne.residentId),
+                  initiales: ligne.initiales,
+                  size: 30,
+                  fontSize: 11),
               const SizedBox(width: AppSizes.sm),
               Expanded(
                 flex: 2,
@@ -486,11 +492,11 @@ class _ResidentRow extends StatelessWidget {
           child: Row(
             children: [
               _AvatarCircle(
-                proprietaire: ProprietairePhoto(
-                    TypeProprietairePhoto.resident, ligne.residentId),
-                initiales: ligne.initiales,
-                size: 42,
-                fontSize: 14),
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.resident, ligne.residentId),
+                  initiales: ligne.initiales,
+                  size: 42,
+                  fontSize: 14),
               const SizedBox(width: AppSizes.md),
               Expanded(
                 child: Column(

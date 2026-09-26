@@ -1,15 +1,20 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/helpers/date_helper.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/mise_en_page.dart';
 import '../../../photo_profil/domain/photo_profil_models.dart';
 import '../../../photo_profil/presentation/widgets/avatar_profil.dart';
 
 import '../../domain/entities/progression_jour.dart';
 import '../providers/employer_dashboard_provider.dart';
+
+enum _Tri { progression, prenom }
 
 class ProgressionJourScreen extends ConsumerStatefulWidget {
   const ProgressionJourScreen({super.key});
@@ -19,160 +24,516 @@ class ProgressionJourScreen extends ConsumerStatefulWidget {
       _ProgressionJourScreenState();
 }
 
-class _ProgressionJourScreenState
-    extends ConsumerState<ProgressionJourScreen> {
+class _ProgressionJourScreenState extends ConsumerState<ProgressionJourScreen> {
+  String _recherche = '';
+  _Tri _tri = _Tri.progression;
+  bool _croissant = true;
+  int _page = 0;
+  int _parPage = 10;
+
+  /// `null` : choisi selon la largeur (grille sur téléphone, tableau sinon).
+  ModeAffichage? _mode;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => _load());
   }
 
-  void _load() =>
-      ref.read(employerDashboardNotifierProvider.notifier).loadProgressionJour();
+  void _load() => ref
+      .read(employerDashboardNotifierProvider.notifier)
+      .loadProgressionJour();
+
+  void _trier(_Tri tri) => setState(() {
+        _croissant = _tri == tri ? !_croissant : true;
+        _tri = tri;
+        _page = 0;
+      });
+
+  /// Préposées filtrées et triées. En tri par progression, celles sans tâche
+  /// restent à la fin (0 % n'y veut pas dire « en retard »).
+  List<ProgressionJour> _lignes(List<ProgressionJour> toutes) {
+    final q = _recherche.trim().toLowerCase();
+    final filtrees = toutes
+        .where((p) => q.isEmpty || p.prenom.toLowerCase().contains(q))
+        .toList();
+    int parPrenom(ProgressionJour a, ProgressionJour b) =>
+        a.prenom.toLowerCase().compareTo(b.prenom.toLowerCase());
+    int sens(int c) => _croissant ? c : -c;
+
+    if (_tri == _Tri.prenom) {
+      return filtrees..sort((a, b) => sens(parPrenom(a, b)));
+    }
+    final actives = filtrees.where((p) => p.totalTaches > 0).toList()
+      ..sort((a, b) => sens(a.pourcentage.compareTo(b.pourcentage)));
+    final sansTaches = filtrees.where((p) => p.totalTaches == 0).toList()
+      ..sort(parPrenom);
+    return [...actives, ...sansTaches];
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(employerDashboardNotifierProvider);
+    final compact = estCompact(context);
+    final mode =
+        compact ? ModeAffichage.grille : (_mode ?? ModeAffichage.tableau);
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
-        backgroundColor: AppColors.rouge,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.backOrHome(AppRoutes.employerDashboard),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Progression du jour',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600),
-            ),
-            Text(
-              DateHelper.formatDate(DateTime.now()),
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          // Spinner pendant le refresh, icône sinon
-          if (state.isLoading)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-              tooltip: 'Rafraîchir',
-              onPressed: _load,
-            ),
-        ],
+    final lignes = _lignes(state.progressions);
+    final nbPages = lignes.isEmpty ? 1 : ((lignes.length - 1) ~/ _parPage) + 1;
+    final page = _page.clamp(0, nbPages - 1);
+    final visibles = lignes.skip(page * _parPage).take(_parPage).toList();
+    final marge = compact ? 12.0 : 24.0;
+
+    return PageAvecEnTete(
+      chargement: state.isLoading,
+      enTete: EnTetePage(
+        icone: Icons.checklist_rounded,
+        titre: 'Progression du jour',
+        sousTitre: 'Avancement des préposées — '
+            '${DateHelper.formatDate(DateTime.now())}',
       ),
-      body: RefreshIndicator(
+      contenu: RefreshIndicator(
         color: AppColors.rouge,
         onRefresh: () async => _load(),
-        child: _buildBody(state),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+              .plusBarre(context),
+          children: [_contenu(state, lignes, visibles, page, mode, compact)],
+        ),
       ),
     );
   }
 
-  Widget _buildBody(EmployerDashboardState state) {
+  Widget _contenu(
+    EmployerDashboardState state,
+    List<ProgressionJour> lignes,
+    List<ProgressionJour> visibles,
+    int page,
+    ModeAffichage mode,
+    bool compact,
+  ) {
     if (state.isLoading && state.progressions.isEmpty) {
-      return const Center(
-          child: CircularProgressIndicator(color: AppColors.rouge));
+      return const Padding(
+        padding: EdgeInsets.only(top: 80),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
     }
     if (state.error != null && state.progressions.isEmpty) {
       return _ErrorState(message: state.error!, onRetry: _load);
     }
-    if (state.progressions.isEmpty) {
-      return const _EmptyState();
-    }
+    if (state.progressions.isEmpty) return const _EmptyState();
 
-    // ── Tri & regroupement ──────────────────────────────
-    // Actives = ont des tâches, triées par progression croissante
-    final actives = state.progressions
-        .where((p) => p.totalTaches > 0)
-        .toList()
-      ..sort((a, b) => a.pourcentage.compareTo(b.pourcentage));
+    final recherche = ChampRecherche(
+      indice: 'Rechercher une préposée par prénom',
+      onChanged: (v) => setState(() {
+        _recherche = v;
+        _page = 0;
+      }),
+    );
 
-    // Sans tâches = triées par prénom
-    final sansTaches = state.progressions
-        .where((p) => p.totalTaches == 0)
-        .toList()
-      ..sort((a, b) => a.prenom.compareTo(b.prenom));
-
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.md, vertical: AppSizes.lg),
-          children: [
-            // Bandeau récapitulatif
-            _SummaryBanner(progressions: state.progressions),
-
-            // Section préposées actives
-            if (actives.isNotEmpty) ...[
-              const SizedBox(height: AppSizes.lg),
-              const _SectionLabel(label: 'PRÉPOSÉES DU JOUR'),
-              const SizedBox(height: AppSizes.xs),
-              ...actives.map((p) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                    child: _ProgressionCard(progression: p),
-                  )),
-            ],
-
-            // Section préposées sans tâches
-            if (sansTaches.isNotEmpty) ...[
-              const SizedBox(height: AppSizes.md),
-              const _SectionLabel(label: "PAS DE TÂCHES AUJOURD'HUI"),
-              const SizedBox(height: AppSizes.xs),
-              ...sansTaches.map((p) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSizes.sm),
-                    child: _InactiveCard(employeeId: p.employeeId, prenom: p.prenom),
-                  )),
-            ],
-
-            const SizedBox(height: AppSizes.lg),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SummaryBanner(progressions: state.progressions),
+        const SizedBox(height: AppSizes.md),
+        BarreSection(
+          titre: 'Préposées du jour (${state.progressions.length})',
+          onRetour: () => context.backOrHome(AppRoutes.employerDashboard),
+          actions: [
+            ActionSection(
+              icone: Icons.refresh_rounded,
+              infoBulle: 'Actualiser',
+              onPressed: state.isLoading ? null : _load,
+            ),
           ],
+        ),
+        const SizedBox(height: AppSizes.md),
+        if (compact)
+          recherche
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: recherche,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSizes.md),
+              BasculeAffichage(
+                mode: mode,
+                onChanged: (m) => setState(() => _mode = m),
+              ),
+            ],
+          ),
+        const SizedBox(height: AppSizes.md),
+        if (lignes.isEmpty)
+          CarteContenu(
+            padding: const EdgeInsets.all(AppSizes.xl),
+            child: Text(
+              'Aucune préposée ne correspond à « ${_recherche.trim()} ».',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.grisDark),
+            ),
+          )
+        else if (mode == ModeAffichage.tableau)
+          _TableauProgression(
+            lignes: visibles,
+            premierNumero: page * _parPage + 1,
+            tri: _tri,
+            croissant: _croissant,
+            onTrier: _trier,
+          )
+        else
+          _GrilleProgression(lignes: visibles),
+        const SizedBox(height: AppSizes.md),
+        BarrePagination(
+          page: page,
+          parPage: _parPage,
+          total: lignes.length,
+          onPage: (p) => setState(() => _page = p),
+          onParPage: (n) => setState(() {
+            _parPage = n;
+            _page = 0;
+          }),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Affichage tableau
+// ─────────────────────────────────────────────────────────
+
+const _styleEnTete = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+  color: AppColors.grisDark,
+);
+
+class _TableauProgression extends StatelessWidget {
+  final List<ProgressionJour> lignes;
+  final int premierNumero;
+  final _Tri tri;
+  final bool croissant;
+  final ValueChanged<_Tri> onTrier;
+
+  const _TableauProgression({
+    required this.lignes,
+    required this.premierNumero,
+    required this.tri,
+    required this.croissant,
+    required this.onTrier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CarteContenu(
+      child: Column(
+        children: [
+          Container(
+            color: const Color(0xFFF7F8FA),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const SizedBox(
+                    width: 40, child: Text('N°', style: _styleEnTete)),
+                Expanded(
+                  flex: 3,
+                  child: _EnTeteTri(
+                    libelle: 'Préposée',
+                    actif: tri == _Tri.prenom,
+                    croissant: croissant,
+                    onTap: () => onTrier(_Tri.prenom),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: _EnTeteTri(
+                    libelle: 'Progression',
+                    actif: tri == _Tri.progression,
+                    croissant: croissant,
+                    onTap: () => onTrier(_Tri.progression),
+                  ),
+                ),
+                const Expanded(
+                    flex: 2, child: Text('Confirmées', style: _styleEnTete)),
+                const Expanded(child: Text('Fait', style: _styleEnTete)),
+                const Expanded(child: Text('En attente', style: _styleEnTete)),
+                const Expanded(child: Text('Absent', style: _styleEnTete)),
+                const Expanded(child: Text('Refus', style: _styleEnTete)),
+                const Expanded(
+                    flex: 2, child: Text('Statut', style: _styleEnTete)),
+                const SizedBox(width: 48),
+              ],
+            ),
+          ),
+          for (final (i, p) in lignes.indexed) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
+            _LigneProgression(progression: p, numero: premierNumero + i),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EnTeteTri extends StatelessWidget {
+  final String libelle;
+  final bool actif;
+  final bool croissant;
+  final VoidCallback onTap;
+
+  const _EnTeteTri({
+    required this.libelle,
+    required this.actif,
+    required this.croissant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(libelle,
+                  style: _styleEnTete.copyWith(
+                      color: actif ? AppColors.rouge : AppColors.grisDark)),
+              const SizedBox(width: 4),
+              Icon(
+                !actif
+                    ? Icons.swap_vert_rounded
+                    : croissant
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                size: 14,
+                color: actif ? AppColors.rouge : AppColors.grisDark,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────
-// Label de section
-// ─────────────────────────────────────────────────────────
+class _LigneProgression extends StatelessWidget {
+  final ProgressionJour progression;
+  final int numero;
 
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
+  const _LigneProgression({required this.progression, required this.numero});
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        color: AppColors.grisText,
-        letterSpacing: 1.2,
+    final p = progression;
+    final sansTache = p.totalTaches == 0;
+    final urgency = _urgencyOf(p);
+    final couleur = sansTache ? AppColors.grisText : urgency.color;
+    final pct = p.pourcentage.clamp(0.0, 100.0);
+    final enAttente = (p.totalTaches -
+            p.totalFait -
+            p.totalAbsent -
+            p.totalRefus -
+            p.totalAnnule)
+        .clamp(0, p.totalTaches);
+    const styleCellule = TextStyle(fontSize: 13, color: AppColors.noir);
+
+    Widget nombre(int n, Color c) => Text(
+          sansTache ? '—' : '$n',
+          style: styleCellule.copyWith(
+            color: n == 0 || sansTache ? AppColors.grisText : c,
+            fontWeight: n == 0 ? FontWeight.w400 : FontWeight.w700,
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          SizedBox(width: 40, child: Text('$numero', style: styleCellule)),
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                AvatarProfil(
+                  proprietaire: ProprietairePhoto(
+                      TypeProprietairePhoto.employe, p.employeeId),
+                  initiales:
+                      p.prenom.isNotEmpty ? p.prenom[0].toUpperCase() : '?',
+                  rayon: 15,
+                  couleurFond: couleur.withValues(alpha: 0.12),
+                  couleurTexte: couleur,
+                  tailleTexte: 12,
+                  poidsTexte: FontWeight.bold,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    p.prenom,
+                    overflow: TextOverflow.ellipsis,
+                    style: styleCellule.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: sansTache
+                ? const Text('—',
+                    style: TextStyle(fontSize: 13, color: AppColors.grisText))
+                : Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct / 100,
+                            minHeight: 6,
+                            backgroundColor: AppColors.grisMedium,
+                            valueColor: AlwaysStoppedAnimation(couleur),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 44,
+                        child: Text(
+                          '${pct.round()} %',
+                          textAlign: TextAlign.right,
+                          style: styleCellule.copyWith(
+                              fontWeight: FontWeight.w700, color: couleur),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                  ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              sansTache ? '—' : '${p.tachesConfirmees} / ${p.totalTaches}',
+              style: styleCellule,
+            ),
+          ),
+          Expanded(child: nombre(p.totalFait, AppColors.fait)),
+          Expanded(child: nombre(enAttente, AppColors.grisDark)),
+          Expanded(child: nombre(p.totalAbsent, AppColors.absent)),
+          Expanded(child: nombre(p.totalRefus, AppColors.refus)),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _BadgeStatut(
+                libelle: sansTache ? 'Aucune tâche' : urgency.label,
+                couleur: couleur,
+              ),
+            ),
+          ),
+          SizedBox(width: 48, child: _MenuLigne(employeeId: p.employeeId)),
+        ],
       ),
+    );
+  }
+}
+
+class _BadgeStatut extends StatelessWidget {
+  final String libelle;
+  final Color couleur;
+
+  const _BadgeStatut({required this.libelle, required this.couleur});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: couleur.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          libelle,
+          style: TextStyle(
+              fontSize: 11.5, fontWeight: FontWeight.w600, color: couleur),
+        ),
+      );
+}
+
+enum _ActionLigne { planning, memo }
+
+/// Actions d'une préposée (⋮) : son planning, lui écrire un mémo.
+class _MenuLigne extends StatelessWidget {
+  final String employeeId;
+
+  const _MenuLigne({required this.employeeId});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ActionLigne>(
+      tooltip: 'Actions',
+      icon: const Icon(Icons.more_vert_rounded, color: AppColors.rouge),
+      onSelected: (a) => switch (a) {
+        _ActionLigne.planning =>
+          context.go('${AppRoutes.planning}?employeeId=$employeeId'),
+        _ActionLigne.memo =>
+          context.go('${AppRoutes.memo}?employeeId=$employeeId'),
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: _ActionLigne.planning,
+          child: Text('Voir son planning'),
+        ),
+        PopupMenuItem(
+          value: _ActionLigne.memo,
+          child: Text('Lui écrire un mémo'),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Affichage grille
+// ─────────────────────────────────────────────────────────
+
+class _GrilleProgression extends StatelessWidget {
+  final List<ProgressionJour> lignes;
+
+  const _GrilleProgression({required this.lignes});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const ecart = AppSizes.sm;
+        final colonnes =
+            math.max(1, (constraints.maxWidth + ecart) ~/ (340 + ecart));
+        final largeur =
+            (constraints.maxWidth - ecart * (colonnes - 1)) / colonnes;
+        return Wrap(
+          spacing: ecart,
+          runSpacing: ecart,
+          children: [
+            for (final p in lignes)
+              SizedBox(
+                width: largeur,
+                child: p.totalTaches > 0
+                    ? _ProgressionCard(progression: p)
+                    : _InactiveCard(employeeId: p.employeeId, prenom: p.prenom),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -243,7 +604,8 @@ class _SummaryBanner extends StatelessWidget {
                   children: [
                     _SummaryChip(
                       icon: Icons.people_rounded,
-                      label: '${actives.length} / ${progressions.length} actives',
+                      label:
+                          '${actives.length} / ${progressions.length} actives',
                       color: AppColors.absent,
                     ),
                     _SummaryChip(
@@ -254,7 +616,8 @@ class _SummaryBanner extends StatelessWidget {
                     if (totalAbsent > 0)
                       _SummaryChip(
                         icon: Icons.person_off_outlined,
-                        label: '$totalAbsent absent${totalAbsent > 1 ? "s" : ""}',
+                        label:
+                            '$totalAbsent absent${totalAbsent > 1 ? "s" : ""}',
                         color: AppColors.absent,
                       ),
                     if (totalRefus > 0)
@@ -328,7 +691,7 @@ class _GaugePainter extends CustomPainter {
 
   // Arc de 270°, départ en bas à gauche (7h30), fin en bas à droite (4h30)
   static const double _startAngle = math.pi * 0.75; // 135° → 7h30
-  static const double _sweepFull = math.pi * 1.5;   // 270°
+  static const double _sweepFull = math.pi * 1.5; // 270°
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -444,8 +807,7 @@ extension _UrgencyExt on _UrgencyLevel {
 
 _UrgencyLevel _urgencyOf(ProgressionJour p) {
   if (p.pourcentage >= 100) return _UrgencyLevel.termine;
-  final hasAction =
-      p.totalFait > 0 || p.totalAbsent > 0 || p.totalRefus > 0;
+  final hasAction = p.totalFait > 0 || p.totalAbsent > 0 || p.totalRefus > 0;
   return hasAction ? _UrgencyLevel.enCours : _UrgencyLevel.pasCommence;
 }
 
@@ -570,8 +932,7 @@ class _ProgressionCard extends StatelessWidget {
           Text(
             '${p.totalTaches} tâche${p.totalTaches > 1 ? "s" : ""}  •  '
             '${p.tachesConfirmees} confirmée${p.tachesConfirmees > 1 ? "s" : ""}',
-            style:
-                const TextStyle(fontSize: 12, color: AppColors.grisText),
+            style: const TextStyle(fontSize: 12, color: AppColors.grisText),
           ),
 
           const SizedBox(height: AppSizes.sm),
@@ -592,9 +953,7 @@ class _ProgressionCard extends StatelessWidget {
                   label: 'Absent',
                   color: AppColors.absent),
               _StatPill(
-                  count: p.totalRefus,
-                  label: 'Refus',
-                  color: AppColors.refus),
+                  count: p.totalRefus, label: 'Refus', color: AppColors.refus),
               if (p.totalAnnule > 0)
                 _StatPill(
                     count: p.totalAnnule,
@@ -621,8 +980,8 @@ class _InactiveCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final initiale = prenom.isNotEmpty ? prenom[0].toUpperCase() : '?';
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.md, vertical: 10),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.grisLight,
         borderRadius: BorderRadius.circular(AppSizes.radiusLg),
@@ -710,8 +1069,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.bar_chart_rounded,
-              size: 64, color: AppColors.grisMedium),
+          Icon(Icons.bar_chart_rounded, size: 64, color: AppColors.grisMedium),
           SizedBox(height: AppSizes.md),
           Text(
             "Aucune donnée pour aujourd'hui",
@@ -754,14 +1112,12 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 14, color: AppColors.grisDark),
+              style: const TextStyle(fontSize: 14, color: AppColors.grisDark),
             ),
             const SizedBox(height: AppSizes.lg),
             FilledButton.icon(
               onPressed: onRetry,
-              style:
-                  FilledButton.styleFrom(backgroundColor: AppColors.rouge),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Réessayer'),
             ),

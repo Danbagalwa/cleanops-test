@@ -52,7 +52,8 @@ Uint8List _jpeg([int couleur = 120]) {
   return img.encodeJpg(image);
 }
 
-PhotoCompressee _photo({int taille = 28 * 1024, int original = 3 * 1024 * 1024}) =>
+PhotoCompressee _photo(
+        {int taille = 28 * 1024, int original = 3 * 1024 * 1024}) =>
     PhotoCompressee(
       octets: Uint8List.fromList([..._jpeg(), ...List.filled(taille, 0)]),
       largeur: 320,
@@ -80,7 +81,8 @@ class _FauxRepo implements PhotoProfilRepository {
   }
 
   @override
-  Future<void> definir(ProprietairePhoto proprietaire, PhotoCompressee p) async {
+  Future<void> definir(
+      ProprietairePhoto proprietaire, PhotoCompressee p) async {
     if (erreurDefinir != null) throw erreurDefinir!;
     definitions.add((proprietaire, p));
     photo = p.octets;
@@ -185,7 +187,8 @@ void main() {
         role: RoleType.employe,
         isActif: true,
       );
-      expect(ProprietairePhoto.de(preposee).type, TypeProprietairePhoto.employe);
+      expect(
+          ProprietairePhoto.de(preposee).type, TypeProprietairePhoto.employe);
     });
 
     test('un résident est de type « resident »', () {
@@ -330,7 +333,8 @@ void main() {
       expect(find.text('Supprimer la photo'), findsOneWidget);
     });
 
-    testWidgets('l\'image choisie est réduite AVANT tout envoi', (tester) async {
+    testWidgets('l\'image choisie est réduite AVANT tout envoi',
+        (tester) async {
       final ctx = await _afficher(
         tester,
         selecteur: _FauxSelecteur()..retour = Uint8List.fromList([9, 8, 7]),
@@ -361,10 +365,12 @@ void main() {
     testWidgets('l\'aperçu montre la photo RÉDUITE, pas l\'original',
         (tester) async {
       final reduite = _photo();
-      await _afficher(tester, enfant: _editeur(), compression: (_) async => reduite);
+      await _afficher(tester,
+          enfant: _editeur(), compression: (_) async => reduite);
       await _choisirGalerie(tester);
 
-      final apercu = tester.widgetList<CircleAvatar>(find.byType(CircleAvatar))
+      final apercu = tester
+          .widgetList<CircleAvatar>(find.byType(CircleAvatar))
           .firstWhere((a) => a.radius == 80);
       expect((apercu.backgroundImage as MemoryImage).bytes, reduite.octets);
     });
@@ -387,7 +393,8 @@ void main() {
 
     testWidgets('l\'avatar affiche ensuite la nouvelle photo', (tester) async {
       final reduite = _photo();
-      await _afficher(tester, enfant: _editeur(), compression: (_) async => reduite);
+      await _afficher(tester,
+          enfant: _editeur(), compression: (_) async => reduite);
 
       await _choisirGalerie(tester);
       await tester.tap(find.text('Enregistrer'));
@@ -408,7 +415,8 @@ void main() {
       expect(find.text('Photo de profil mise à jour.'), findsNothing);
     });
 
-    testWidgets('« remplacera votre photo actuelle » seulement s\'il y en a '
+    testWidgets(
+        '« remplacera votre photo actuelle » seulement s\'il y en a '
         'une', (tester) async {
       await _afficher(tester, enfant: _editeur());
       await _choisirGalerie(tester);
@@ -420,7 +428,8 @@ void main() {
       await _afficher(tester,
           repo: _FauxRepo(photo: _jpeg()), enfant: _editeur());
       await _choisirGalerie(tester);
-      expect(find.text('Elle remplacera votre photo actuelle.'), findsOneWidget);
+      expect(
+          find.text('Elle remplacera votre photo actuelle.'), findsOneWidget);
     });
 
     testWidgets('l\'utilisateur annule le choix : rien ne se passe',
@@ -440,13 +449,14 @@ void main() {
   });
 
   group('Erreurs', () {
-    testWidgets('image trop volumineuse ou illisible : message clair, rien '
+    testWidgets(
+        'image trop volumineuse ou illisible : message clair, rien '
         'n\'est envoyé', (tester) async {
       final ctx = await _afficher(
         tester,
         enfant: _editeur(),
-        compression: (_) async =>
-            throw const ErreurPhoto('Cette image est trop volumineuse (15 Mo au maximum).'),
+        compression: (_) async => throw const ErreurPhoto(
+            'Cette image est trop volumineuse (15 Mo au maximum).'),
       );
 
       await _choisirGalerie(tester);
@@ -475,8 +485,8 @@ void main() {
       await _afficher(
         tester,
         repo: _FauxRepo()
-          ..erreurDefinir =
-              const ErreurPhoto('La photo est trop volumineuse (96 Ko au maximum).'),
+          ..erreurDefinir = const ErreurPhoto(
+              'La photo est trop volumineuse (96 Ko au maximum).'),
         enfant: _editeur(),
       );
 
@@ -528,7 +538,8 @@ void main() {
     testWidgets('on ne peut pas relancer pendant le traitement',
         (tester) async {
       final selecteur = _FauxSelecteur()..attente = Completer<void>();
-      final ctx = await _afficher(tester, selecteur: selecteur, enfant: _editeur());
+      final ctx =
+          await _afficher(tester, selecteur: selecteur, enfant: _editeur());
 
       await _ouvrirMenu(tester);
       await tester.tap(find.text('Choisir dans la galerie'));
@@ -537,7 +548,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
-      await tester.tap(find.byTooltip('Modifier la photo'), warnIfMissed: false);
+      await tester.tap(find.byTooltip('Modifier la photo'),
+          warnIfMissed: false);
       await tester.pump();
       expect(find.text('Choisir dans la galerie'), findsNothing,
           reason: 'le menu ne se rouvre pas pendant le traitement');
@@ -550,8 +562,8 @@ void main() {
 
   group('Supprimer la photo', () {
     testWidgets('confirmation, puis suppression', (tester) async {
-      final ctx = await _afficher(
-          tester, repo: _FauxRepo(photo: _jpeg()), enfant: _editeur());
+      final ctx = await _afficher(tester,
+          repo: _FauxRepo(photo: _jpeg()), enfant: _editeur());
 
       await _ouvrirMenu(tester);
       await tester.tap(find.text('Supprimer la photo'));
@@ -569,8 +581,8 @@ void main() {
     });
 
     testWidgets('annuler la suppression garde la photo', (tester) async {
-      final ctx = await _afficher(
-          tester, repo: _FauxRepo(photo: _jpeg()), enfant: _editeur());
+      final ctx = await _afficher(tester,
+          repo: _FauxRepo(photo: _jpeg()), enfant: _editeur());
 
       await _ouvrirMenu(tester);
       await tester.tap(find.text('Supprimer la photo'));
@@ -586,7 +598,8 @@ void main() {
       await _afficher(
         tester,
         repo: _FauxRepo(photo: _jpeg())
-          ..erreurSupprimer = const ErreurPhoto("La photo n'a pas pu être supprimée."),
+          ..erreurSupprimer =
+              const ErreurPhoto("La photo n'a pas pu être supprimée."),
         enfant: _editeur(),
       );
 
@@ -604,7 +617,8 @@ void main() {
   group('Dans les écrans de profil', () {
     testWidgets('« Mon profil » d\'un responsable', (tester) async {
       await _afficher(tester,
-          enfant: const SizedBox(width: 700, height: 900, child: ProfileScreen()));
+          enfant:
+              const SizedBox(width: 700, height: 900, child: ProfileScreen()));
 
       expect(find.byTooltip('Modifier la photo'), findsOneWidget);
       expect(find.text('NS'), findsOneWidget);
@@ -613,7 +627,8 @@ void main() {
     testWidgets('« Mon profil » de la Réception aussi', (tester) async {
       await _afficher(tester,
           employe: _reception,
-          enfant: const SizedBox(width: 700, height: 900, child: ProfileScreen()));
+          enfant:
+              const SizedBox(width: 700, height: 900, child: ProfileScreen()));
 
       expect(find.byTooltip('Modifier la photo'), findsOneWidget);
     });
@@ -622,10 +637,12 @@ void main() {
         (tester) async {
       final ctx = await _afficher(tester,
           repo: _FauxRepo(photo: _jpeg()),
-          enfant: const SizedBox(width: 700, height: 900, child: ProfileScreen()));
+          enfant:
+              const SizedBox(width: 700, height: 900, child: ProfileScreen()));
 
       expect(ctx.repo.lectures, greaterThan(0));
-      final avatar = tester.widget<CircleAvatar>(find.byType(CircleAvatar).first);
+      final avatar =
+          tester.widget<CircleAvatar>(find.byType(CircleAvatar).first);
       expect(avatar.foregroundImage, isA<MemoryImage>());
     });
 
@@ -633,21 +650,18 @@ void main() {
       await _afficher(tester,
           employe: _resident,
           enfant: const SizedBox(
-              width: 700,
-              height: 900,
-              child: TabProfil(employee: _resident)));
+              width: 700, height: 900, child: TabProfil(employee: _resident)));
 
       expect(find.byTooltip('Modifier la photo'), findsOneWidget);
     });
 
-    testWidgets('résident : la photo est enregistrée comme celle d\'un '
+    testWidgets(
+        'résident : la photo est enregistrée comme celle d\'un '
         'RÉSIDENT', (tester) async {
       final ctx = await _afficher(tester,
           employe: _resident,
           enfant: const SizedBox(
-              width: 700,
-              height: 900,
-              child: TabProfil(employee: _resident)));
+              width: 700, height: 900, child: TabProfil(employee: _resident)));
 
       await _choisirGalerie(tester);
       await tester.tap(find.text('Enregistrer'));
@@ -657,10 +671,12 @@ void main() {
           const ProprietairePhoto(TypeProprietairePhoto.resident, 'z1'));
     });
 
-    testWidgets('employé : la photo est enregistrée comme celle d\'un '
+    testWidgets(
+        'employé : la photo est enregistrée comme celle d\'un '
         'EMPLOYÉ', (tester) async {
       final ctx = await _afficher(tester,
-          enfant: const SizedBox(width: 700, height: 900, child: ProfileScreen()));
+          enfant:
+              const SizedBox(width: 700, height: 900, child: ProfileScreen()));
 
       await _choisirGalerie(tester);
       await tester.tap(find.text('Enregistrer'));
@@ -673,7 +689,8 @@ void main() {
     testWidgets('sur mobile', (tester) async {
       await _afficher(tester,
           taille: const Size(420, 900),
-          enfant: const SizedBox(width: 400, height: 800, child: ProfileScreen()));
+          enfant:
+              const SizedBox(width: 400, height: 800, child: ProfileScreen()));
 
       expect(find.byTooltip('Modifier la photo'), findsOneWidget);
     });

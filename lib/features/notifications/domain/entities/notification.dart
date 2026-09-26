@@ -70,6 +70,19 @@ class AppNotification extends Equatable {
         readAt: readAt ?? this.readAt,
       );
 
+  /// Copie remise à l'état « non lue » (sans date de lecture).
+  AppNotification marqueeNonLue() => AppNotification(
+        id: id,
+        recipientId: recipientId,
+        type: type,
+        category: category,
+        message: message,
+        entityId: entityId,
+        entityType: entityType,
+        isRead: false,
+        sentAt: sentAt,
+      );
+
   @override
   List<Object?> get props => [id, isRead, readAt];
 }

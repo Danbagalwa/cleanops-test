@@ -7,7 +7,6 @@ class AttribuerPin {
   final ResidentRepository _repo;
   const AttribuerPin(this._repo);
 
-  Future<Either<Failure, Resident>> call(
-          String residentId, String pin) =>
+  Future<Either<Failure, Resident>> call(String residentId, String pin) =>
       _repo.attribuerPin(residentId, pin);
 }

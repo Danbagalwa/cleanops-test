@@ -7,6 +7,8 @@ abstract class NotificationsDatasource {
   Stream<List<NotificationModel>> watchNotifications(String recipientId);
   Future<void> markAsRead(String notificationId);
   Future<void> markAllAsRead(String recipientId);
+  Future<void> markAsUnread(String notificationId);
+  Future<void> delete(String notificationId);
 }
 
 class NotificationsDatasourceImpl implements NotificationsDatasource {
@@ -65,6 +67,29 @@ class NotificationsDatasourceImpl implements NotificationsDatasource {
           .eq('is_lue', false);
     } catch (error) {
       throw ServerException('Erreur lecture notifications : $error');
+    }
+  }
+
+  @override
+  Future<void> markAsUnread(String notificationId) async {
+    try {
+      await SupabaseService.table(SupabaseService.notifications).update({
+        'is_lue': false,
+        'date_lue': null,
+      }).eq('id', notificationId);
+    } catch (error) {
+      throw ServerException('Erreur notification non lue : $error');
+    }
+  }
+
+  @override
+  Future<void> delete(String notificationId) async {
+    try {
+      await SupabaseService.table(SupabaseService.notifications)
+          .delete()
+          .eq('id', notificationId);
+    } catch (error) {
+      throw ServerException('Erreur suppression notification : $error');
     }
   }
 }

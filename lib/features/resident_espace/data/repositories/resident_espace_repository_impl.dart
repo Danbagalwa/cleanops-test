@@ -2,6 +2,7 @@ import 'package:dartz/dartz.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../domain/entities/demande_resident.dart';
+import '../../domain/entities/jour_menage.dart';
 import '../../domain/entities/notification_resident.dart';
 import '../../domain/entities/tache_resident.dart';
 import '../../domain/repositories/resident_espace_repository.dart';
@@ -16,6 +17,20 @@ class ResidentEspaceRepositoryImpl implements ResidentEspaceRepository {
       String residentId) async {
     try {
       return Right(await _ds.getTaches(residentId));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, CalendrierMenages>> getCalendrier({
+    required String residentId,
+    required DateTime debut,
+    required DateTime fin,
+  }) async {
+    try {
+      return Right(await _ds.getCalendrier(
+          residentId: residentId, debut: debut, fin: fin));
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -107,8 +122,7 @@ class ResidentEspaceRepositoryImpl implements ResidentEspaceRepository {
   }
 
   @override
-  Future<Either<Failure, void>> marquerNotificationLue(
-      String notifId) async {
+  Future<Either<Failure, void>> marquerNotificationLue(String notifId) async {
     try {
       await _ds.marquerNotificationLue(notifId);
       return const Right(null);

@@ -20,6 +20,9 @@ class DemandeEquipeModel extends DemandeEquipe {
     super.documentNom,
     super.documentTypeMime,
     super.documentTaille,
+    super.preuveNom,
+    super.preuveTypeMime,
+    super.preuveTaille,
   });
 
   /// PostgREST embarque une relation enfant tantôt en liste, tantôt en objet
@@ -33,6 +36,7 @@ class DemandeEquipeModel extends DemandeEquipe {
 
   factory DemandeEquipeModel.fromJson(Map<String, dynamic> json) {
     final document = _documentJson(json['demandes_equipe_documents']);
+    final preuve = _documentJson(json['demandes_equipe_preuves']);
     return DemandeEquipeModel(
       id: json['id'] as String,
       employeeId: json['employee_id'] as String,
@@ -62,6 +66,9 @@ class DemandeEquipeModel extends DemandeEquipe {
       documentNom: document?['nom'] as String?,
       documentTypeMime: document?['type_mime'] as String?,
       documentTaille: (document?['taille'] as num?)?.toInt(),
+      preuveNom: preuve?['nom'] as String?,
+      preuveTypeMime: preuve?['type_mime'] as String?,
+      preuveTaille: (preuve?['taille'] as num?)?.toInt(),
     );
   }
 }

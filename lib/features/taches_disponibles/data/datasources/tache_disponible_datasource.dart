@@ -35,29 +35,37 @@ class TacheDisponibleDatasourceImpl implements TacheDisponibleDatasource {
     try {
       // Récupérer les tâches disponibles pour ce jour
       // visibilité TouteEquipe OU EmployeSpecifique ciblant cet employé
-      final data = await SupabaseService
-          .table(SupabaseService.tachesDisponibles)
+      final data = await SupabaseService.table(
+              SupabaseService.tachesDisponibles)
           .select(_joinTache)
           .eq('statut', StatutDisponible.disponible.label)
           .or('visibilite.eq.TouteEquipe,employee_visible_id.eq.$employeeId');
 
-      // Filtrer sur la semaine contenant `date`
-      // semaineReelle = lundi de la semaine → dimanche = lundi + 6 jours
-      final monday = DateTime(date.year, date.month, date.day)
-          .subtract(Duration(days: date.weekday - 1));
-      final sunday = monday.add(const Duration(days: 6));
+      // À partir de `date` : un ménage d'un jour déjà passé ne peut plus être
+      // pris (avant, toute la semaine en cours restait affichée, lundi
+      // compris un jeudi). Les jours à venir, même la semaine suivante,
+      // restent proposés.
       final dateOnly = DateTime(date.year, date.month, date.day);
 
-      return (data as List)
+      final taches = (data as List)
           .map((e) => TacheDisponibleModel.fromJson(e as Map<String, dynamic>))
           .where((td) {
-        if (td.tacheJour == null) return false;
+        final tj = td.tacheJour;
+        if (tj == null) return false;
         // Ne pas afficher à l'employée ses propres tâches libérées
-        if (td.tacheJour!.employeeId == employeeId) return false;
-        final sr = td.tacheJour!.semaineReelle;
-        final srDate = DateTime(sr.year, sr.month, sr.day);
-        return !dateOnly.isBefore(srDate) && !dateOnly.isAfter(sunday);
-      }).toList();
+        if (tj.employeeId == employeeId) return false;
+        return !tj.dateDuJour!.isBefore(dateOnly);
+      }).toList()
+        // Du plus proche au plus lointain : matin avant après-midi.
+        ..sort((a, b) {
+          final da = a.tacheJour!.dateDuJour ?? a.tacheJour!.semaineReelle;
+          final db = b.tacheJour!.dateDuJour ?? b.tacheJour!.semaineReelle;
+          final c = da.compareTo(db);
+          if (c != 0) return c;
+          return a.tacheJour!.periode.index
+              .compareTo(b.tacheJour!.periode.index);
+        });
+      return taches;
     } on PostgrestException catch (e) {
       throw ServerException(e.message);
     } catch (e) {
@@ -88,17 +96,18 @@ class TacheDisponibleDatasourceImpl implements TacheDisponibleDatasource {
         },
       };
 
-      final data = await SupabaseService
-          .table(SupabaseService.tachesDisponibles)
-          .insert(row)
-          .select(_joinTache)
-          .single();
+      final data =
+          await SupabaseService.table(SupabaseService.tachesDisponibles)
+              .insert(row)
+              .select(_joinTache)
+              .single();
 
       final result = TacheDisponibleModel.fromJson(data);
 
       final numero = result.tacheJour?.appartement?.numero;
-      final message =
-          numero != null ? 'Tâche disponible — Apt $numero' : 'Une tâche est disponible pour l\'équipe.';
+      final message = numero != null
+          ? 'Tâche disponible — Apt $numero'
+          : 'Une tâche est disponible pour l\'équipe.';
 
       if (employeeVisibleId != null) {
         await _notifierEmployes(
@@ -143,11 +152,11 @@ class TacheDisponibleDatasourceImpl implements TacheDisponibleDatasource {
         },
       );
 
-      final updated = await SupabaseService
-          .table(SupabaseService.tachesDisponibles)
-          .select(_joinTache)
-          .eq('id', tacheDisponibleId)
-          .single();
+      final updated =
+          await SupabaseService.table(SupabaseService.tachesDisponibles)
+              .select(_joinTache)
+              .eq('id', tacheDisponibleId)
+              .single();
 
       final result = TacheDisponibleModel.fromJson(updated);
 

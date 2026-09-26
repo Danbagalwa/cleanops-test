@@ -3,6 +3,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../data/datasources/resident_espace_datasource.dart';
 import '../../data/repositories/resident_espace_repository_impl.dart';
 import '../../domain/entities/demande_resident.dart';
+import '../../domain/entities/jour_menage.dart';
 import '../../domain/entities/notification_resident.dart';
 import '../../domain/entities/tache_resident.dart';
 import '../../domain/repositories/resident_espace_repository.dart';
@@ -289,6 +290,22 @@ final residentEspaceNotifierProvider = StateNotifierProvider.autoDispose<
     residentPrenom: employee?.prenom ?? '',
     residentNom: employee?.nom ?? '',
   );
+});
+
+/// Calendrier des ménages du résident connecté pour le mois de [mois]
+/// (n'importe quel jour du mois).
+final calendrierResidentProvider = FutureProvider.autoDispose
+    .family<CalendrierMenages, DateTime>((ref, mois) async {
+  final residentId = ref.watch(employeeCourantProvider)?.id ?? '';
+  final debut = DateTime(mois.year, mois.month, 1);
+  final fin = DateTime(mois.year, mois.month + 1, 0);
+  final result =
+      await ref.watch(residentEspaceRepositoryProvider).getCalendrier(
+            residentId: residentId,
+            debut: debut,
+            fin: fin,
+          );
+  return result.fold((f) => throw Exception(f.message), (c) => c);
 });
 
 /// Badge notifications non lues — safe à watch même pour les non-résidents.

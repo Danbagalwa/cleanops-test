@@ -1,12 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/widgets/error_widget.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/mise_en_page.dart';
+import '../../../../core/widgets/notification_app.dart';
+import '../../../auth/domain/entities/employee.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../reception/presentation/reception_sections.dart';
 import '../../domain/entities/demande_equipe.dart';
 import '../providers/demande_equipe_provider.dart';
+import '../widgets/demande_equipe_elements.dart';
 import '../widgets/nouvelle_demande_equipe_sheet.dart';
 import '../widgets/piece_jointe_demande.dart';
 
@@ -23,144 +31,182 @@ class MesDemandesEquipeScreen extends ConsumerStatefulWidget {
 class _MesDemandesEquipeScreenState
     extends ConsumerState<MesDemandesEquipeScreen> {
   _StatutFiltre _filtre = _StatutFiltre.tous;
+  String _recherche = '';
+
+  /// Un avertissement (document non joint) a déjà été affiché pendant
+  /// l'envoi : on ne le recouvre pas par un message de réussite.
+  bool _avertissementAffiche = false;
 
   List<DemandeEquipe> _filtrer(List<DemandeEquipe> demandes) {
+    final q = _recherche.trim().toLowerCase();
     return demandes.where((d) {
-      return switch (_filtre) {
+      final statutOk = switch (_filtre) {
         _StatutFiltre.tous => true,
         _StatutFiltre.enAttente => d.enAttente,
         _StatutFiltre.resolues => d.resolue,
       };
+      return statutOk &&
+          (q.isEmpty ||
+              d.motif.toLowerCase().contains(q) ||
+              d.type.libelle.toLowerCase().contains(q));
     }).toList();
   }
 
   Future<void> _ouvrirNouvelleDemande() async {
-    await showNouvelleDemandeEquipeModal(context);
+    _avertissementAffiche = false;
+    final envoyee = await showNouvelleDemandeEquipeModal(context);
+    if (envoyee == true && mounted && !_avertissementAffiche) {
+      NotificationApp.succes(
+        context,
+        'Votre demande a été envoyée. Vous serez informé(e) de la réponse.',
+      );
+    }
   }
+
+  Future<void> _charger() =>
+      ref.read(mesDemandesEquipeNotifierProvider.notifier).charger();
 
   @override
   Widget build(BuildContext context) {
     ref.listen(mesDemandesEquipeNotifierProvider, (previous, next) {
       final avertissement = next.avertissement;
       if (avertissement != null && avertissement != previous?.avertissement) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(avertissement)));
-        ref.read(mesDemandesEquipeNotifierProvider.notifier).viderAvertissement();
+        _avertissementAffiche = true;
+        NotificationApp.avertissement(context, avertissement);
+        ref
+            .read(mesDemandesEquipeNotifierProvider.notifier)
+            .viderAvertissement();
       }
     });
     final state = ref.watch(mesDemandesEquipeNotifierProvider);
     final employee = ref.watch(employeeCourantProvider);
     final filtrees = _filtrer(state.demandes);
-    final fallback = employee?.isResponsable == true
-        ? AppRoutes.employerDashboard
-        : AppRoutes.employeeDashboard;
+    final fallback = switch (employee) {
+      Employee(isResponsable: true) => AppRoutes.employerDashboard,
+      Employee(isReception: true) => receptionAccueilRoute,
+      _ => AppRoutes.employeeDashboard,
+    };
+    final compact = estCompact(context);
+    final marge = compact ? 12.0 : 24.0;
+    final enAttente = state.demandes.where((d) => d.enAttente).length;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
+    FiltreSection filtre(_StatutFiltre f, IconData icone, String info) =>
+        FiltreSection(
+          icone: icone,
+          infoBulle: info,
+          actif: _filtre == f,
+          onTap: () => setState(() => _filtre = f),
+        );
+
+    final nouvelle = FilledButton.icon(
+      onPressed: state.isSending ? null : _ouvrirNouvelleDemande,
+      style: FilledButton.styleFrom(
         backgroundColor: AppColors.rouge,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.backOrHome(fallback),
+        shape: const StadiumBorder(),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+      ),
+      icon: const Icon(Icons.add_rounded, size: 19),
+      label: Text(compact ? 'Nouvelle' : 'Nouvelle demande'),
+    );
+    final recherche = ChampRecherche(
+      indice: 'Rechercher dans mes demandes',
+      onChanged: (v) => setState(() => _recherche = v),
+    );
+
+    Widget corps;
+    if (state.isLoading && state.demandes.isEmpty) {
+      corps = const Padding(
+        padding: EdgeInsets.only(top: 60),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
+    } else if (state.error != null && state.demandes.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: AppErrorNotice(error: state.error!, onRetry: _charger),
+      );
+    } else if (state.demandes.isEmpty) {
+      corps = _EmptyState(onNouvelleDemande: _ouvrirNouvelleDemande);
+    } else if (filtrees.isEmpty) {
+      corps = const CarteContenu(
+        padding: EdgeInsets.all(AppSizes.xl),
+        child: Text(
+          'Aucune demande ne correspond à ce filtre.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.grisDark),
         ),
-        title: const Text(
-          'Mes demandes d\'équipe',
-          style: TextStyle(
-              color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          if (state.isLoading)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-              tooltip: 'Actualiser',
-              onPressed: () =>
-                  ref.read(mesDemandesEquipeNotifierProvider.notifier).charger(),
+      );
+    } else {
+      corps = LayoutBuilder(builder: (context, c) {
+        const ecart = AppSizes.sm;
+        final colonnes = math.max(1, (c.maxWidth + ecart) ~/ (360 + ecart));
+        final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+        return Wrap(
+          spacing: ecart,
+          runSpacing: ecart,
+          children: [
+            for (final d in filtrees)
+              SizedBox(width: largeur, child: _DemandeCard(demande: d)),
+          ],
+        );
+      });
+    }
+
+    return PageAvecEnTete(
+      chargement: state.isLoading && state.demandes.isNotEmpty,
+      enTete: EnTetePage(
+        icone: Icons.event_note_rounded,
+        titre: 'Mes demandes',
+        sousTitre: enAttente == 0
+            ? 'Congés, absences planifiées et autres demandes à la direction'
+            : 'Congés, absences planifiées et autres demandes — '
+                '$enAttente en attente de réponse',
+      ),
+      contenu: RefreshIndicator(
+        color: AppColors.rouge,
+        onRefresh: _charger,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+              .plusBarre(context),
+          children: [
+            BarreSection(
+              titre: 'Mes demandes (${filtrees.length})',
+              onRetour: () => context.backOrHome(fallback),
+              filtres: [
+                filtre(_StatutFiltre.tous, Icons.list_alt_rounded,
+                    'Toutes mes demandes'),
+                filtre(_StatutFiltre.enAttente, Icons.hourglass_top_rounded,
+                    'En attente'),
+                filtre(
+                    _StatutFiltre.resolues, Icons.task_alt_rounded, 'Traitées'),
+              ],
+              actions: [
+                ActionSection(
+                  icone: Icons.refresh_rounded,
+                  infoBulle: 'Actualiser',
+                  onPressed: state.isLoading ? null : _charger,
+                ),
+              ],
             ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _ouvrirNouvelleDemande,
-        backgroundColor: AppColors.rouge,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nouvelle demande'),
-      ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 700),
-          child: Column(
-            children: [
-              if (state.demandes.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSizes.md, AppSizes.md, AppSizes.md, 0),
+            const SizedBox(height: AppSizes.md),
+            Row(
+              children: [
+                Expanded(
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        _Chip(
-                          label: 'Toutes',
-                          selected: _filtre == _StatutFiltre.tous,
-                          onTap: () =>
-                              setState(() => _filtre = _StatutFiltre.tous),
-                        ),
-                        _Chip(
-                          label: 'En attente',
-                          selected: _filtre == _StatutFiltre.enAttente,
-                          onTap: () => setState(
-                              () => _filtre = _StatutFiltre.enAttente),
-                        ),
-                        _Chip(
-                          label: 'Résolues',
-                          selected: _filtre == _StatutFiltre.resolues,
-                          onTap: () =>
-                              setState(() => _filtre = _StatutFiltre.resolues),
-                        ),
-                      ],
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: recherche,
                     ),
                   ),
                 ),
-              Expanded(
-                child: state.isLoading && state.demandes.isEmpty
-                    ? const AppSkeletonList()
-                    : state.demandes.isEmpty
-                        ? _EmptyState(onNouvelleDemande: _ouvrirNouvelleDemande)
-                        : filtrees.isEmpty
-                            ? const _EmptyFiltre()
-                            : RefreshIndicator(
-                                color: AppColors.rouge,
-                                onRefresh: () => ref
-                                    .read(mesDemandesEquipeNotifierProvider
-                                        .notifier)
-                                    .charger(),
-                                child: ListView.separated(
-                                  padding: const EdgeInsets.fromLTRB(
-                                      AppSizes.md,
-                                      AppSizes.md,
-                                      AppSizes.md,
-                                      80),
-                                  itemCount: filtrees.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(height: AppSizes.sm),
-                                  itemBuilder: (_, i) =>
-                                      _DemandeCard(demande: filtrees[i]),
-                                ),
-                              ),
-              ),
-            ],
-          ),
+                const SizedBox(width: AppSizes.sm),
+                nouvelle,
+              ],
+            ),
+            const SizedBox(height: AppSizes.md),
+            corps,
+          ],
         ),
       ),
     );
@@ -173,29 +219,23 @@ class _DemandeCard extends StatelessWidget {
   final DemandeEquipe demande;
   const _DemandeCard({required this.demande});
 
-  static const _mois = [
-    'jan', 'fév', 'mar', 'avr', 'mai', 'juin',
-    'juil', 'août', 'sep', 'oct', 'nov', 'déc',
-  ];
-
-  String _fmt(DateTime d) => '${d.day} ${_mois[d.month - 1]} ${d.year}';
-
   @override
   Widget build(BuildContext context) {
-    final periode = demande.dateFin != null
-        ? '${_fmt(demande.dateDebut)} → ${_fmt(demande.dateFin!)}'
-        : _fmt(demande.dateDebut);
+    final d = demande;
+    final periode = periodeDemande(d);
+    final jours = joursDemande(d);
+    final couleurType = couleurTypeDemande(d.type);
 
     return Container(
       padding: const EdgeInsets.all(AppSizes.md),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: demande.enAttente
-              ? AppColors.aVerifier.withValues(alpha: 0.5)
+          color: d.enAttente
+              ? AppColors.aVerifier.withValues(alpha: 0.6)
               : AppColors.grisMedium,
-          width: demande.enAttente ? 2 : 1,
+          width: d.enAttente ? 1.5 : 1,
         ),
       ),
       child: Column(
@@ -203,52 +243,76 @@ class _DemandeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(
-                demande.type == TypeDemandeEquipe.conge
-                    ? Icons.beach_access_rounded
-                    : Icons.event_busy_rounded,
-                size: 18,
-                color: AppColors.rouge,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: couleurType.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(iconeTypeDemande(d.type),
+                    size: 18, color: couleurType),
               ),
-              const SizedBox(width: AppSizes.sm),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  demande.type.libelle,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: AppColors.noir),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      d.type.libelle,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: AppColors.noir,
+                      ),
+                    ),
+                    Text(
+                      'Envoyée le ${dateEnvoiDemande(d)}',
+                      style: const TextStyle(
+                          fontSize: 11.5, color: AppColors.grisText),
+                    ),
+                  ],
                 ),
               ),
-              _StatutBadge(demande: demande),
+              BadgeStatutDemande(demande: d),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(periode,
-              style:
-                  const TextStyle(fontSize: 12, color: AppColors.grisDark)),
-          const SizedBox(height: AppSizes.sm),
-          Text(demande.motif,
-              style:
-                  const TextStyle(fontSize: 13, color: AppColors.grisDark)),
-          if (demande.aDocument) ...[
-            const SizedBox(height: AppSizes.sm),
-            PieceJointeDemande(demande: demande),
-          ],
-          if (demande.resolue && demande.noteResponsable != null) ...[
-            const SizedBox(height: AppSizes.sm),
-            Container(
-              padding: const EdgeInsets.all(AppSizes.sm),
-              decoration: BoxDecoration(
-                color: AppColors.grisLight,
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-              ),
-              child: Text(
-                demande.noteResponsable!,
-                style:
-                    const TextStyle(fontSize: 12, color: AppColors.grisDark),
-              ),
+          if (periode != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.event_rounded,
+                    size: 15, color: AppColors.grisText),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    jours != null && jours > 1
+                        ? '$periode · $jours jours'
+                        : periode,
+                    style: const TextStyle(
+                        fontSize: 12.5, color: AppColors.grisDark),
+                  ),
+                ),
+              ],
             ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            d.motif,
+            style: const TextStyle(
+                fontSize: 13, height: 1.35, color: AppColors.noir),
+          ),
+          if (d.aDocument) ...[
+            const SizedBox(height: 8),
+            PieceJointeDemande(demande: d),
+          ],
+          if (d.resolue) ...[
+            const SizedBox(height: 10),
+            NoteResponsableDemande(demande: d),
+          ],
+          if (d.aPreuve) ...[
+            const SizedBox(height: 8),
+            PieceJointeDemande(demande: d, preuve: true),
           ],
         ],
       ),
@@ -256,72 +320,7 @@ class _DemandeCard extends StatelessWidget {
   }
 }
 
-class _StatutBadge extends StatelessWidget {
-  final DemandeEquipe demande;
-  const _StatutBadge({required this.demande});
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, bg, fg) = switch (demande.statut) {
-      _ when demande.estApprouvee => (
-          'Approuvée',
-          AppColors.faitBg,
-          AppColors.fait
-        ),
-      _ when demande.estRefusee => (
-          'Refusée',
-          AppColors.refusBg,
-          AppColors.refus
-        ),
-      _ => ('En attente', AppColors.grisLight, AppColors.grisDark),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(label,
-          style:
-              TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  const _Chip(
-      {required this.label, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.rouge.withValues(alpha: 0.1)
-                : AppColors.grisLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: selected ? AppColors.rouge : AppColors.grisMedium),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                color: selected ? AppColors.rouge : AppColors.grisDark,
-              )),
-        ),
-      ),
-    );
-  }
-}
+// ── État vide ──────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   final VoidCallback onNouvelleDemande;
@@ -329,54 +328,44 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSizes.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.event_note_rounded,
-                size: 56, color: AppColors.grisText),
-            const SizedBox(height: AppSizes.md),
-            const Text('Aucune demande pour le moment',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.noir)),
-            const SizedBox(height: 4),
-            const Text('Demandez un congé ou signalez une absence planifiée.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppColors.grisDark)),
-            const SizedBox(height: AppSizes.lg),
-            FilledButton.icon(
-              onPressed: onNouvelleDemande,
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('Faire une demande'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.rouge),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyFiltre extends StatelessWidget {
-  const _EmptyFiltre();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
+    return CarteContenu(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off_rounded, size: 48, color: AppColors.grisText),
-          SizedBox(height: AppSizes.md),
-          Text('Aucun résultat',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.noir)),
+          Container(
+            padding: const EdgeInsets.all(AppSizes.lg),
+            decoration: BoxDecoration(
+              color: AppColors.rouge.withValues(alpha: 0.06),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.event_note_rounded,
+                size: 44, color: AppColors.rouge),
+          ),
+          const SizedBox(height: AppSizes.md),
+          const Text(
+            'Aucune demande',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.noir),
+          ),
+          const SizedBox(height: AppSizes.xs),
+          const Text(
+            'Demandez un congé, signalez une absence planifiée ou écrivez '
+            'une autre demande à la direction.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.grisText, fontSize: 13),
+          ),
+          const SizedBox(height: AppSizes.lg),
+          FilledButton.icon(
+            onPressed: onNouvelleDemande,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.rouge,
+              shape: const StadiumBorder(),
+            ),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Nouvelle demande'),
+          ),
         ],
       ),
     );

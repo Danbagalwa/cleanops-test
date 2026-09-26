@@ -15,8 +15,7 @@ abstract class ResidentRemoteDatasource {
   Future<ResidentModel> desactiverResident(
       String residentId, String desactiveParId);
   Future<ResidentModel> activerResident(String residentId);
-  Future<ResidentModel> toggleApplication(
-      String residentId, bool aApplication);
+  Future<ResidentModel> toggleApplication(String residentId, bool aApplication);
 }
 
 class ResidentRemoteDatasourceImpl implements ResidentRemoteDatasource {
@@ -44,8 +43,7 @@ class ResidentRemoteDatasourceImpl implements ResidentRemoteDatasource {
   }
 
   @override
-  Future<ResidentModel?> getResidentByAppartement(
-      String appartementId) async {
+  Future<ResidentModel?> getResidentByAppartement(String appartementId) async {
     try {
       final data = await SupabaseService.client
           .from(_table)
@@ -85,8 +83,7 @@ class ResidentRemoteDatasourceImpl implements ResidentRemoteDatasource {
   }
 
   @override
-  Future<ResidentModel> attribuerPin(
-      String residentId, String pin) async {
+  Future<ResidentModel> attribuerPin(String residentId, String pin) async {
     try {
       final data = await SupabaseService.client
           .from(_table)

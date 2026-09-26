@@ -8,6 +8,7 @@ import '../../domain/photo_profil_models.dart';
 import '../../domain/selecteur_image.dart';
 import '../providers/photo_profil_provider.dart';
 import 'avatar_profil.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 /// Avatar d'un utilisateur avec un bouton pour changer sa photo de profil.
 ///
@@ -48,14 +49,9 @@ class _PhotoProfilEditeurState extends ConsumerState<PhotoProfilEditeur> {
 
   void _message(String texte, {bool erreur = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(texte),
-          backgroundColor: erreur ? AppColors.refus : null,
-        ),
-      );
+    erreur
+        ? NotificationApp.erreur(context, texte)
+        : NotificationApp.succes(context, texte);
   }
 
   Future<void> _ouvrirMenu() async {

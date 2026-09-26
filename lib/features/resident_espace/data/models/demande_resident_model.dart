@@ -17,9 +17,30 @@ class DemandeResidentModel extends DemandeResident {
     super.propositionNotes,
     super.propositionHasAnimal,
     super.propositionTypeAnimal,
+    super.dateReponse,
+    super.dateResolution,
+    super.residentPrenom,
+    super.residentNom,
+    super.numeroAppartement,
+    super.tailleAppartement,
+    super.menageDate,
+    super.menagePeriode,
   });
 
+  /// [json] peut contenir, pour la vue responsable, `residents`
+  /// (`prenom, nom, appartements(numero, taille)`) et `taches_jour`
+  /// (`semaine_reelle, jour, periode`).
   factory DemandeResidentModel.fromJson(Map<String, dynamic> json) {
+    final resident = json['residents'] as Map<String, dynamic>?;
+    final appartement = resident?['appartements'] as Map<String, dynamic>?;
+    final tache = json['taches_jour'] as Map<String, dynamic>?;
+
+    // `semaine_reelle` porte la date réelle du ménage (pas le lundi).
+    final semaine = tache?['semaine_reelle'] as String?;
+    final menageDate = semaine == null ? null : DateTime.tryParse(semaine);
+    DateTime? date(String cle) =>
+        json[cle] is String ? DateTime.tryParse(json[cle] as String) : null;
+
     return DemandeResidentModel(
       id: json['id'] as String,
       residentId: json['resident_id'] as String,
@@ -40,6 +61,14 @@ class DemandeResidentModel extends DemandeResident {
       propositionNotes: json['proposition_notes'] as String?,
       propositionHasAnimal: json['proposition_has_animal'] as bool?,
       propositionTypeAnimal: json['proposition_type_animal'] as String?,
+      dateReponse: date('date_reponse'),
+      dateResolution: date('date_resolution'),
+      residentPrenom: resident?['prenom'] as String?,
+      residentNom: resident?['nom'] as String?,
+      numeroAppartement: appartement?['numero']?.toString(),
+      tailleAppartement: appartement?['taille']?.toString(),
+      menageDate: menageDate,
+      menagePeriode: tache?['periode'] as String?,
     );
   }
 }

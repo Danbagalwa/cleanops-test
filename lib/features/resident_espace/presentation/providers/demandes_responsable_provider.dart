@@ -87,7 +87,7 @@ class DemandesResponsableNotifier
         state = state.copyWith(
           isSending: false,
           demandes: state.demandes
-              .map((d) => d.id == updated.id ? updated : d)
+              .map((d) => d.id == updated.id ? updated.avecContexteDe(d) : d)
               .toList(),
         );
         return true;
@@ -107,7 +107,7 @@ class DemandesResponsableNotifier
         state = state.copyWith(
           isSending: false,
           demandes: state.demandes
-              .map((d) => d.id == updated.id ? updated : d)
+              .map((d) => d.id == updated.id ? updated.avecContexteDe(d) : d)
               .toList(),
         );
         return true;
@@ -133,7 +133,7 @@ class DemandesResponsableNotifier
         state = state.copyWith(
           isSending: false,
           demandes: state.demandes
-              .map((d) => d.id == updated.id ? updated : d)
+              .map((d) => d.id == updated.id ? updated.avecContexteDe(d) : d)
               .toList(),
         );
         return true;

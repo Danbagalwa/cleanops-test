@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/services/supabase_service.dart';
 import '../../data/datasources/tache_jour_datasource.dart';
 import '../../data/repositories/tache_jour_repository_impl.dart';
 import '../../domain/entities/tache_jour.dart';
@@ -45,11 +46,9 @@ class TacheJourState {
       taches.where((t) => t.periode == PeriodeType.pm).toList()
         ..sort((a, b) => a.numeroTache.compareTo(b.numeroTache));
 
-  int get totalMinutes =>
-      taches.fold(0, (s, t) => s + t.minutesEstimees);
+  int get totalMinutes => taches.fold(0, (s, t) => s + t.minutesEstimees);
 
-  int get tachesConfirmees =>
-      taches.where((t) => t.estConfirmee).length;
+  int get tachesConfirmees => taches.where((t) => t.estConfirmee).length;
 
   TacheJourState copyWith({
     List<TacheJour>? taches,
@@ -83,8 +82,7 @@ class TacheJourNotifier extends StateNotifier<TacheJourState> {
 
   Future<void> charger({required String employeeId}) async {
     state = state.copyWith(isLoading: true, error: null);
-    final result =
-        await _getTaches(employeeId: employeeId, dateStr: _dateStr);
+    final result = await _getTaches(employeeId: employeeId, dateStr: _dateStr);
     result.fold(
       (f) => state = state.copyWith(isLoading: false, error: f.message),
       (list) => state = state.copyWith(isLoading: false, taches: list),
@@ -96,10 +94,10 @@ class TacheJourNotifier extends StateNotifier<TacheJourState> {
     required StatutTache statut,
     String? motifAbsent,
   }) async {
-    state = state.copyWith(
-        updatingIds: {...state.updatingIds, id}, error: null);
-    final result = await _updateStatut(
-        id: id, statut: statut, motifAbsent: motifAbsent);
+    state =
+        state.copyWith(updatingIds: {...state.updatingIds, id}, error: null);
+    final result =
+        await _updateStatut(id: id, statut: statut, motifAbsent: motifAbsent);
     return result.fold(
       (f) {
         state = state.copyWith(
@@ -119,9 +117,21 @@ class TacheJourNotifier extends StateNotifier<TacheJourState> {
   }
 }
 
+/// Identifiants des tâches libérées à l'équipe (pool, statut Disponible) :
+/// elles restent au nom de la préposée tant qu'une collègue ne les a pas
+/// prises, mais ne sont plus les siennes et sont masquées de sa journée.
+/// En cas d'échec (réseau), rien n'est masqué.
+final idsTachesAuPoolProvider =
+    FutureProvider.autoDispose<Set<String>>((ref) async {
+  final data = await SupabaseService.table(SupabaseService.tachesDisponibles)
+      .select('tache_jour_id')
+      .eq('statut', 'Disponible');
+  return {for (final r in data as List) r['tache_jour_id'] as String};
+});
+
 // ── Provider (family par date ISO) ───────────────────────
-final tacheJourNotifierProvider = StateNotifierProvider.family<
-    TacheJourNotifier, TacheJourState, String>(
+final tacheJourNotifierProvider =
+    StateNotifierProvider.family<TacheJourNotifier, TacheJourState, String>(
   (ref, dateStr) => TacheJourNotifier(
     getTaches: ref.watch(_getTachesProvider),
     updateStatut: ref.watch(_updateStatutProvider),

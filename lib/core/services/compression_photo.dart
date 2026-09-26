@@ -300,7 +300,8 @@ abstract final class CompresseurPhoto {
         allowUpscaling: false,
       );
       image = (await codec.getNextFrame()).image;
-      final donnees = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final donnees =
+          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (donnees == null) {
         throw const ErreurPhoto("Ce fichier n'est pas une image lisible.");
       }

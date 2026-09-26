@@ -19,7 +19,8 @@ const _reception = Employee(
   isActif: true,
 );
 
-Future<void> _afficher(WidgetTester tester, {Size taille = const Size(1000, 900)}) async {
+Future<void> _afficher(WidgetTester tester,
+    {Size taille = const Size(1000, 900)}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = taille;
   addTearDown(tester.view.reset);
@@ -60,7 +61,7 @@ void main() {
     testWidgets('accueille la personne connectée', (tester) async {
       await _afficher(tester);
 
-      expect(find.text('Bonjour Receptioniste'), findsOneWidget);
+      expect(find.text('Bienvenue, Receptioniste Dab'), findsOneWidget);
       expect(find.text('Que souhaitez-vous faire ?'), findsOneWidget);
     });
 
@@ -89,7 +90,8 @@ void main() {
       expect(find.text('Résidents'), findsOneWidget);
     });
 
-    testWidgets('n\'affiche AUCUNE donnée : ni compteur, ni progression, ni liste',
+    testWidgets(
+        'n\'affiche AUCUNE donnée : ni compteur, ni progression, ni liste',
         (tester) async {
       await _afficher(tester);
 
@@ -116,7 +118,7 @@ void main() {
 
         expect(find.text('Section en construction'), findsOneWidget);
         expect(find.text(section.description), findsOneWidget);
-        expect(find.text('Bonjour Receptioniste'), findsNothing);
+        expect(find.text('Bienvenue, Receptioniste Dab'), findsNothing);
       });
     }
   });

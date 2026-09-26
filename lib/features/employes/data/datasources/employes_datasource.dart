@@ -33,7 +33,7 @@ class EmployesDatasourceImpl implements EmployesDatasource {
 
   static String _slugify(String text) {
     const from = 'àáâãäåçèéêëìíîïñòóôõöùúûüý';
-    const to   = 'aaaaaaceeeeiiiinooooouuuuy';
+    const to = 'aaaaaaceeeeiiiinooooouuuuy';
     var s = text.toLowerCase().trim();
     for (var i = 0; i < from.length; i++) {
       s = s.replaceAll(from[i], to[i]);
@@ -68,17 +68,21 @@ class EmployesDatasourceImpl implements EmployesDatasource {
     String? motDePasse,
   }) async {
     try {
-      final data = await _supabase.from('employees').insert({
-        'nom': nom,
-        'prenom': prenom,
-        'slug': _slugify(prenom),
-        'role': role.label,
-        'is_actif': true,
-        if (numeroPointeuse != null && numeroPointeuse.isNotEmpty)
-          'numero_pointeuse': numeroPointeuse,
-        if (motDePasse != null && motDePasse.isNotEmpty)
-          'mot_de_passe': motDePasse,
-      }).select(_kSelectEmployee).single();
+      final data = await _supabase
+          .from('employees')
+          .insert({
+            'nom': nom,
+            'prenom': prenom,
+            'slug': _slugify(prenom),
+            'role': role.label,
+            'is_actif': true,
+            if (numeroPointeuse != null && numeroPointeuse.isNotEmpty)
+              'numero_pointeuse': numeroPointeuse,
+            if (motDePasse != null && motDePasse.isNotEmpty)
+              'mot_de_passe': motDePasse,
+          })
+          .select(_kSelectEmployee)
+          .single();
       return EmployeeModel.fromJson(data);
     } on PostgrestException catch (e) {
       if (e.code == '23505') {
@@ -106,9 +110,10 @@ class EmployesDatasourceImpl implements EmployesDatasource {
       final data = await _supabase
           .from('employees')
           .update({
+            // Pas de 'slug' : l'identifiant est créé à partir du prénom, puis
+            // appartient à la personne (modifiable depuis son profil).
             'nom': nom,
             'prenom': prenom,
-            'slug': _slugify(prenom),
             'role': role.label,
             'is_actif': isActif,
             if (role == RoleType.employe &&
@@ -141,8 +146,7 @@ class EmployesDatasourceImpl implements EmployesDatasource {
     try {
       await _supabase
           .from('employees')
-          .update({'is_actif': isActif})
-          .eq('id', id);
+          .update({'is_actif': isActif}).eq('id', id);
     } on PostgrestException catch (e) {
       throw ServerException(e.message);
     } catch (e) {

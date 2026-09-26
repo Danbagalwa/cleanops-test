@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../domain/reception_pin_models.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 /// Fenêtre qui montre un PIN qui vient d'être généré : UNE seule fois, puis
 /// plus jamais relisible. Ne se ferme pas par un clic à côté.
@@ -21,8 +22,7 @@ class AffichagePinDialog extends StatelessWidget {
   Future<void> _copier(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: pin.pin));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('PIN copié.')));
+    NotificationApp.succes(context, 'PIN copié.');
   }
 
   @override

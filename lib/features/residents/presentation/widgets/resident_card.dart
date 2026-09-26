@@ -161,15 +161,15 @@ class _StatutBadge extends StatelessWidget {
   const _StatutBadge({required this.statut});
 
   Color get _color => switch (statut) {
-        'Inscrit'  => AppColors.fait,
+        'Inscrit' => AppColors.fait,
         'Sans app' => AppColors.aVerifier,
-        _          => AppColors.grisDark,
+        _ => AppColors.grisDark,
       };
 
   IconData get _icon => switch (statut) {
-        'Inscrit'  => Icons.phone_android_rounded,
+        'Inscrit' => Icons.phone_android_rounded,
         'Sans app' => Icons.description_rounded,
-        _          => Icons.block_rounded,
+        _ => Icons.block_rounded,
       };
 
   @override

@@ -98,8 +98,8 @@ class ChatGroupeNotifier extends StateNotifier<ChatGroupeState> {
   Future<void> loadMore() async {
     if (!state.hasMore || state.isLoadingMore || state.isLoading) return;
     state = state.copyWith(isLoadingMore: true);
-    final result = await _repo.getMessages(
-        offset: state.messages.length, limit: 50);
+    final result =
+        await _repo.getMessages(offset: state.messages.length, limit: 50);
     if (_disposed) return;
     result.fold(
       (_) => state = state.copyWith(isLoadingMore: false),
@@ -156,8 +156,7 @@ class ChatGroupeNotifier extends StateNotifier<ChatGroupeState> {
   }
 
   Future<void> desepinglerMessage(String messageId) async {
-    final result =
-        await _repo.desepinglerMessage(messageId: messageId);
+    final result = await _repo.desepinglerMessage(messageId: messageId);
     if (_disposed) return;
     result.fold(
       (f) => state = state.copyWith(error: f.message),
@@ -182,8 +181,7 @@ class ChatGroupeNotifier extends StateNotifier<ChatGroupeState> {
       (f) => state = state.copyWith(error: f.message),
       (_) {
         state = state.copyWith(
-          messages:
-              state.messages.where((m) => m.id != messageId).toList(),
+          messages: state.messages.where((m) => m.id != messageId).toList(),
           messagesEpingles:
               state.messagesEpingles.where((m) => m.id != messageId).toList(),
         );
@@ -220,15 +218,12 @@ class ChatGroupeNotifier extends StateNotifier<ChatGroupeState> {
     if (_disposed) return;
     result.fold(
       (_) {},
-      (epingles) =>
-          state = state.copyWith(messagesEpingles: epingles),
+      (epingles) => state = state.copyWith(messagesEpingles: epingles),
     );
   }
 
   List<ChatMessage> _remplacerMessage(ChatMessage updated) {
-    return state.messages
-        .map((m) => m.id == updated.id ? updated : m)
-        .toList();
+    return state.messages.map((m) => m.id == updated.id ? updated : m).toList();
   }
 
   @override

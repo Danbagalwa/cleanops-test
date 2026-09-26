@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 
+/// Zone de saisie du chat. Sur ordinateur, Entrée envoie et Maj+Entrée
+/// passe à la ligne.
 class ChatInputWidget extends StatefulWidget {
   final bool isSending;
   final void Function(String) onEnvoyer;
@@ -17,6 +20,7 @@ class ChatInputWidget extends StatefulWidget {
 
 class _ChatInputWidgetState extends State<ChatInputWidget> {
   final _controller = TextEditingController();
+  late final FocusNode _focus = FocusNode(onKeyEvent: _clavier);
   bool _hasText = false;
 
   @override
@@ -31,7 +35,18 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
   @override
   void dispose() {
     _controller.dispose();
+    _focus.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _clavier(FocusNode _, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.enter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _envoyer();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _envoyer() {
@@ -39,71 +54,52 @@ class _ChatInputWidgetState extends State<ChatInputWidget> {
     if (texte.isEmpty || widget.isSending) return;
     widget.onEnvoyer(texte);
     _controller.clear();
+    _focus.requestFocus();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.of(context).viewPadding.bottom;
-
     return Container(
-      padding: EdgeInsets.fromLTRB(12, 8, 8, 8 + bottomPad),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F2F5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
-            offset: const Offset(0, -1),
-            blurRadius: 6,
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      color: Colors.white,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // ── Champ de texte ──────────────────────────────
           Expanded(
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x14000000),
-                    blurRadius: 3,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: TextField(
-                controller: _controller,
-                enabled: !widget.isSending,
-                maxLines: 5,
-                minLines: 1,
-                textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(fontSize: 14.5, color: Color(0xFF111B21)),
-                decoration: const InputDecoration(
-                  hintText: 'Message…',
-                  hintStyle: TextStyle(
-                    color: Color(0xFFADB5BD),
-                    fontSize: 14.5,
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
+            child: TextField(
+              controller: _controller,
+              focusNode: _focus,
+              enabled: !widget.isSending,
+              maxLines: 5,
+              minLines: 1,
+              textCapitalization: TextCapitalization.sentences,
+              style: const TextStyle(fontSize: 14.5, color: AppColors.noir),
+              decoration: InputDecoration(
+                hintText: 'Écrire un message à l’équipe…',
+                hintStyle:
+                    const TextStyle(color: AppColors.grisText, fontSize: 14),
+                filled: true,
+                fillColor: AppColors.grisLight,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide.none,
                 ),
-                onSubmitted: (_) => _envoyer(),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  borderSide:
+                      const BorderSide(color: AppColors.rouge, width: 1.4),
+                ),
               ),
             ),
           ),
-
           const SizedBox(width: 8),
-
-          // ── Bouton envoyer ──────────────────────────────
           _SendButton(
             enabled: _hasText && !widget.isSending,
             isSending: widget.isSending,
@@ -128,44 +124,33 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: enabled ? AppColors.rouge : const Color(0xFFCDD6E0),
-        shape: BoxShape.circle,
-        boxShadow: enabled
-            ? [
-                BoxShadow(
-                  color: AppColors.rouge.withValues(alpha: 0.35),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          customBorder: const CircleBorder(),
-          child: Center(
-            child: isSending
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(
-                    Icons.send_rounded,
-                    size: 19,
-                    color: Colors.white,
-                  ),
+    return Tooltip(
+      message: 'Envoyer',
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: enabled ? AppColors.rouge : AppColors.grisMedium,
+          shape: BoxShape.circle,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            customBorder: const CircleBorder(),
+            child: Center(
+              child: isSending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : const Icon(Icons.send_rounded,
+                      size: 19, color: Colors.white),
+            ),
           ),
         ),
       ),

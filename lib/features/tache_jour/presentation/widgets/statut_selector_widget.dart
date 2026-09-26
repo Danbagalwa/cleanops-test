@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../domain/entities/tache_jour.dart';
 import '../providers/tache_jour_provider.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 class StatutSelectorWidget extends ConsumerStatefulWidget {
   final TacheJour tache;
@@ -39,22 +40,33 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
   bool _saving = false;
 
   static const _options = [
-    (StatutTache.fait, 'Fait', Icons.check_circle_outline_rounded,
-        AppColors.fait),
-    (StatutTache.absent, 'Absent', Icons.door_back_door_outlined,
-        AppColors.absent),
+    (
+      StatutTache.fait,
+      'Fait',
+      Icons.check_circle_outline_rounded,
+      AppColors.fait
+    ),
+    (
+      StatutTache.absent,
+      'Absent',
+      Icons.door_back_door_outlined,
+      AppColors.absent
+    ),
     (StatutTache.refus, 'Refus', Icons.block_rounded, AppColors.refus),
     (StatutTache.annule, 'Annulé', Icons.cancel_outlined, AppColors.annule),
-    (StatutTache.nonCommence, 'Non commencé',
-        Icons.radio_button_unchecked_rounded, AppColors.nonCommence),
+    (
+      StatutTache.nonCommence,
+      'Non commencé',
+      Icons.radio_button_unchecked_rounded,
+      AppColors.nonCommence
+    ),
   ];
 
   @override
   void initState() {
     super.initState();
     _statut = widget.tache.statut;
-    _motifCtrl =
-        TextEditingController(text: widget.tache.motifAbsent ?? '');
+    _motifCtrl = TextEditingController(text: widget.tache.motifAbsent ?? '');
   }
 
   @override
@@ -74,14 +86,9 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
   }
 
   Future<void> _confirmer() async {
-    if (_statut == StatutTache.absent &&
-        _motifCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez indiquer un motif d\'absence.'),
-          backgroundColor: AppColors.refus,
-        ),
-      );
+    if (_statut == StatutTache.absent && _motifCtrl.text.trim().isEmpty) {
+      NotificationApp.avertissement(
+          context, 'Veuillez indiquer un motif d\'absence.');
       return;
     }
 
@@ -100,12 +107,7 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
         Navigator.of(context).pop();
       } else {
         setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de la mise à jour.'),
-            backgroundColor: AppColors.rouge,
-          ),
-        );
+        NotificationApp.erreur(context, 'Erreur lors de la mise à jour.');
       }
     }
   }
@@ -277,18 +279,23 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
                     child: Row(
                       children: [
                         Icon(
-                          isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                          isSelected
+                              ? Icons.radio_button_checked_rounded
+                              : Icons.radio_button_unchecked_rounded,
                           size: 20,
                           color: isSelected ? color : AppColors.grisMedium,
                         ),
                         const SizedBox(width: 12),
-                        Icon(icon, size: 18, color: isSelected ? color : AppColors.grisDark),
+                        Icon(icon,
+                            size: 18,
+                            color: isSelected ? color : AppColors.grisDark),
                         const SizedBox(width: 8),
                         Text(
                           label,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w400,
                             color: isSelected ? color : AppColors.noir,
                           ),
                         ),
@@ -319,8 +326,8 @@ class _StatutSelectorWidgetState extends ConsumerState<StatutSelectorWidget> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius:
                                 BorderRadius.circular(AppSizes.radiusSm),
-                            borderSide:
-                                const BorderSide(color: AppColors.absent, width: 2),
+                            borderSide: const BorderSide(
+                                color: AppColors.absent, width: 2),
                           ),
                         ),
                       ),

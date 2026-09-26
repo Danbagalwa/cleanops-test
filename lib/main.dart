@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'package:cleanops/features/auth/presentation/providers/auth_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,11 +19,18 @@ const String _supabaseAnonKey =
     'sb_publishable_XA3b--cmQ2zTDJfScL4N-A_-a2G2WDN';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Adresse demandée (lien partagé, page rechargée) : lue avant l'écran de
+  // démarrage, qui remplace ensuite l'adresse du navigateur.
+  memoriserLienDemarrage(binding.platformDispatcher.defaultRouteName);
   _configureFlutterErrors();
 
+  // Préchargement des effets « liquid glass » en arrière-plan : rien n'est
+  // attendu avant la première frame.
+  unawaited(LiquidGlassWidgets.initialize());
+
   // Affiche la première frame sans attendre le réseau ni le stockage local.
-  runApp(const _BootstrapApp());
+  runApp(LiquidGlassWidgets.wrap(child: const _BootstrapApp()));
 }
 
 void _configureFlutterErrors() {
@@ -94,6 +104,9 @@ class _BootstrapAppState extends State<_BootstrapApp> {
       title: 'CleanOps',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      // Écran provisoire de démarrage : sur le web, il ignore l'adresse du
+      // navigateur (ex. /demandes/equipe), que GoRouter reprend ensuite.
+      initialRoute: '/',
       home: _StartupScreen(
         hasError: _initializationError != null,
         onRetry: _initialize,

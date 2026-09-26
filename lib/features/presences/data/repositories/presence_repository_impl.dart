@@ -46,10 +46,10 @@ class PresenceRepositoryImpl implements PresenceRepository {
   }
 
   @override
-  Future<Either<Failure, List<Presence>>> getAbsencesDuJour(
-      DateTime date) async {
+  Future<Either<Failure, List<Presence>>> getAbsences(
+      DateTime debut, DateTime fin) async {
     try {
-      final result = await _ds.getAbsencesDuJour(date);
+      final result = await _ds.getAbsences(debut, fin);
       return Right(result);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
@@ -58,9 +58,9 @@ class PresenceRepositoryImpl implements PresenceRepository {
 
   @override
   Future<Either<Failure, List<Presence>>> getPresencesAvecHeures(
-      DateTime date) async {
+      DateTime debut, DateTime fin) async {
     try {
-      final result = await _ds.getPresencesAvecHeures(date);
+      final result = await _ds.getPresencesAvecHeures(debut, fin);
       return Right(result);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

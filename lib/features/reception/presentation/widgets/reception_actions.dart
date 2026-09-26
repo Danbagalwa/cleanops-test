@@ -8,6 +8,7 @@ import '../../../tache_jour/domain/entities/tache_jour.dart';
 import '../../domain/reception_models.dart';
 import '../providers/reception_residents_provider.dart';
 import 'message_form_card.dart';
+import 'package:cleanops/core/widgets/notification_app.dart';
 
 /// Ouvre l'aperçu d'impression du calendrier des prochaines dates.
 ///
@@ -47,29 +48,25 @@ Future<void> imprimerCalendrierDeLigne(
   WidgetRef ref,
   ResidentLigne ligne,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
   try {
     final fiche =
         await ref.read(receptionFicheProvider(ligne.appartementId).future);
     if (!context.mounted) return;
     if (fiche == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Cet appartement est introuvable.')),
-      );
+      NotificationApp.avertissement(
+          context, 'Cet appartement est introuvable.');
       return;
     }
     if (fiche.prochainesDates.isEmpty) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-              'Aucune date de ménage planifiée pour l\'appartement ${fiche.numero}.'),
-        ),
+      NotificationApp.info(
+        context,
+        'Aucune date de ménage planifiée pour l\'appartement ${fiche.numero}.',
       );
       return;
     }
     ouvrirImpressionCalendrier(context, fiche);
   } catch (erreur) {
-    messenger.showSnackBar(SnackBar(content: Text(erreur.toString())));
+    if (context.mounted) NotificationApp.depuisErreur(context, erreur);
   }
 }
 

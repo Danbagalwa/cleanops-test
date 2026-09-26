@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
+import 'notification_app.dart';
 
 enum AppExportFormat { pdf, excel }
 
@@ -161,21 +162,5 @@ class _ExportMenuItem extends StatelessWidget {
   }
 }
 
-void showExportSuccess(BuildContext context, String message) {
-  final messenger = ScaffoldMessenger.of(context);
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF18794E),
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white),
-            const SizedBox(width: 10),
-            Expanded(child: Text(message)),
-          ],
-        ),
-      ),
-    );
-}
+void showExportSuccess(BuildContext context, String message) =>
+    NotificationApp.succes(context, message, titre: 'Export terminé');

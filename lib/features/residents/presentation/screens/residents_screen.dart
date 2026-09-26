@@ -1,11 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/widgets/error_widget.dart';
-import '../../../../core/widgets/export_menu_button.dart';
-import '../../../../core/widgets/skeleton_widget.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/export_menu_button.dart'
+    show showExportSuccess;
+import '../../../../core/widgets/mise_en_page.dart';
+import '../../../../core/widgets/notification_app.dart';
+import '../../../appartements/presentation/widgets/appartement_list_item.dart'
+    show BadgeTaille, comparerNumeros;
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../pdf/domain/usecases/generate_residents_export.dart';
 import '../../../pdf/presentation/screens/residents_pdf_preview_screen.dart';
@@ -16,9 +23,13 @@ import '../widgets/desactivation_dialog.dart';
 import '../widgets/pin_attribution_dialog.dart';
 import '../widgets/resident_list_item.dart';
 
-const _kPageSize = 10;
+/// Activité du résident (filtres de la barre de section).
+enum _Activite { tous, actifs, inactifs }
 
-enum _FiltreStatut { tous, actifs, inscrits, sansApp, inactifs }
+/// Accès à l'application (tuiles).
+enum _Acces { tous, inscrits, sansApp, sansPin }
+
+enum _Tri { nom, appartement, statut }
 
 class ResidentsScreen extends ConsumerStatefulWidget {
   const ResidentsScreen({super.key});
@@ -29,20 +40,16 @@ class ResidentsScreen extends ConsumerStatefulWidget {
 
 class _ResidentsScreenState extends ConsumerState<ResidentsScreen> {
   final _searchCtrl = TextEditingController();
-  String _searchQuery = '';
-  _FiltreStatut _filtre = _FiltreStatut.tous;
+  String _recherche = '';
+  _Activite _activite = _Activite.actifs;
+  _Acces _acces = _Acces.tous;
+  _Tri _tri = _Tri.appartement;
+  bool _croissant = true;
   int _page = 0;
+  int _parPage = 10;
 
-  @override
-  void initState() {
-    super.initState();
-    _searchCtrl.addListener(() {
-      setState(() {
-        _searchQuery = _searchCtrl.text.toLowerCase().trim();
-        _page = 0;
-      });
-    });
-  }
+  /// `null` : choisi selon la largeur (grille sur téléphone, tableau sinon).
+  ModeAffichage? _mode;
 
   @override
   void dispose() {
@@ -50,42 +57,81 @@ class _ResidentsScreenState extends ConsumerState<ResidentsScreen> {
     super.dispose();
   }
 
-  List<Resident> _filtered(List<Resident> all) {
-    return all.where((r) {
-      final matchSearch = _searchQuery.isEmpty ||
-          r.nomComplet.toLowerCase().contains(_searchQuery) ||
-          (r.numeroAppartement?.toLowerCase().contains(_searchQuery) ?? false);
-      final matchFiltre = switch (_filtre) {
-        _FiltreStatut.tous => true,
-        _FiltreStatut.actifs => r.isActif,
-        _FiltreStatut.inscrits => r.isActif && r.aApplication,
-        _FiltreStatut.sansApp => r.isActif && !r.aApplication,
-        _FiltreStatut.inactifs => !r.isActif,
+  ResidentNotifier get _notifier => ref.read(residentNotifierProvider.notifier);
+
+  Future<void> _charger() => _notifier.loadResidents();
+
+  void _changer(VoidCallback maj) => setState(() {
+        maj();
+        _page = 0;
+      });
+
+  void _trier(_Tri tri) => _changer(() {
+        _croissant = _tri == tri ? !_croissant : true;
+        _tri = tri;
+      });
+
+  void _effacerFiltres() {
+    _searchCtrl.clear();
+    _changer(() {
+      _recherche = '';
+      _activite = _Activite.tous;
+      _acces = _Acces.tous;
+    });
+  }
+
+  bool _deLActivite(Resident r) => switch (_activite) {
+        _Activite.tous => true,
+        _Activite.actifs => r.isActif,
+        _Activite.inactifs => !r.isActif,
       };
-      return matchSearch && matchFiltre;
-    }).toList();
+
+  static bool _deLAcces(Resident r, _Acces a) => switch (a) {
+        _Acces.tous => true,
+        _Acces.inscrits => r.aApplication,
+        _Acces.sansApp => !r.aApplication,
+        _Acces.sansPin => r.aApplication && !r.aPin,
+      };
+
+  List<Resident> _lignes(List<Resident> tous) {
+    final q = _recherche.trim().toLowerCase();
+    int parNom(Resident a, Resident b) =>
+        a.nomComplet.toLowerCase().compareTo(b.nomComplet.toLowerCase());
+    int sens(int c) => _croissant ? c : -c;
+    return tous.where((r) {
+      if (!_deLActivite(r) || !_deLAcces(r, _acces)) return false;
+      return q.isEmpty ||
+          r.nomComplet.toLowerCase().contains(q) ||
+          (r.numeroAppartement?.toLowerCase().contains(q) ?? false);
+    }).toList()
+      ..sort((a, b) {
+        final c = switch (_tri) {
+          _Tri.nom => parNom(a, b),
+          _Tri.appartement => comparerNumeros(
+              a.numeroAppartement ?? '', b.numeroAppartement ?? ''),
+          _Tri.statut => a.statut.compareTo(b.statut),
+        };
+        return c != 0 ? sens(c) : parNom(a, b);
+      });
   }
 
-  String _filterDescription() {
-    final filters = <String>[];
-    if (_searchQuery.isNotEmpty) {
-      filters.add('Recherche : "${_searchCtrl.text.trim()}"');
-    }
-    final status = switch (_filtre) {
-      _FiltreStatut.tous => null,
-      _FiltreStatut.actifs => 'Actifs',
-      _FiltreStatut.inscrits => 'Inscrits',
-      _FiltreStatut.sansApp => 'Sans application',
-      _FiltreStatut.inactifs => 'Inactifs',
-    };
-    if (status != null) filters.add('Statut : $status');
-    return filters.isEmpty ? 'Tous les résidents' : filters.join(' · ');
+  String _descriptionFiltres() {
+    final f = <String>[
+      if (_recherche.trim().isNotEmpty) 'Recherche : "${_recherche.trim()}"',
+      if (_activite == _Activite.actifs) 'Actifs',
+      if (_activite == _Activite.inactifs) 'Inactifs',
+      if (_acces == _Acces.inscrits) 'Inscrits à l’application',
+      if (_acces == _Acces.sansApp) 'Sans application',
+      if (_acces == _Acces.sansPin) 'Inscrits sans PIN',
+    ];
+    return f.isEmpty ? 'Tous les résidents' : f.join(' · ');
   }
 
-  // ── Actions ────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────
 
   Future<void> _ouvrirCreation() async {
-    await showDialog<bool>(
+    var avecPin = false;
+    final cree = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => CreerResidentDialog(
@@ -94,488 +140,492 @@ class _ResidentsScreenState extends ConsumerState<ResidentsScreen> {
           required String nom,
           required String prenom,
           required bool aApplication,
-          required String pin,
-        }) =>
-            ref
-                .read(residentNotifierProvider.notifier)
-                .creerResidentAvecPin(aptId, nom, prenom, aApplication, pin),
+          required String? pin,
+        }) {
+          avecPin = pin != null;
+          return _signalerSiEchec(pin == null
+              ? _notifier.creerResident(aptId, nom, prenom, aApplication)
+              : _notifier.creerResidentAvecPin(
+                  aptId, nom, prenom, aApplication, pin));
+        },
       ),
     );
+    if (!mounted) return;
+    if (cree == true) {
+      NotificationApp.succes(
+        context,
+        avecPin
+            ? 'Le résident a été créé avec son PIN.'
+            : 'Le résident a été enregistré (sans application).',
+      );
+    }
   }
 
-  void _ouvrirPin(Resident resident) {
-    showDialog<bool>(
+  Future<void> _ouvrirPin(Resident resident) async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (_) => PinAttributionDialog(
         nomComplet: resident.nomComplet,
-        onConfirmer: (pin) => ref
-            .read(residentNotifierProvider.notifier)
-            .attribuerPin(resident.id, pin),
+        remplacement: resident.aPin,
+        onConfirmer: (pin) =>
+            _signalerSiEchec(_notifier.attribuerPin(resident.id, pin)),
       ),
     );
+    if (!mounted) return;
+    if (ok == true) {
+      NotificationApp.succes(
+        context,
+        resident.aPin
+            ? 'Le PIN de ${resident.nomComplet} a été modifié.'
+            : 'Un PIN a été attribué à ${resident.nomComplet}.',
+      );
+    }
   }
 
-  void _confirmerDesactivation(Resident resident) {
-    showDialog<bool>(
+  Future<void> _confirmerDesactivation(Resident resident) async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (_) => DesactivationDialog(
         nomComplet: resident.nomComplet,
-        onConfirmer: () => ref
-            .read(residentNotifierProvider.notifier)
-            .desactiverResident(resident.id),
+        onConfirmer: () =>
+            _signalerSiEchec(_notifier.desactiverResident(resident.id)),
+      ),
+    );
+    if (!mounted) return;
+    if (ok == true) {
+      NotificationApp.succes(
+          context, '${resident.nomComplet} a été désactivé(e).');
+    }
+  }
+
+  Future<void> _activer(Resident resident) async {
+    final ok = await _notifier.activerResident(resident.id);
+    if (!mounted) return;
+    if (ok) {
+      NotificationApp.succes(
+          context, '${resident.nomComplet} a été réactivé(e).');
+    } else {
+      _signalerErreur();
+    }
+  }
+
+  Future<void> _basculerApplication(Resident resident) async {
+    final ok =
+        await _notifier.toggleApplication(resident.id, !resident.aApplication);
+    if (!mounted) return;
+    if (ok) {
+      NotificationApp.succes(
+        context,
+        resident.aApplication
+            ? '${resident.nomComplet} est maintenant « Sans app ».'
+            : '${resident.nomComplet} est maintenant inscrit(e) à l’application.',
+      );
+    } else {
+      _signalerErreur();
+    }
+  }
+
+  /// Action lancée depuis un dialogue : en cas d'échec, le dialogue reste
+  /// ouvert et l'erreur s'affiche tout de suite.
+  Future<bool> _signalerSiEchec(Future<bool> action) async {
+    final ok = await action;
+    if (!ok && mounted) _signalerErreur();
+    return ok;
+  }
+
+  /// Affiche l'erreur laissée par la dernière action.
+  void _signalerErreur() {
+    final erreur = ref.read(residentNotifierProvider).error;
+    if (erreur == null) return;
+    AppFeedback.showError(context, erreur);
+  }
+
+  void _exporterPdf(List<Resident> lignes) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ResidentsPdfPreviewScreen(
+          residents: lignes,
+          filterDescription: _descriptionFiltres(),
+          generatedBy:
+              ref.read(employeeCourantProvider)?.nomComplet ?? 'CleanOps',
+        ),
       ),
     );
   }
 
-  void _activer(Resident resident) {
-    ref.read(residentNotifierProvider.notifier).activerResident(resident.id);
+  void _exporterExcel(List<Resident> lignes) {
+    try {
+      const GenerateResidentsExcel()(
+        residents: lignes,
+        filterDescription: _descriptionFiltres(),
+      );
+      showExportSuccess(
+          context, 'La liste Excel des résidents a été téléchargée.');
+    } catch (error) {
+      AppFeedback.showError(context, error);
+    }
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // ── Construction ───────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(residentNotifierProvider);
-    final currentEmployee = ref.watch(employeeCourantProvider);
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    final filtered = _filtered(state.residents);
-    final filterDescription = _filterDescription();
-    final totalPages = (filtered.length / _kPageSize).ceil().clamp(1, 9999);
-    final safePage = _page.clamp(0, totalPages - 1);
-    final paginated =
-        filtered.skip(safePage * _kPageSize).take(_kPageSize).toList();
+    final compact = estCompact(context);
+    final mode =
+        compact ? ModeAffichage.grille : (_mode ?? ModeAffichage.tableau);
+    final marge = compact ? 12.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: AppColors.grisLight,
-      appBar: AppBar(
+    final tous = state.residents;
+    final lignes = _lignes(tous);
+    final nbPages = lignes.isEmpty ? 1 : ((lignes.length - 1) ~/ _parPage) + 1;
+    final page = _page.clamp(0, nbPages - 1);
+    final visibles = lignes.skip(page * _parPage).take(_parPage).toList();
+
+    FiltreSection filtre(_Activite a, IconData icone, String info) =>
+        FiltreSection(
+          icone: icone,
+          infoBulle: info,
+          actif: _activite == a,
+          onTap: () => _changer(() => _activite = a),
+        );
+
+    final recherche = ChampRecherche(
+      controller: _searchCtrl,
+      indice: 'Rechercher un nom ou un appartement',
+      onChanged: (v) => _changer(() => _recherche = v),
+    );
+    final ajouter = FilledButton.icon(
+      onPressed: _ouvrirCreation,
+      style: FilledButton.styleFrom(
         backgroundColor: AppColors.rouge,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.backOrHome(AppRoutes.employerDashboard),
-        ),
-        title: Text(
-          'Résidents${state.residents.isNotEmpty ? '  (${state.totalActifs})' : ''}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        actions: [
-          AppExportMenuButton(
-            enabled: filtered.isNotEmpty && !state.isLoading,
-            onPdf: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ResidentsPdfPreviewScreen(
-                  residents: filtered,
-                  filterDescription: filterDescription,
-                  generatedBy: currentEmployee?.nomComplet ?? 'CleanOps',
-                ),
-              ),
-            ),
-            onExcel: () {
-              try {
-                const GenerateResidentsExcel()(
-                  residents: filtered,
-                  filterDescription: filterDescription,
-                );
-                showExportSuccess(
-                  context,
-                  'La liste Excel des résidents a été téléchargée.',
-                );
-              } catch (error) {
-                AppFeedback.showError(context, error);
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-          if (isDesktop)
-            Padding(
-              padding: const EdgeInsets.only(right: AppSizes.md),
-              child: FilledButton.icon(
-                onPressed: _ouvrirCreation,
-                icon: const Icon(Icons.person_add_rounded, size: 18),
-                label: const Text('Ajouter'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.rouge,
-                ),
-              ),
-            ),
-        ],
+        shape: const StadiumBorder(),
+        minimumSize: const Size(0, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
       ),
-      floatingActionButton: isDesktop
-          ? null
-          : FloatingActionButton(
-              onPressed: _ouvrirCreation,
-              backgroundColor: AppColors.rouge,
-              child: const Icon(Icons.person_add_rounded, color: Colors.white),
+      icon: const Icon(Icons.person_add_rounded, size: 18),
+      label: Text(compact ? 'Ajouter' : 'Ajouter un résident'),
+    );
+
+    Widget corps;
+    if (state.isLoading && tous.isEmpty) {
+      corps = const Padding(
+        padding: EdgeInsets.only(top: 60),
+        child: Center(child: CircularProgressIndicator(color: AppColors.rouge)),
+      );
+    } else if (state.error != null && tous.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: AppErrorNotice(error: state.error!, onRetry: _charger),
+      );
+    } else if (tous.isEmpty) {
+      corps = _EtatVide(onAdd: _ouvrirCreation);
+    } else if (lignes.isEmpty) {
+      corps = CarteContenu(
+        padding: const EdgeInsets.all(AppSizes.xl),
+        child: Column(
+          children: [
+            const Text(
+              'Aucun résident ne correspond à votre recherche ou filtre.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.grisDark),
             ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? 1100 : double.infinity,
+            const SizedBox(height: AppSizes.md),
+            OutlinedButton.icon(
+              onPressed: _effacerFiltres,
+              icon: const Icon(Icons.clear_rounded),
+              label: const Text('Effacer les filtres'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      corps = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (mode == ModeAffichage.tableau)
+            _TableauResidents(
+              lignes: visibles,
+              premierNumero: page * _parPage + 1,
+              tri: _tri,
+              croissant: _croissant,
+              onTrier: _trier,
+              onPin: _ouvrirPin,
+              onDesactiver: _confirmerDesactivation,
+              onActiver: _activer,
+              onBasculerApplication: _basculerApplication,
+            )
+          else
+            _GrilleResidents(
+              lignes: visibles,
+              onPin: _ouvrirPin,
+              onDesactiver: _confirmerDesactivation,
+              onActiver: _activer,
+              onBasculerApplication: _basculerApplication,
+            ),
+          const SizedBox(height: AppSizes.md),
+          BarrePagination(
+            page: page,
+            parPage: _parPage,
+            total: lignes.length,
+            onPage: (p) => setState(() => _page = p),
+            onParPage: (n) => _changer(() => _parPage = n),
           ),
-          child: Column(
-            children: [
-              _SearchFilterBar(
-                controller: _searchCtrl,
-                hasText: _searchQuery.isNotEmpty,
-                filtre: _filtre,
-                isDesktop: isDesktop,
-                onFiltreChanged: (f) => setState(() {
-                  _filtre = f;
-                  _page = 0;
-                }),
-              ),
+        ],
+      );
+    }
 
-              if (state.isLoading && state.residents.isNotEmpty)
-                const LinearProgressIndicator(
-                  color: AppColors.rouge,
-                  backgroundColor: Colors.transparent,
-                  minHeight: 2,
+    return PageAvecEnTete(
+      chargement: state.isLoading,
+      enTete: EnTetePage(
+        icone: Icons.people_alt_rounded,
+        titre: 'Résidents',
+        sousTitre: tous.isEmpty
+            ? 'Occupants des appartements de la résidence'
+            : 'Résidence — ${state.totalActifs} actifs · '
+                '${state.totalInscrits} inscrits à l’application · '
+                '${state.totalSansApp} sans application',
+      ),
+      contenu: RefreshIndicator(
+        color: AppColors.rouge,
+        onRefresh: _charger,
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+              .plusBarre(context),
+          children: [
+            BarreSection(
+              titre: 'Résidents (${lignes.length})',
+              onRetour: () => context.backOrHome(AppRoutes.employerDashboard),
+              filtres: [
+                filtre(
+                    _Activite.tous, Icons.groups_rounded, 'Tous les résidents'),
+                filtre(_Activite.actifs, Icons.person_rounded, 'Actifs'),
+                filtre(
+                    _Activite.inactifs, Icons.person_off_outlined, 'Inactifs'),
+              ],
+              actions: [
+                ActionSection(
+                  icone: Icons.print_rounded,
+                  infoBulle: 'Imprimer ou exporter en PDF',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterPdf(lignes),
                 ),
-
-              Expanded(
-                child: _buildBody(
-                  state: state,
-                  filtered: filtered,
-                  paginated: paginated,
-                  totalPages: totalPages,
-                  currentPage: safePage,
-                  isDesktop: isDesktop,
+                ActionSection(
+                  icone: Icons.download_rounded,
+                  infoBulle: 'Télécharger en Excel',
+                  onPressed: lignes.isEmpty || state.isLoading
+                      ? null
+                      : () => _exporterExcel(lignes),
                 ),
+                ActionSection(
+                  icone: Icons.refresh_rounded,
+                  infoBulle: 'Actualiser',
+                  onPressed: state.isLoading ? null : _charger,
+                ),
+              ],
+            ),
+            if (tous.isNotEmpty) ...[
+              const SizedBox(height: AppSizes.md),
+              _FiltreAcces(
+                residents: tous.where(_deLActivite).toList(),
+                selection: _acces,
+                onChanged: (a) => _changer(() => _acces = a),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody({
-    required ResidentState state,
-    required List<Resident> filtered,
-    required List<Resident> paginated,
-    required int totalPages,
-    required int currentPage,
-    required bool isDesktop,
-  }) {
-    if (state.isLoading && state.residents.isEmpty) {
-      return const AppSkeletonList();
-    }
-
-    if (state.error != null && state.residents.isEmpty) {
-      return _ErrorState(
-        message: state.error!,
-        onRetry: () =>
-            ref.read(residentNotifierProvider.notifier).loadResidents(),
-      );
-    }
-
-    if (state.residents.isEmpty) {
-      return _EmptyState(onAdd: _ouvrirCreation);
-    }
-
-    if (filtered.isEmpty) {
-      return _EmptySearch(
-        onClear: () {
-          _searchCtrl.clear();
-          setState(() {
-            _filtre = _FiltreStatut.tous;
-            _page = 0;
-          });
-        },
-      );
-    }
-
-    final paginationBar = totalPages > 1
-        ? _PaginationBar(
-            currentPage: currentPage,
-            totalPages: totalPages,
-            totalItems: filtered.length,
-            pageSize: _kPageSize,
-            onPageChanged: (p) => setState(() => _page = p),
-          )
-        : null;
-
-    if (isDesktop) {
-      return Column(
-        children: [
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.md,
-                vertical: AppSizes.sm,
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: AppColors.grisMedium),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    const _ColumnHeader(),
-                    const Divider(
-                        height: 1, thickness: 1, color: AppColors.grisMedium),
-                    Expanded(
-                      child: RefreshIndicator(
-                        color: AppColors.rouge,
-                        onRefresh: () => ref
-                            .read(residentNotifierProvider.notifier)
-                            .loadResidents(),
-                        child: ListView.separated(
-                          padding: EdgeInsets.zero,
-                          itemCount: paginated.length,
-                          separatorBuilder: (_, __) => const Divider(
-                              height: 1,
-                              thickness: 1,
-                              color: AppColors.grisMedium),
-                          itemBuilder: (context, i) {
-                            final r = paginated[i];
-                            return ResidentListItem(
-                              key: ValueKey(r.id),
-                              resident: r,
-                              isAlternate: i.isOdd,
-                              onPin: () => _ouvrirPin(r),
-                              onDesactiver: () => _confirmerDesactivation(r),
-                              onActiver: () => _activer(r),
-                            );
-                          },
-                        ),
+            const SizedBox(height: AppSizes.md),
+            if (compact)
+              Row(
+                children: [
+                  Expanded(child: recherche),
+                  const SizedBox(width: AppSizes.sm),
+                  ajouter,
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: recherche,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  BasculeAffichage(
+                    mode: mode,
+                    onChanged: (m) => setState(() => _mode = m),
+                  ),
+                  const SizedBox(width: AppSizes.md),
+                  ajouter,
+                ],
               ),
-            ),
-          ),
-          if (paginationBar != null) paginationBar,
-        ],
-      );
-    }
-
-    // Mobile
-    return Column(
-      children: [
-        Expanded(
-          child: RefreshIndicator(
-            color: AppColors.rouge,
-            onRefresh: () =>
-                ref.read(residentNotifierProvider.notifier).loadResidents(),
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
-              itemCount: paginated.length,
-              separatorBuilder: (_, __) => const SizedBox.shrink(),
-              itemBuilder: (context, i) {
-                final r = paginated[i];
-                return ResidentListItem(
-                  key: ValueKey(r.id),
-                  resident: r,
-                  isAlternate: i.isOdd,
-                  onPin: () => _ouvrirPin(r),
-                  onDesactiver: () => _confirmerDesactivation(r),
-                  onActiver: () => _activer(r),
-                );
-              },
-            ),
-          ),
+            const SizedBox(height: AppSizes.md),
+            corps,
+          ],
         ),
-        if (paginationBar != null) paginationBar,
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-// EN-TÊTE DE COLONNES (desktop)
-// ══════════════════════════════════════════════════════════
-
-class _ColumnHeader extends StatelessWidget {
-  const _ColumnHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    const labelStyle = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: AppColors.grisText,
-      letterSpacing: 0.2,
-    );
-
-    return Container(
-      color: AppColors.grisLight,
-      padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 8),
-      child: const Row(
-        children: [
-          SizedBox(width: 30 + AppSizes.sm),
-          Expanded(flex: 2, child: Text('NOM', style: labelStyle)),
-          Expanded(child: Text('APPARTEMENT', style: labelStyle)),
-          Expanded(child: Text('STATUT', style: labelStyle)),
-          SizedBox(width: 56, child: Text('PIN', style: labelStyle)),
-          SizedBox(width: 80, child: Text('ACTIONS', style: labelStyle)),
-        ],
       ),
     );
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// BARRE RECHERCHE + FILTRES
-// ══════════════════════════════════════════════════════════
+// ── Tuiles d'accès à l'application ─────────────────────────
 
-class _SearchFilterBar extends StatelessWidget {
-  final TextEditingController controller;
-  final bool hasText;
-  final _FiltreStatut filtre;
-  final bool isDesktop;
-  final ValueChanged<_FiltreStatut> onFiltreChanged;
+class _FiltreAcces extends StatelessWidget {
+  final List<Resident> residents;
+  final _Acces selection;
+  final ValueChanged<_Acces> onChanged;
 
-  const _SearchFilterBar({
-    required this.controller,
-    required this.hasText,
-    required this.filtre,
-    required this.isDesktop,
-    required this.onFiltreChanged,
+  const _FiltreAcces({
+    required this.residents,
+    required this.selection,
+    required this.onChanged,
   });
 
-  Widget _buildSearchField() {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        hintText: 'Nom, prénom ou appartement...',
-        hintStyle: const TextStyle(fontSize: 13),
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          size: 18,
-          color: AppColors.grisText,
-        ),
-        suffixIcon: hasText
-            ? IconButton(
-                icon: const Icon(Icons.clear_rounded, size: 16),
-                onPressed: controller.clear,
-                color: AppColors.grisText,
-              )
-            : null,
-        filled: true,
-        fillColor: AppColors.grisLight,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.radiusSm + 4),
-          borderSide: const BorderSide(color: AppColors.rouge, width: 1.5),
-        ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        isDense: true,
-      ),
-      style: const TextStyle(fontSize: 13),
-    );
-  }
-
-  Widget _buildChips() {
-    const chips = [
-      (_FiltreStatut.tous, 'Tous'),
-      (_FiltreStatut.actifs, 'Actifs'),
-      (_FiltreStatut.inscrits, 'Inscrits'),
-      (_FiltreStatut.sansApp, 'Sans app'),
-      (_FiltreStatut.inactifs, 'Inactifs'),
-    ];
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: chips
-          .map((c) => _ChipFiltre(
-                label: c.$2,
-                selected: filtre == c.$1,
-                onTap: () => onFiltreChanged(c.$1),
-              ))
-          .toList(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: AppSizes.sm,
-      ),
-      child: isDesktop
-          ? Row(
-              children: [
-                SizedBox(width: 280, child: _buildSearchField()),
-                const SizedBox(width: AppSizes.md),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: _buildChips(),
-                  ),
-                ),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSearchField(),
-                const SizedBox(height: AppSizes.sm),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: _buildChips(),
-                ),
-              ],
-            ),
-    );
+    _Tuile tuile(_Acces a, IconData icone, Color couleur, String libelle) =>
+        _Tuile(
+          icone: icone,
+          couleur: couleur,
+          libelle: libelle,
+          nombre: residents
+              .where((r) => _ResidentsScreenState._deLAcces(r, a))
+              .length,
+          actif: selection == a,
+          alerte: a == _Acces.sansPin,
+          onTap: () =>
+              onChanged(selection == a && a != _Acces.tous ? _Acces.tous : a),
+        );
+
+    final tuiles = [
+      tuile(_Acces.tous, Icons.groups_rounded, AppColors.rouge, 'Tous'),
+      tuile(_Acces.inscrits, Icons.phone_iphone_rounded, AppColors.fait,
+          'Inscrits à l’app'),
+      tuile(_Acces.sansApp, Icons.phonelink_erase_rounded, AppColors.aVerifier,
+          'Sans application'),
+      tuile(_Acces.sansPin, Icons.key_off_rounded, AppColors.refus,
+          'Inscrits sans PIN'),
+    ];
+
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      const minimum = 170.0;
+      final tiennent =
+          c.maxWidth >= tuiles.length * minimum + ecart * (tuiles.length - 1);
+      if (tiennent) {
+        return Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              Expanded(child: t),
+            ],
+          ],
+        );
+      }
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (i, t) in tuiles.indexed) ...[
+              if (i > 0) const SizedBox(width: ecart),
+              SizedBox(width: minimum, child: t),
+            ],
+          ],
+        ),
+      );
+    });
   }
 }
 
-class _ChipFiltre extends StatelessWidget {
-  final String label;
-  final bool selected;
+class _Tuile extends StatelessWidget {
+  final IconData icone;
+  final Color couleur;
+  final String libelle;
+  final int nombre;
+  final bool actif;
+
+  /// Mise en évidence quand il y a des cas à régler (ex. PIN manquant).
+  final bool alerte;
   final VoidCallback onTap;
 
-  const _ChipFiltre({
-    required this.label,
-    required this.selected,
+  const _Tuile({
+    required this.icone,
+    required this.couleur,
+    required this.libelle,
+    required this.nombre,
+    required this.actif,
+    required this.alerte,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
+    final aSignaler = alerte && nombre > 0;
+    return Material(
+      color: actif
+          ? AppColors.rouge.withValues(alpha: 0.06)
+          : aSignaler
+              ? couleur.withValues(alpha: 0.05)
+              : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: actif
+              ? AppColors.rouge
+              : aSignaler
+                  ? couleur.withValues(alpha: 0.4)
+                  : AppColors.grisMedium,
+          width: actif ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.rouge.withValues(alpha: 0.1)
-                : AppColors.grisLight,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? AppColors.rouge : AppColors.grisMedium,
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-              color: selected ? AppColors.rouge : AppColors.grisDark,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: couleur.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icone, size: 17, color: couleur),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$nombre',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: aSignaler ? couleur : AppColors.noir,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      libelle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: actif ? FontWeight.w700 : FontWeight.w500,
+                        color: actif ? AppColors.rouge : AppColors.grisDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -583,122 +633,213 @@ class _ChipFiltre extends StatelessWidget {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// PAGINATION
-// ══════════════════════════════════════════════════════════
+// ── Tableau ────────────────────────────────────────────────
 
-class _PaginationBar extends StatelessWidget {
-  final int currentPage;
-  final int totalPages;
-  final int totalItems;
-  final int pageSize;
-  final ValueChanged<int> onPageChanged;
+const _styleEnTete = TextStyle(
+  fontSize: 12,
+  fontWeight: FontWeight.w600,
+  color: AppColors.grisDark,
+);
 
-  const _PaginationBar({
-    required this.currentPage,
-    required this.totalPages,
-    required this.totalItems,
-    required this.pageSize,
-    required this.onPageChanged,
+class _TableauResidents extends StatelessWidget {
+  final List<Resident> lignes;
+  final int premierNumero;
+  final _Tri tri;
+  final bool croissant;
+  final ValueChanged<_Tri> onTrier;
+  final ValueChanged<Resident> onPin;
+  final ValueChanged<Resident> onDesactiver;
+  final ValueChanged<Resident> onActiver;
+  final ValueChanged<Resident> onBasculerApplication;
+
+  const _TableauResidents({
+    required this.lignes,
+    required this.premierNumero,
+    required this.tri,
+    required this.croissant,
+    required this.onTrier,
+    required this.onPin,
+    required this.onDesactiver,
+    required this.onActiver,
+    required this.onBasculerApplication,
   });
-
-  List<Widget> _buildPageNumbers() {
-    final buttons = <Widget>[];
-    final start =
-        (currentPage - 2).clamp(0, (totalPages - 5).clamp(0, totalPages));
-    final end = (start + 5).clamp(0, totalPages);
-
-    for (int i = start; i < end; i++) {
-      final active = i == currentPage;
-      buttons.add(
-        GestureDetector(
-          onTap: active ? null : () => onPageChanged(i),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 28,
-            height: 28,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: active ? AppColors.rouge : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '${i + 1}',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                color: active ? Colors.white : AppColors.grisDark,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    return buttons;
-  }
 
   @override
   Widget build(BuildContext context) {
-    final start = currentPage * pageSize + 1;
-    final end = ((currentPage + 1) * pageSize).clamp(0, totalItems);
-    final isCompact = MediaQuery.sizeOf(context).width < 600;
+    Widget entete(String libelle, _Tri t) => _EnTeteTri(
+          libelle: libelle,
+          actif: tri == t,
+          croissant: croissant,
+          onTap: () => onTrier(t),
+        );
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: AppColors.grisMedium, width: 1),
-        ),
-      ),
-      padding: EdgeInsets.symmetric(
-        horizontal: isCompact ? AppSizes.sm : AppSizes.md,
-        vertical: 10,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return CarteContenu(
+      child: Column(
         children: [
-          Text(
-            '$start–$end sur $totalItems',
-            style: const TextStyle(fontSize: 12, color: AppColors.grisText),
+          Container(
+            color: const Color(0xFFF7F8FA),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const SizedBox(
+                    width: 40, child: Text('N°', style: _styleEnTete)),
+                Expanded(flex: 4, child: entete('Résident', _Tri.nom)),
+                Expanded(
+                    flex: 3, child: entete('Appartement', _Tri.appartement)),
+                Expanded(flex: 2, child: entete('Application', _Tri.statut)),
+                const Expanded(
+                    flex: 2, child: Text('PIN', style: _styleEnTete)),
+                const SizedBox(width: 48),
+              ],
+            ),
           ),
-          Row(
+          for (final (i, r) in lignes.indexed) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.grisMedium),
+            _LigneResident(
+              resident: r,
+              numero: premierNumero + i,
+              onPin: () => onPin(r),
+              onDesactiver: () => onDesactiver(r),
+              onActiver: () => onActiver(r),
+              onBasculerApplication: () => onBasculerApplication(r),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EnTeteTri extends StatelessWidget {
+  final String libelle;
+  final bool actif;
+  final bool croissant;
+  final VoidCallback onTap;
+
+  const _EnTeteTri({
+    required this.libelle,
+    required this.actif,
+    required this.croissant,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final couleur = actif ? AppColors.rouge : AppColors.grisDark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: currentPage > 0
-                    ? () => onPageChanged(currentPage - 1)
-                    : null,
-                tooltip: 'Précédent',
-                iconSize: 18,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
-              ),
-              if (isCompact)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: Text(
-                    'Page ${currentPage + 1}/$totalPages',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.grisDark,
-                    ),
-                  ),
-                )
-              else
-                ..._buildPageNumbers(),
-              IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: currentPage < totalPages - 1
-                    ? () => onPageChanged(currentPage + 1)
-                    : null,
-                tooltip: 'Suivant',
-                iconSize: 18,
-                visualDensity: VisualDensity.compact,
-                color: AppColors.grisDark,
+              Text(libelle, style: _styleEnTete.copyWith(color: couleur)),
+              const SizedBox(width: 4),
+              Icon(
+                !actif
+                    ? Icons.swap_vert_rounded
+                    : croissant
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                size: 14,
+                color: couleur,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LigneResident extends StatelessWidget {
+  final Resident resident;
+  final int numero;
+  final VoidCallback onPin;
+  final VoidCallback onDesactiver;
+  final VoidCallback onActiver;
+  final VoidCallback onBasculerApplication;
+
+  const _LigneResident({
+    required this.resident,
+    required this.numero,
+    required this.onPin,
+    required this.onDesactiver,
+    required this.onActiver,
+    required this.onBasculerApplication,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = resident;
+    const style = TextStyle(fontSize: 13, color: AppColors.noir);
+    return Container(
+      color: r.isActif ? null : AppColors.grisLight.withValues(alpha: 0.6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 40, child: Text('$numero', style: style)),
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                AvatarResident(resident: r),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    r.nomComplet,
+                    overflow: TextOverflow.ellipsis,
+                    style: style.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: r.isActif ? AppColors.noir : AppColors.grisDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: r.numeroAppartement == null
+                ? const Text('—',
+                    style: TextStyle(fontSize: 13, color: AppColors.grisText))
+                : Row(
+                    children: [
+                      Text('Apt ${r.numeroAppartement}',
+                          style: style.copyWith(fontWeight: FontWeight.w600)),
+                      if (r.tailleAppartement != null) ...[
+                        const SizedBox(width: 6),
+                        BadgeTaille(taille: r.tailleAppartement!),
+                      ],
+                    ],
+                  ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: BadgeApplicationResident(resident: r),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: BadgePinResident(resident: r),
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: MenuResident(
+              resident: r,
+              onPin: onPin,
+              onDesactiver: onDesactiver,
+              onActiver: onActiver,
+              onBasculerApplication: onBasculerApplication,
+            ),
           ),
         ],
       ),
@@ -706,115 +847,97 @@ class _PaginationBar extends StatelessWidget {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// ÉTATS VISUELS
-// ══════════════════════════════════════════════════════════
+// ── Grille ─────────────────────────────────────────────────
 
-class _EmptyState extends StatelessWidget {
-  final VoidCallback onAdd;
-  const _EmptyState({required this.onAdd});
+class _GrilleResidents extends StatelessWidget {
+  final List<Resident> lignes;
+  final ValueChanged<Resident> onPin;
+  final ValueChanged<Resident> onDesactiver;
+  final ValueChanged<Resident> onActiver;
+  final ValueChanged<Resident> onBasculerApplication;
+
+  const _GrilleResidents({
+    required this.lignes,
+    required this.onPin,
+    required this.onDesactiver,
+    required this.onActiver,
+    required this.onBasculerApplication,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return LayoutBuilder(builder: (context, c) {
+      const ecart = AppSizes.sm;
+      final colonnes = math.max(1, (c.maxWidth + ecart) ~/ (320 + ecart));
+      final largeur = (c.maxWidth - ecart * (colonnes - 1)) / colonnes;
+      return Wrap(
+        spacing: ecart,
+        runSpacing: ecart,
+        children: [
+          for (final r in lignes)
+            SizedBox(
+              width: largeur,
+              child: ResidentListItem(
+                key: ValueKey(r.id),
+                resident: r,
+                onPin: () => onPin(r),
+                onDesactiver: () => onDesactiver(r),
+                onActiver: () => onActiver(r),
+                onBasculerApplication: () => onBasculerApplication(r),
+              ),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+// ── État vide ──────────────────────────────────────────────
+
+class _EtatVide extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EtatVide({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return CarteContenu(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(AppSizes.xl),
+            padding: const EdgeInsets.all(AppSizes.lg),
             decoration: BoxDecoration(
               color: AppColors.rouge.withValues(alpha: 0.06),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.people_outline_rounded,
-              size: 56,
-              color: AppColors.rouge,
-            ),
+            child: const Icon(Icons.people_alt_rounded,
+                size: 48, color: AppColors.rouge),
           ),
-          const SizedBox(height: AppSizes.lg),
+          const SizedBox(height: AppSizes.md),
           const Text(
             'Aucun résident',
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.noir),
           ),
           const SizedBox(height: AppSizes.sm),
           const Text(
-            'Ajoutez votre premier résident\npour commencer.',
+            'Ajoutez les occupants des appartements\npour leur donner accès à leur espace.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.grisDark, height: 1.5),
           ),
-          const SizedBox(height: AppSizes.xl),
+          const SizedBox(height: AppSizes.lg),
           FilledButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.person_add_rounded),
             label: const Text('Ajouter un résident'),
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.rouge,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.lg,
-                vertical: AppSizes.md,
-              ),
+              shape: const StadiumBorder(),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EmptySearch extends StatelessWidget {
-  final VoidCallback onClear;
-  const _EmptySearch({required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.search_off_rounded, size: 48, color: AppColors.grisDark),
-          const SizedBox(height: AppSizes.md),
-          const Text(
-            'Aucun résultat',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppColors.noir,
-            ),
-          ),
-          const SizedBox(height: AppSizes.sm),
-          const Text(
-            'Aucun résident ne correspond\nà votre recherche ou filtre.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.grisDark, height: 1.5),
-          ),
-          const SizedBox(height: AppSizes.lg),
-          OutlinedButton.icon(
-            onPressed: onClear,
-            icon: const Icon(Icons.clear_rounded),
-            label: const Text('Effacer les filtres'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSizes.xl),
-        child: AppErrorNotice(error: message, onRetry: onRetry),
       ),
     );
   }

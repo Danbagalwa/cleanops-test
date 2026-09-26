@@ -74,7 +74,7 @@ class PlanningState {
 
 // ── Notifier ──────────────────────────────────────────────
 class PlanningNotifier extends StateNotifier<PlanningState> {
-  static const int _capaciteMaxParPeriode = 6;
+  static const int capaciteMaxParPeriode = 6;
 
   final GetPlanningEmployee _get;
   final PlanningRepository _repository;
@@ -128,7 +128,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
       state = state.copyWith(
         error:
             'La période $jour ${periode == PeriodeType.am ? 'matin' : 'après-midi'} '
-            'contient déjà $_capaciteMaxParPeriode tâches. '
+            'contient déjà $capaciteMaxParPeriode tâches. '
             'Déplacez ou retirez une tâche avant d’en ajouter une autre.',
       );
       return false;
@@ -208,12 +208,12 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
         .toList();
     final position = numeroTache ?? _prochainePositionLibre(destination);
 
-    if (position == null || position < 1 || position > _capaciteMaxParPeriode) {
+    if (position == null || position < 1 || position > capaciteMaxParPeriode) {
       state = state.copyWith(
         error:
             'La période $jour ${periode == PeriodeType.am ? 'matin' : 'après-midi'} '
             'est complète. Elle peut contenir au maximum '
-            '$_capaciteMaxParPeriode tâches.',
+            '$capaciteMaxParPeriode tâches.',
       );
       return false;
     }
@@ -250,7 +250,7 @@ class PlanningNotifier extends StateNotifier<PlanningState> {
 
   int? _prochainePositionLibre(List<PlanningTemplate> templates) {
     final positions = templates.map((template) => template.numeroTache).toSet();
-    for (var position = 1; position <= _capaciteMaxParPeriode; position++) {
+    for (var position = 1; position <= capaciteMaxParPeriode; position++) {
       if (!positions.contains(position)) return position;
     }
     return null;

@@ -101,6 +101,12 @@ const String receptionProfilRoute = '/reception/profil';
 /// Sous `/reception/`, donc dans son périmètre. Pas une des 5 sections.
 const String receptionNotificationsRoute = '/reception/notifications';
 
+/// Route de « Mes demandes » (congé / absence planifiée / autre) de la
+/// Réception — même écran que les préposé(e)s. Sous `/reception/`, donc dans
+/// son périmètre. Pas une des 5 sections : accessible depuis le tableau de
+/// bord, pas depuis le menu des sections.
+const String receptionMesDemandesEquipeRoute = '/reception/mes-demandes-equipe';
+
 /// Modèle de route de la fiche d'un appartement.
 const String receptionFichePattern = '/reception/residents/:appartementId';
 

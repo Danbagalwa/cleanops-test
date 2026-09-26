@@ -8,6 +8,7 @@ import '../providers/reception_residents_provider.dart';
 import '../reception_sections.dart';
 import '../widgets/message_form_card.dart';
 import '../widgets/reception_actions.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 /// Fiche d'un appartement pour la Réception : LECTURE SEULE.
 ///
@@ -67,7 +68,7 @@ class _Contenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.md),
+      padding: const EdgeInsets.all(AppSizes.md).plusBarre(context),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -112,7 +113,8 @@ class _Carte extends StatelessWidget {
             if (titre != null) ...[
               Text(
                 titre!,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSizes.sm),
             ],

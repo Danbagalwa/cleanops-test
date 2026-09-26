@@ -139,9 +139,8 @@ class AppartementsNotifier extends StateNotifier<AppartementsState> {
         return false;
       },
       (appt) {
-        final updated = state.appartements
-            .map((a) => a.id == id ? appt : a)
-            .toList();
+        final updated =
+            state.appartements.map((a) => a.id == id ? appt : a).toList();
         state = state.copyWith(isLoading: false, appartements: updated);
         return true;
       },
@@ -157,8 +156,7 @@ class AppartementsNotifier extends StateNotifier<AppartementsState> {
         return false;
       },
       (_) {
-        final updated =
-            state.appartements.where((a) => a.id != id).toList();
+        final updated = state.appartements.where((a) => a.id != id).toList();
         state = state.copyWith(isLoading: false, appartements: updated);
         return true;
       },

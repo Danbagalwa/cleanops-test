@@ -27,8 +27,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     if (!mounted) return;
 
+    // Page demandée à l'ouverture (ex. page rechargée) : on y retourne après
+    // la vérification de session ; la redirection globale en contrôle l'accès.
+    final lien = consommerLienDemarrage();
+
     if (employee != null) {
       ref.read(authNotifierProvider.notifier).setEmployee(employee);
+
+      if (lien != null && lien != AppRoutes.login) {
+        context.go(lien);
+        return;
+      }
 
       switch (employee.profil) {
         case ProfilAcces.preposee:

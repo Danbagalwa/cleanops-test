@@ -1,12 +1,20 @@
 import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
 import '../entities/demande_resident.dart';
+import '../entities/jour_menage.dart';
 import '../entities/notification_resident.dart';
 import '../entities/tache_resident.dart';
 
 abstract class ResidentEspaceRepository {
   // ── Tâches ────────────────────────────────────────────────
   Future<Either<Failure, List<TacheResident>>> getTaches(String residentId);
+
+  /// Calendrier des ménages du [debut] au [fin] inclus.
+  Future<Either<Failure, CalendrierMenages>> getCalendrier({
+    required String residentId,
+    required DateTime debut,
+    required DateTime fin,
+  });
 
   // ── Demandes résident ─────────────────────────────────────
   Future<Either<Failure, List<DemandeResident>>> getDemandes(String residentId);

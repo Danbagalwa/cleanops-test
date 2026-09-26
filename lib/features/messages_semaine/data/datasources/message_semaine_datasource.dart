@@ -17,7 +17,8 @@ abstract class MessageSemaineDatasource {
 class MessageSemaineDatasourceImpl implements MessageSemaineDatasource {
   static const _table = 'messages_semaine';
   static const _kSelect =
-      'id, contenu, type, is_actif, créé_par, date_creation, date_desactivation';
+      'id, contenu, type, is_actif, créé_par, date_creation, date_desactivation, '
+      'cree_par_employe:employees(prenom, nom)';
 
   @override
   Future<MessageSemaineModel?> getMessageActif() async {
@@ -75,21 +76,18 @@ class MessageSemaineDatasourceImpl implements MessageSemaineDatasource {
   @override
   Future<void> desactiverMessage(String id) async {
     try {
-      await SupabaseService.client
-          .from(_table)
-          .update({
-            'is_actif': false,
-            'date_desactivation': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', id);
+      await SupabaseService.client.from(_table).update({
+        'is_actif': false,
+        'date_desactivation': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', id);
     } catch (e) {
       throw ServerException('Erreur désactivation message : $e');
     }
   }
 
   static String _typeToString(MessageType t) => switch (t) {
-        MessageType.automatique  => 'Automatique',
-        MessageType.fete         => 'Fete',
+        MessageType.automatique => 'Automatique',
+        MessageType.fete => 'Fete',
         MessageType.personnalise => 'Personnalisé',
       };
 }

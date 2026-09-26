@@ -199,8 +199,7 @@ class ResidentNotifier extends StateNotifier<ResidentState> {
 
   Future<bool> desactiverResident(String residentId) async {
     if (_currentEmployeeId == null) return false;
-    final result =
-        await _desactiverResident(residentId, _currentEmployeeId);
+    final result = await _desactiverResident(residentId, _currentEmployeeId);
     return result.fold(
       (f) {
         state = state.copyWith(error: f.message);
@@ -227,10 +226,8 @@ class ResidentNotifier extends StateNotifier<ResidentState> {
     );
   }
 
-  Future<bool> toggleApplication(
-      String residentId, bool aApplication) async {
-    final result =
-        await _repo.toggleApplication(residentId, aApplication);
+  Future<bool> toggleApplication(String residentId, bool aApplication) async {
+    final result = await _repo.toggleApplication(residentId, aApplication);
     return result.fold(
       (f) {
         state = state.copyWith(error: f.message);
@@ -245,17 +242,16 @@ class ResidentNotifier extends StateNotifier<ResidentState> {
 
   void _updateLocalement(Resident updated) {
     state = state.copyWith(
-      residents: state.residents
-          .map((r) => r.id == updated.id ? updated : r)
-          .toList(),
+      residents:
+          state.residents.map((r) => r.id == updated.id ? updated : r).toList(),
     );
   }
 }
 
 // ── Provider ───────────────────────────────────────────────
 
-final residentNotifierProvider = StateNotifierProvider.autoDispose<
-    ResidentNotifier, ResidentState>((ref) {
+final residentNotifierProvider =
+    StateNotifierProvider.autoDispose<ResidentNotifier, ResidentState>((ref) {
   final employee = ref.watch(employeeCourantProvider);
   return ResidentNotifier(
     getResidents: ref.watch(_getResidentsProvider),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:cleanops/core/widgets/app_shell.dart';
 import 'package:cleanops/features/auth/domain/entities/employee.dart';
 import 'package:cleanops/features/auth/presentation/providers/auth_provider.dart';
+import 'package:cleanops/features/notifications/presentation/providers/notifications_provider.dart';
 
 Employee _avec(RoleType role) => Employee(
       id: 'id',
@@ -30,13 +31,15 @@ Future<void> _afficher(
     ProviderScope(
       overrides: [
         employeeCourantProvider.overrideWithValue(_avec(role)),
+        unreadNotificationsCountProvider.overrideWithValue(0),
       ],
       child: MaterialApp(
         home: AppShell(location: location, child: const Text(_contenu)),
       ),
     ),
   );
-  await tester.pump();
+  // Laisse se terminer l'animation d'entrée du nom de l'app.
+  await tester.pumpAndSettle();
 }
 
 /// Entrées de menu du responsable et de la préposée : jamais pour la Réception.
@@ -162,12 +165,109 @@ void main() {
     });
   });
 
+  group('Barre du haut', () {
+    testWidgets('bureau : ☰ replie puis déplie la barre latérale',
+        (tester) async {
+      await _afficher(tester, RoleType.admin);
+      expect(find.text('Progression du jour'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Progression du jour'), findsNothing);
+
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Progression du jour'), findsOneWidget);
+    });
+
+    testWidgets('mobile : ☰ ouvre le tiroir avec tout le menu',
+        (tester) async {
+      await _afficher(tester, RoleType.admin, taille: const Size(390, 800));
+      expect(find.text('Progression du jour'), findsNothing);
+
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(find.text('Progression du jour'), findsOneWidget);
+    });
+
+    testWidgets('cloche et compte, même pour la Réception', (tester) async {
+      await _afficher(tester, RoleType.reception, location: '/reception');
+
+      expect(find.byTooltip('Notifications'), findsOneWidget);
+      expect(find.byTooltip('Mon compte'), findsOneWidget);
+    });
+  });
+
+  group('Menu latéral en sections', () {
+    testWidgets('la section de la page affichée est ouverte, pas les autres',
+        (tester) async {
+      await _afficher(tester, RoleType.admin, location: '/planning');
+
+      for (final section in ['Accueil', 'Opérations', 'Équipe', 'Résidence']) {
+        expect(find.text(section), findsOneWidget, reason: section);
+      }
+      expect(find.text('Progression du jour'), findsOneWidget);
+      expect(find.text('Employé(e)s'), findsNothing);
+      expect(find.text('Statistiques'), findsNothing);
+    });
+
+    testWidgets('ouvrir une section referme la précédente', (tester) async {
+      await _afficher(tester, RoleType.admin, location: '/planning');
+
+      await tester.tap(find.text('Équipe'));
+      await tester.pumpAndSettle();
+      expect(find.text('Employé(e)s'), findsOneWidget);
+      expect(find.text('Progression du jour'), findsNothing);
+
+      await tester.tap(find.text('Résidence'));
+      await tester.pumpAndSettle();
+      expect(find.text('Statistiques'), findsOneWidget);
+      expect(find.text('Employé(e)s'), findsNothing);
+    });
+
+    testWidgets('toucher la section ouverte la referme', (tester) async {
+      await _afficher(tester, RoleType.admin, location: '/planning');
+
+      await tester.tap(find.text('Opérations'));
+      await tester.pumpAndSettle();
+      expect(find.text('Progression du jour'), findsNothing);
+    });
+
+    testWidgets('sur le tableau de bord, c\'est « Accueil » qui est ouvert',
+        (tester) async {
+      await _afficher(tester, RoleType.admin, location: '/employeur');
+
+      expect(find.text('Tableau de bord'), findsOneWidget);
+      expect(find.text('Progression du jour'), findsNothing);
+    });
+
+    testWidgets('bloc profil en haut et zone de déconnexion en bas',
+        (tester) async {
+      await _afficher(tester, RoleType.admin);
+
+      // Nom et poste : dans le bloc profil et dans la zone de déconnexion.
+      expect(find.text('P N'), findsNWidgets(2));
+      expect(find.text('Admin'), findsNWidgets(2));
+      expect(find.byTooltip('Déconnexion'), findsOneWidget);
+    });
+
+    testWidgets('pied de page sur bureau', (tester) async {
+      await _afficher(tester, RoleType.admin);
+
+      expect(find.textContaining('CleanOps. Tous droits réservés.'),
+          findsOneWidget);
+    });
+  });
+
   testWidgets('Contrôle : un Admin voit toujours la page et son menu',
       (tester) async {
     await _afficher(tester, RoleType.admin);
 
     expect(find.text(_contenu), findsOneWidget);
     expect(find.text('Accès non disponible pour ce profil.'), findsNothing);
-    expect(find.text('Employé(e)s'), findsWidgets);
+    expect(find.text('Planning'), findsWidgets);
   });
 }

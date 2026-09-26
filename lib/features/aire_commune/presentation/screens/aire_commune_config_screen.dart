@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
-import '../../../../core/widgets/error_widget.dart';
 import '../../../../core/helpers/date_helper.dart';
+import '../../../../core/router/app_router.dart';
+import '../../../../core/widgets/espace_barre_mobile.dart';
+import '../../../../core/widgets/mise_en_page.dart';
 import '../../domain/entities/reset_aire_commune.dart';
 import '../../domain/entities/tache_aire_commune.dart';
 import '../providers/aire_commune_provider.dart';
+import '../widgets/aire_commune_actions.dart';
 
 class AireCommuneConfigScreen extends ConsumerStatefulWidget {
   const AireCommuneConfigScreen({super.key});
@@ -31,73 +35,70 @@ class _AireCommuneConfigScreenState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(aireCommuneNotifierProvider);
+    final marge = estCompact(context) ? 12.0 : 24.0;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
-      appBar: AppBar(
-        backgroundColor: AppColors.rouge,
-        surfaceTintColor: AppColors.rouge,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 1,
-        shadowColor: Colors.black12,
-        leading: IconButton(
-          tooltip: 'Retour',
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'Réglages des aires communes',
-          style: TextStyle(
-              color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
-        ),
+    return PageAvecEnTete(
+      chargement: state.isLoading || state.isResetting,
+      enTete: const EnTetePage(
+        icone: Icons.tune_rounded,
+        titre: 'Réglages des aires communes',
+        sousTitre: 'Remises à zéro et corrections des confirmations',
       ),
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 820),
-          child: ListView(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.md, vertical: AppSizes.lg),
-            children: [
-              const _ConfigIntro(),
-              const SizedBox(height: AppSizes.lg),
-              // ── Section 1 : Reset complet ──────────────
-              const _SectionHeader(label: 'RESET MANUEL'),
-              const SizedBox(height: AppSizes.xs),
-              _ResetCard(isResetting: state.isResetting),
-
-              const SizedBox(height: AppSizes.lg),
-
-              // ── Section 2 : Jour de reset automatique ──
-              const _SectionHeader(label: 'RESET AUTOMATIQUE'),
-              const SizedBox(height: AppSizes.xs),
-              _JourResetCard(jourActuel: state.jourResetConfig),
-
-              const SizedBox(height: AppSizes.md),
-
-              // ── Section 3 : Activer/désactiver auto ────
-              _ResetAutoCard(actif: state.resetAutoActif),
-
-              const SizedBox(height: AppSizes.lg),
-
-              // ── Section 4 : Annuler une confirmation ───
-              const _SectionHeader(label: 'ANNULER UNE CONFIRMATION'),
-              const SizedBox(height: AppSizes.xs),
-              _ZonesConfirmeesCard(zones: state.toutesConfirmees),
-
-              // ── Section 5 : Historique ──────────────────
-              if (state.historiqueResets.isNotEmpty) ...[
-                const SizedBox(height: AppSizes.lg),
-                const _SectionHeader(label: 'HISTORIQUE DES RESETS'),
-                const SizedBox(height: AppSizes.xs),
-                _HistoriqueCard(resets: state.historiqueResets),
-              ],
-
-              const SizedBox(height: AppSizes.xl),
-            ],
+      contenu: ListView(
+        padding: EdgeInsets.fromLTRB(marge, AppSizes.lg, marge, AppSizes.lg)
+            .plusBarre(context),
+        children: [
+          BarreSection(
+            titre: 'Réglages',
+            onRetour: () => context.canPop()
+                ? context.pop()
+                : context.go(AppRoutes.aireCommune),
           ),
-        ),
+          const SizedBox(height: AppSizes.lg),
+          Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 820),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Section 1 : Remise à zéro manuelle ────
+                  const _SectionHeader(label: 'REMISE À ZÉRO MANUELLE'),
+                  const SizedBox(height: AppSizes.xs),
+                  _ResetCard(isResetting: state.isResetting),
+
+                  const SizedBox(height: AppSizes.lg),
+
+                  // ── Section 2 : Jour de remise à zéro auto ─
+                  const _SectionHeader(label: 'REMISE À ZÉRO AUTOMATIQUE'),
+                  const SizedBox(height: AppSizes.xs),
+                  _JourResetCard(jourActuel: state.jourResetConfig),
+
+                  const SizedBox(height: AppSizes.md),
+
+                  // ── Section 3 : Activer/désactiver auto ────
+                  _ResetAutoCard(actif: state.resetAutoActif),
+
+                  const SizedBox(height: AppSizes.lg),
+
+                  // ── Section 4 : Annuler une confirmation ───
+                  const _SectionHeader(label: 'ANNULER UNE CONFIRMATION'),
+                  const SizedBox(height: AppSizes.xs),
+                  _ZonesConfirmeesCard(zones: state.toutesConfirmees),
+
+                  // ── Section 5 : Historique ──────────────────
+                  if (state.historiqueResets.isNotEmpty) ...[
+                    const SizedBox(height: AppSizes.lg),
+                    const _SectionHeader(
+                        label: 'HISTORIQUE DES REMISES À ZÉRO'),
+                    const SizedBox(height: AppSizes.xs),
+                    _HistoriqueCard(resets: state.historiqueResets),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -117,64 +118,6 @@ class _SectionHeader extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: AppColors.grisText,
         letterSpacing: 1.2,
-      ),
-    );
-  }
-}
-
-class _ConfigIntro extends StatelessWidget {
-  const _ConfigIntro();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.lg),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.rouge, AppColors.rougeLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppSizes.radiusXl),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .16),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: const Icon(Icons.tune_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Organisation hebdomadaire',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Configurez les remises à zéro et corrigez les confirmations '
-                  'si nécessaire.',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: .76),
-                    fontSize: 12,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -225,7 +168,7 @@ class _ResetCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reset semaine complète',
+                Text('Remettre la semaine à zéro',
                     style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -245,7 +188,7 @@ class _ResetCard extends ConsumerWidget {
                       strokeWidth: 2.5, color: AppColors.refus),
                 )
               : FilledButton.icon(
-                  onPressed: () => _confirmerReset(context, ref),
+                  onPressed: () => remettreAZeroAireCommune(context, ref),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.refus,
                     padding:
@@ -257,66 +200,6 @@ class _ResetCard extends ConsumerWidget {
                 ),
         ],
       ),
-    );
-  }
-
-  Future<void> _confirmerReset(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
-        title: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: AppColors.aVerifier),
-          SizedBox(width: 8),
-          Text('Confirmer le reset ?'),
-        ]),
-        content: const Text(
-          'Toutes les confirmations de la semaine seront effacées.\n\n'
-          'Les zones repasseront à "À confirmer".',
-          style: TextStyle(fontSize: 14, color: AppColors.grisDark),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Annuler')),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.refus),
-            icon: const Icon(Icons.restart_alt_rounded, size: 16),
-            label: const Text('Confirmer'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    final success = await ref
-        .read(aireCommuneNotifierProvider.notifier)
-        .resetSemaineComplete();
-
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      success
-          ? SnackBar(
-              content: const Row(children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Aire commune remise à zéro'),
-              ]),
-              backgroundColor: AppColors.fait,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
-            )
-          : SnackBar(
-              content: Text(ref.read(aireCommuneNotifierProvider).error ??
-                  'Erreur lors du reset'),
-              backgroundColor: AppColors.rouge,
-              behavior: SnackBarBehavior.floating,
-            ),
     );
   }
 }
@@ -503,7 +386,7 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final nomZone = _formatZone(zone.zone);
+    final nomZone = formatZoneAire(zone.zone);
     final heure =
         zone.confirmeLE != null ? DateHelper.formatHeure(zone.confirmeLE!) : '';
 
@@ -538,7 +421,7 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
             ),
           ),
           TextButton.icon(
-            onPressed: () => _confirmerAnnulation(context, ref, nomZone),
+            onPressed: () => annulerConfirmationAire(context, ref, zone),
             icon: const Icon(Icons.undo_rounded, size: 15),
             label: const Text('Annuler', style: TextStyle(fontSize: 12)),
             style: TextButton.styleFrom(
@@ -549,47 +432,6 @@ class _ZoneConfirmeeRow extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _confirmerAnnulation(
-      BuildContext context, WidgetRef ref, String nomZone) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
-        title: const Text('Annuler la confirmation ?'),
-        content: Text(
-          'La zone "$nomZone" repassera à "À confirmer".',
-          style: const TextStyle(fontSize: 14, color: AppColors.grisDark),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Non')),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.refus),
-            child: const Text('Annuler la confirmation'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true || !context.mounted) return;
-
-    final success = await ref
-        .read(aireCommuneNotifierProvider.notifier)
-        .annulerConfirmationZone(zone.id);
-
-    if (!context.mounted) return;
-    if (!success) {
-      AppFeedback.showError(
-        context,
-        ref.read(aireCommuneNotifierProvider).error ??
-            'Impossible d’annuler cette confirmation pour le moment.',
-      );
-    }
   }
 }
 
@@ -662,7 +504,3 @@ class _HistoriqueRow extends StatelessWidget {
     );
   }
 }
-
-// ── Helper ─────────────────────────────────────────────────
-String _formatZone(String zone) =>
-    zone.replaceAll('_Etage_', ' – Étage ').replaceAll('_', ' ');

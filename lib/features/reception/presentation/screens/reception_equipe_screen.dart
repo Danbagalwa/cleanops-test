@@ -7,6 +7,7 @@ import '../../../../core/widgets/error_widget.dart';
 import '../../../../core/widgets/skeleton_widget.dart';
 import '../../domain/reception_equipe_models.dart';
 import '../providers/reception_equipe_provider.dart';
+import 'package:cleanops/core/widgets/espace_barre_mobile.dart';
 
 enum _Filtre { tous, presents, absents, nonConfirmes }
 
@@ -212,7 +213,8 @@ class _ReceptionEquipeScreenState extends ConsumerState<ReceptionEquipeScreen> {
                 color: AppColors.rouge,
                 onRefresh: () async => ref.invalidate(receptionEquipeProvider),
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
+                  padding: const EdgeInsets.symmetric(vertical: AppSizes.sm)
+                      .plusBarre(context),
                   itemCount: filtered.length,
                   itemBuilder: (_, i) => ligne(i),
                 ),

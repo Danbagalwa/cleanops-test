@@ -2,7 +2,9 @@ import '../../../../core/errors/exceptions.dart';
 import '../../../../core/helpers/semaine_helper.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../auth/domain/entities/employee.dart';
+import '../../domain/construire_calendrier.dart';
 import '../../domain/entities/demande_resident.dart';
+import '../../domain/entities/jour_menage.dart';
 import '../../domain/menages_depuis_arrivee.dart';
 import '../models/demande_resident_model.dart';
 import '../models/notification_resident_model.dart';
@@ -58,6 +60,14 @@ String _typeDemandeLabel(TypeDemande t) => switch (t) {
 
 abstract class ResidentEspaceDatasource {
   Future<List<TacheResidentModel>> getTaches(String residentId);
+
+  /// Ménages de l'appartement du résident du [debut] au [fin] inclus (depuis
+  /// son arrivée), avec leur statut vu par le résident.
+  Future<CalendrierMenages> getCalendrier({
+    required String residentId,
+    required DateTime debut,
+    required DateTime fin,
+  });
   Future<List<DemandeResidentModel>> getDemandes(String residentId);
   Future<DemandeResidentModel> creerDemande({
     required String residentId,
@@ -115,8 +125,8 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
   static const _kSelectDemande =
       'id, resident_id, type, tache_jour_id, motif, statut, reponse, '
       'proposition_date, proposition_periode, resident_accepte, est_urgente, '
-      'date_creation, proposition_notes, proposition_has_animal, '
-      'proposition_type_animal';
+      'date_creation, date_reponse, date_resolution, proposition_notes, '
+      'proposition_has_animal, proposition_type_animal';
 
   static const _kSelectNotif =
       'id, resident_id, tache_jour_id, type, message, is_lue, date_envoi';
@@ -210,14 +220,75 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
       final data = menagesDepuisArrivee(
         List<Map<String, dynamic>>.from(dernierEffectue as List),
         dateArrivee,
-      )
-          .map(TacheResidentModel.fromJson)
-          .toList()
+      ).map(TacheResidentModel.fromJson).toList()
         ..addAll(menagesAVenir);
 
       return data;
     } catch (e) {
       throw ServerException('Erreur chargement ménages : $e');
+    }
+  }
+
+  @override
+  Future<CalendrierMenages> getCalendrier({
+    required String residentId,
+    required DateTime debut,
+    required DateTime fin,
+  }) async {
+    String iso(DateTime d) => d.toIso8601String().substring(0, 10);
+    try {
+      final residentRow = await SupabaseService.client
+          .from(SupabaseService.residents)
+          .select('appartement_id, date_arrivee')
+          .eq('id', residentId)
+          .single();
+      final appartementId = residentRow['appartement_id'] as String;
+
+      // Un nouveau résident ne voit jamais les ménages d'avant son arrivée.
+      var depuis = DateTime(debut.year, debut.month, debut.day);
+      final arrivee =
+          DateTime.tryParse((residentRow['date_arrivee'] as String?) ?? '');
+      if (arrivee != null && arrivee.isAfter(depuis)) {
+        depuis = DateTime(arrivee.year, arrivee.month, arrivee.day);
+      }
+
+      final taches = depuis.isAfter(fin)
+          ? const <dynamic>[]
+          : await SupabaseService.client
+              .from(SupabaseService.tachesJour)
+              .select('id, semaine_reelle, jour, periode, statut, '
+                  'employees!taches_jour_employee_id_fkey(prenom, nom)')
+              .eq('appartement_id', appartementId)
+              .gte('semaine_reelle', iso(depuis))
+              .lte('semaine_reelle', iso(fin));
+
+      final templates = await SupabaseService.client
+          .from(SupabaseService.planningTemplates)
+          .select('id, numero_semaine, jour, periode, '
+              'employees!planning_templates_employee_id_fkey(prenom, nom)')
+          .eq('appartement_id', appartementId);
+
+      final demandes = await SupabaseService.client
+          .from(SupabaseService.demandesResidents)
+          .select('type, tache_jour_id, resident_accepte, proposition_date, '
+              'proposition_periode')
+          .eq('resident_id', residentId);
+
+      List<Map<String, dynamic>> lignes(Object data) => [
+            for (final l in data as List) Map<String, dynamic>.from(l as Map),
+          ];
+
+      return construireCalendrier(
+        taches: lignes(taches),
+        templates: lignes(templates),
+        demandes: lignes(demandes),
+        debut: depuis,
+        fin: fin,
+        aujourdhui: DateTime.now(),
+        semainePourDate: SemaineHelper.semainePourDate,
+      );
+    } catch (e) {
+      throw ServerException('Erreur chargement calendrier : $e');
     }
   }
 
@@ -389,11 +460,54 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
           .from(SupabaseService.demandesResidents)
           .select(_kSelectDemande)
           .order('date_creation', ascending: false);
-      return (data as List)
-          .map((j) => DemandeResidentModel.fromJson(j as Map<String, dynamic>))
-          .toList();
+      final lignes = [
+        for (final j in data as List) Map<String, dynamic>.from(j as Map),
+      ];
+      await _ajouterContexte(lignes);
+      return lignes.map(DemandeResidentModel.fromJson).toList();
     } catch (e) {
       throw ServerException('Erreur chargement toutes demandes : $e');
+    }
+  }
+
+  /// Ajoute à chaque demande le résident (et son appartement) et le ménage
+  /// visé. Requêtes séparées : pas de dépendance aux clés étrangères, et un
+  /// échec ne bloque pas la liste (le contexte manquera, simplement).
+  Future<void> _ajouterContexte(List<Map<String, dynamic>> lignes) async {
+    Set<String> ids(String cle) => {
+          for (final l in lignes)
+            if (l[cle] is String) l[cle] as String,
+        };
+    final residentIds = ids('resident_id');
+    final tacheIds = ids('tache_jour_id');
+
+    Future<Map<String, Map<String, dynamic>>> charger(
+        String table, String colonnes, Set<String> ids) async {
+      if (ids.isEmpty) return {};
+      try {
+        final res = await SupabaseService.client
+            .from(table)
+            .select(colonnes)
+            .inFilter('id', ids.toList());
+        return {
+          for (final r in res as List)
+            (r as Map)['id'] as String: Map<String, dynamic>.from(r),
+        };
+      } catch (_) {
+        return {};
+      }
+    }
+
+    final (residents, taches) = await (
+      charger(SupabaseService.residents,
+          'id, prenom, nom, appartements(numero, taille)', residentIds),
+      charger(SupabaseService.tachesJour, 'id, semaine_reelle, jour, periode',
+          tacheIds),
+    ).wait;
+
+    for (final l in lignes) {
+      l['residents'] = residents[l['resident_id']];
+      l['taches_jour'] = taches[l['tache_jour_id']];
     }
   }
 
@@ -464,16 +578,13 @@ class ResidentEspaceDatasourceImpl implements ResidentEspaceDatasource {
           .single();
       final appartementId = residentRow['appartement_id'] as String;
 
-      await SupabaseService.client
-          .from(SupabaseService.appartements)
-          .update({
-            'notes': demande.propositionNotes,
-            'has_animal': demande.propositionHasAnimal ?? false,
-            'type_animal': demande.propositionHasAnimal == true
-                ? demande.propositionTypeAnimal
-                : null,
-          })
-          .eq('id', appartementId);
+      await SupabaseService.client.from(SupabaseService.appartements).update({
+        'notes': demande.propositionNotes,
+        'has_animal': demande.propositionHasAnimal ?? false,
+        'type_animal': demande.propositionHasAnimal == true
+            ? demande.propositionTypeAnimal
+            : null,
+      }).eq('id', appartementId);
 
       final data = await SupabaseService.client
           .from(SupabaseService.demandesResidents)
